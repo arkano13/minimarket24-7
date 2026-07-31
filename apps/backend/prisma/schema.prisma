@@ -1,0 +1,358 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RolUsuario {
+  ADMINISTRADOR
+  SUPERVISOR
+  CAJERO
+  BODEGA
+}
+
+enum UnidadInventario {
+  UNIDAD
+  GRAMO
+  MILILITRO
+}
+
+enum TipoPresentacion {
+  UNIDAD
+  PAQUETE
+  CAJA
+  PESO
+  VOLUMEN
+}
+
+enum ModoPrecio {
+  UNICO
+  POR_HORARIO
+}
+
+enum TipoMovimientoInventario {
+  INVENTARIO_INICIAL
+  COMPRA
+  VENTA
+  DEVOLUCION_CLIENTE
+  DEVOLUCION_PROVEEDOR
+  AJUSTE_POSITIVO
+  AJUSTE_NEGATIVO
+  CANCELACION_VENTA
+}
+
+enum EstadoVenta {
+  COMPLETADA
+  CANCELADA
+}
+
+enum MetodoPago {
+  EFECTIVO
+  TARJETA
+  TRANSFERENCIA
+}
+
+model Usuario {
+  id                    Int                    @id @default(autoincrement())
+  nombre                String                 @db.VarChar(120)
+  usuario               String                 @unique @db.VarChar(50)
+  contrasenaHash        String                 @map("contrasena_hash") @db.VarChar(255)
+  rol                   RolUsuario
+  activo                Boolean                @default(true)
+  ultimoAcceso          DateTime?              @map("ultimo_acceso")
+  creadoEn              DateTime               @default(now()) @map("creado_en")
+  actualizadoEn         DateTime               @updatedAt @map("actualizado_en")
+  modulos               UsuarioModulo[]
+  movimientosInventario MovimientoInventario[]
+  ventas                Venta[]
+  turnosCajaAbiertos    TurnoCaja[]            @relation("UsuarioAperturaCaja")
+  turnosCajaCerrados    TurnoCaja[]            @relation("UsuarioCierreCaja")
+  movimientosCaja       MovimientoCaja[]
+
+  @@map("usuarios")
+}
+
+model Modulo {
+  codigo   String          @id @db.VarChar(30)
+  nombre   String          @db.VarChar(100)
+  tipo     String          @db.VarChar(30)
+  activo   Boolean         @default(true)
+  usuarios UsuarioModulo[]
+
+  @@map("modulos")
+}
+
+model UsuarioModulo {
+  usuarioId    Int     @map("usuario_id")
+  moduloCodigo String  @map("modulo_codigo") @db.VarChar(30)
+  permitido    Boolean @default(true)
+  usuario      Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  modulo       Modulo  @relation(fields: [moduloCodigo], references: [codigo], onDelete: Cascade)
+
+  @@id([usuarioId, moduloCodigo])
+  @@map("usuario_modulo")
+}
+
+model Categoria {
+  id        Int        @id @default(autoincrement())
+  nombre    String     @unique @db.VarChar(100)
+  activo    Boolean    @default(true)
+  creadoEn  DateTime   @default(now()) @map("creado_en")
+  productos Producto[]
+
+  @@map("categorias")
+}
+
+model Producto {
+  id                 Int                    @id @default(autoincrement())
+  sku                String?                @unique @db.VarChar(40)
+  nombre             String                 @db.VarChar(150)
+  descripcion        String?                @db.VarChar(300)
+  categoriaId        Int?                   @map("categoria_id")
+  unidadInventario   UnidadInventario       @map("unidad_inventario")
+  modoPrecio         ModoPrecio             @default(UNICO) @map("modo_precio")
+  stockActual        Decimal                @default(0) @map("stock_actual") @db.Decimal(16, 3)
+  stockMinimo        Decimal                @default(0) @map("stock_minimo") @db.Decimal(16, 3)
+  costoPromedio      Decimal                @default(0) @map("costo_promedio") @db.Decimal(14, 4)
+  controlaInventario Boolean                @default(true) @map("controla_inventario")
+  activo             Boolean                @default(true)
+  creadoEn           DateTime               @default(now()) @map("creado_en")
+  actualizadoEn      DateTime               @updatedAt @map("actualizado_en")
+  categoria          Categoria?             @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
+  presentaciones     PresentacionProducto[]
+  movimientos        MovimientoInventario[]
+  detallesVenta      VentaDetalle[]
+
+  @@index([nombre])
+  @@index([categoriaId])
+  @@map("productos")
+}
+
+model PresentacionProducto {
+  id                Int                         @id @default(autoincrement())
+  productoId        Int                         @map("producto_id")
+  nombre            String                      @db.VarChar(80)
+  tipo              TipoPresentacion
+  factorInventario  Decimal                     @map("factor_inventario") @db.Decimal(14, 3)
+  precioBase        Decimal                     @map("precio_base") @db.Decimal(14, 2)
+  esPrincipal       Boolean                     @default(false) @map("es_principal")
+  activo            Boolean                     @default(true)
+  creadoEn          DateTime                    @default(now()) @map("creado_en")
+  actualizadoEn     DateTime                    @updatedAt @map("actualizado_en")
+  producto          Producto                    @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  codigosBarra      CodigoBarraProducto[]
+  preciosHorario    PrecioPresentacionHorario[]
+  detallesVenta     VentaDetalle[]
+  preciosEspeciales PrecioEspecialCliente[]
+
+  @@unique([productoId, nombre])
+  @@index([productoId])
+  @@map("presentaciones_producto")
+}
+
+model CodigoBarraProducto {
+  id             Int                  @id @default(autoincrement())
+  presentacionId Int                  @map("presentacion_id")
+  codigo         String               @unique @db.VarChar(80)
+  principal      Boolean              @default(true)
+  activo         Boolean              @default(true)
+  presentacion   PresentacionProducto @relation(fields: [presentacionId], references: [id], onDelete: Cascade)
+
+  @@index([presentacionId])
+  @@map("codigos_barra_producto")
+}
+
+model FranjaHorariaPrecio {
+  id           Int                         @id @default(autoincrement())
+  nombre       String                      @unique @db.VarChar(80)
+  minutoInicio Int                         @map("minuto_inicio")
+  minutoFin    Int                         @map("minuto_fin")
+  orden        Int                         @default(0)
+  activo       Boolean                     @default(true)
+  precios      PrecioPresentacionHorario[]
+
+  @@map("franjas_horarias_precio")
+}
+
+model PrecioPresentacionHorario {
+  presentacionId Int                  @map("presentacion_id")
+  franjaId       Int                  @map("franja_id")
+  precio         Decimal              @db.Decimal(14, 2)
+  presentacion   PresentacionProducto @relation(fields: [presentacionId], references: [id], onDelete: Cascade)
+  franja         FranjaHorariaPrecio  @relation(fields: [franjaId], references: [id], onDelete: Cascade)
+
+  @@id([presentacionId, franjaId])
+  @@map("precios_presentacion_horario")
+}
+
+model MovimientoInventario {
+  id             Int                      @id @default(autoincrement())
+  productoId     Int                      @map("producto_id")
+  usuarioId      Int?                     @map("usuario_id")
+  ventaId        Int?                     @map("venta_id")
+  tipo           TipoMovimientoInventario
+  cantidad       Decimal                  @db.Decimal(16, 3)
+  saldoPosterior Decimal                  @map("saldo_posterior") @db.Decimal(16, 3)
+  costoUnitario  Decimal?                 @map("costo_unitario") @db.Decimal(14, 4)
+  motivo         String?                  @db.VarChar(250)
+  creadoEn       DateTime                 @default(now()) @map("creado_en")
+  producto       Producto                 @relation(fields: [productoId], references: [id], onDelete: Restrict)
+  usuario        Usuario?                 @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  venta          Venta?                   @relation(fields: [ventaId], references: [id], onDelete: SetNull)
+
+  @@index([productoId, creadoEn])
+  @@index([usuarioId])
+  @@index([ventaId])
+  @@map("movimientos_inventario")
+}
+
+model Venta {
+  id                Int                    @id @default(autoincrement())
+  usuarioId         Int                    @map("usuario_id")
+  turnoCajaId       Int?                   @map("turno_caja_id")
+  clienteEspecialId Int?                   @map("cliente_especial_id")
+  clienteNombre     String?                @map("cliente_nombre") @db.VarChar(120)
+  subtotal          Decimal                @db.Decimal(14, 2)
+  total             Decimal                @db.Decimal(14, 2)
+  estado            EstadoVenta            @default(COMPLETADA)
+  creadoEn          DateTime               @default(now()) @map("creado_en")
+  canceladoEn       DateTime?              @map("cancelado_en")
+  usuario           Usuario                @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  turnoCaja         TurnoCaja?             @relation(fields: [turnoCajaId], references: [id], onDelete: Restrict)
+  clienteEspecial   ClienteEspecial?       @relation(fields: [clienteEspecialId], references: [id], onDelete: SetNull)
+  detalles          VentaDetalle[]
+  pagos             PagoVenta[]
+  movimientos       MovimientoInventario[]
+
+  @@index([creadoEn])
+  @@index([usuarioId])
+  @@index([turnoCajaId])
+  @@index([clienteEspecialId])
+  @@index([estado])
+  @@map("ventas")
+}
+
+model ClienteEspecial {
+  id            Int                     @id @default(autoincrement())
+  nombre        String                  @db.VarChar(120)
+  telefono      String?                 @db.VarChar(30)
+  notas         String?                 @db.VarChar(250)
+  activo        Boolean                 @default(true)
+  creadoEn      DateTime                @default(now()) @map("creado_en")
+  actualizadoEn DateTime                @updatedAt @map("actualizado_en")
+  precios       PrecioEspecialCliente[]
+  ventas        Venta[]
+
+  @@index([nombre])
+  @@index([telefono])
+  @@index([activo])
+  @@map("clientes_especiales")
+}
+
+model PrecioEspecialCliente {
+  id             Int                  @id @default(autoincrement())
+  clienteId      Int                  @map("cliente_id")
+  presentacionId Int                  @map("presentacion_id")
+  precio         Decimal              @db.Decimal(14, 2)
+  activo         Boolean              @default(true)
+  creadoEn       DateTime             @default(now()) @map("creado_en")
+  actualizadoEn  DateTime             @updatedAt @map("actualizado_en")
+  cliente        ClienteEspecial      @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  presentacion   PresentacionProducto @relation(fields: [presentacionId], references: [id], onDelete: Cascade)
+
+  @@unique([clienteId, presentacionId])
+  @@index([clienteId])
+  @@index([presentacionId])
+  @@map("precios_especiales_cliente")
+}
+
+model TurnoCaja {
+  id                     Int              @id @default(autoincrement())
+  usuarioAperturaId      Int              @map("usuario_apertura_id")
+  usuarioCierreId        Int?             @map("usuario_cierre_id")
+  fondoInicial           Decimal          @map("fondo_inicial") @db.Decimal(14, 2)
+  efectivoEsperadoCierre Decimal?         @map("efectivo_esperado_cierre") @db.Decimal(14, 2)
+  efectivoContado        Decimal?         @map("efectivo_contado") @db.Decimal(14, 2)
+  diferencia             Decimal?         @db.Decimal(14, 2)
+  estado                 EstadoTurnoCaja  @default(ABIERTO)
+  abiertoEn              DateTime         @default(now()) @map("abierto_en")
+  cerradoEn              DateTime?        @map("cerrado_en")
+  usuarioApertura        Usuario          @relation("UsuarioAperturaCaja", fields: [usuarioAperturaId], references: [id], onDelete: Restrict)
+  usuarioCierre          Usuario?         @relation("UsuarioCierreCaja", fields: [usuarioCierreId], references: [id], onDelete: Restrict)
+  ventas                 Venta[]
+  movimientos            MovimientoCaja[]
+
+  @@index([estado])
+  @@index([abiertoEn])
+  @@index([usuarioAperturaId])
+  @@index([usuarioCierreId])
+  @@map("turnos_caja")
+}
+
+model MovimientoCaja {
+  id          Int                @id @default(autoincrement())
+  turnoCajaId Int                @map("turno_caja_id")
+  usuarioId   Int                @map("usuario_id")
+  tipo        TipoMovimientoCaja
+  monto       Decimal            @db.Decimal(14, 2)
+  motivo      String             @db.VarChar(200)
+  creadoEn    DateTime           @default(now()) @map("creado_en")
+  turnoCaja   TurnoCaja          @relation(fields: [turnoCajaId], references: [id], onDelete: Cascade)
+  usuario     Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@index([turnoCajaId, creadoEn])
+  @@index([usuarioId])
+  @@map("movimientos_caja")
+}
+
+model VentaDetalle {
+  id                 Int                  @id @default(autoincrement())
+  ventaId            Int                  @map("venta_id")
+  productoId         Int                  @map("producto_id")
+  presentacionId     Int                  @map("presentacion_id")
+  productoNombre     String               @map("producto_nombre") @db.VarChar(150)
+  presentacionNombre String               @map("presentacion_nombre") @db.VarChar(80)
+  cantidad           Decimal              @db.Decimal(16, 3)
+  factorInventario   Decimal              @map("factor_inventario") @db.Decimal(14, 3)
+  cantidadInventario Decimal              @map("cantidad_inventario") @db.Decimal(16, 3)
+  costoUnitario      Decimal              @map("costo_unitario") @db.Decimal(14, 4)
+  precioUnitario     Decimal              @map("precio_unitario") @db.Decimal(14, 2)
+  subtotal           Decimal              @db.Decimal(14, 2)
+  precioOrigen       String               @map("precio_origen") @db.VarChar(40)
+  venta              Venta                @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  producto           Producto             @relation(fields: [productoId], references: [id], onDelete: Restrict)
+  presentacion       PresentacionProducto @relation(fields: [presentacionId], references: [id], onDelete: Restrict)
+
+  @@index([ventaId])
+  @@index([productoId])
+  @@index([presentacionId])
+  @@map("ventas_detalle")
+}
+
+model PagoVenta {
+  id         Int        @id @default(autoincrement())
+  ventaId    Int        @map("venta_id")
+  metodo     MetodoPago
+  monto      Decimal    @db.Decimal(14, 2)
+  recibido   Decimal?   @db.Decimal(14, 2)
+  cambio     Decimal    @default(0) @db.Decimal(14, 2)
+  referencia String?    @db.VarChar(100)
+  creadoEn   DateTime   @default(now()) @map("creado_en")
+  venta      Venta      @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+
+  @@index([ventaId])
+  @@index([metodo])
+  @@map("pagos_venta")
+}
+
+enum EstadoTurnoCaja {
+  ABIERTO
+  CERRADO
+}
+
+enum TipoMovimientoCaja {
+  INGRESO
+  RETIRO
+}

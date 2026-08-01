@@ -48,10 +48,25 @@ enum EstadoVenta {
   CANCELADA
 }
 
+enum EstadoCompra {
+  RECIBIDA
+  ANULADA
+}
+
 enum MetodoPago {
   EFECTIVO
   TARJETA
   TRANSFERENCIA
+}
+
+enum EstadoTurnoCaja {
+  ABIERTO
+  CERRADO
+}
+
+enum TipoMovimientoCaja {
+  INGRESO
+  RETIRO
 }
 
 model Usuario {
@@ -70,6 +85,7 @@ model Usuario {
   turnosCajaAbiertos    TurnoCaja[]            @relation("UsuarioAperturaCaja")
   turnosCajaCerrados    TurnoCaja[]            @relation("UsuarioCierreCaja")
   movimientosCaja       MovimientoCaja[]
+  compras               Compra[]
 
   @@map("usuarios")
 }
@@ -124,6 +140,7 @@ model Producto {
   presentaciones     PresentacionProducto[]
   movimientos        MovimientoInventario[]
   detallesVenta      VentaDetalle[]
+  detallesCompra     CompraDetalle[]
 
   @@index([nombre])
   @@index([categoriaId])
@@ -146,6 +163,7 @@ model PresentacionProducto {
   preciosHorario    PrecioPresentacionHorario[]
   detallesVenta     VentaDetalle[]
   preciosEspeciales PrecioEspecialCliente[]
+  detallesCompra    CompraDetalle[]
 
   @@unique([productoId, nombre])
   @@index([productoId])
@@ -192,6 +210,7 @@ model MovimientoInventario {
   productoId     Int                      @map("producto_id")
   usuarioId      Int?                     @map("usuario_id")
   ventaId        Int?                     @map("venta_id")
+  compraId       Int?                     @map("compra_id")
   tipo           TipoMovimientoInventario
   cantidad       Decimal                  @db.Decimal(16, 3)
   saldoPosterior Decimal                  @map("saldo_posterior") @db.Decimal(16, 3)
@@ -201,10 +220,12 @@ model MovimientoInventario {
   producto       Producto                 @relation(fields: [productoId], references: [id], onDelete: Restrict)
   usuario        Usuario?                 @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
   venta          Venta?                   @relation(fields: [ventaId], references: [id], onDelete: SetNull)
+  compra         Compra?                  @relation(fields: [compraId], references: [id], onDelete: SetNull)
 
   @@index([productoId, creadoEn])
   @@index([usuarioId])
   @@index([ventaId])
+  @@index([compraId])
   @@map("movimientos_inventario")
 }
 
@@ -347,12 +368,66 @@ model PagoVenta {
   @@map("pagos_venta")
 }
 
-enum EstadoTurnoCaja {
-  ABIERTO
-  CERRADO
+model Proveedor {
+  id            Int      @id @default(autoincrement())
+  nombre        String   @db.VarChar(150)
+  contacto      String?  @db.VarChar(120)
+  telefono      String?  @db.VarChar(30)
+  correo        String?  @db.VarChar(150)
+  direccion     String?  @db.VarChar(250)
+  notas         String?  @db.VarChar(250)
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now()) @map("creado_en")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+  compras       Compra[]
+
+  @@index([nombre])
+  @@index([activo])
+  @@map("proveedores")
 }
 
-enum TipoMovimientoCaja {
-  INGRESO
-  RETIRO
+model Compra {
+  id              Int                    @id @default(autoincrement())
+  proveedorId     Int                    @map("proveedor_id")
+  usuarioId       Int                    @map("usuario_id")
+  proveedorNombre String                 @map("proveedor_nombre") @db.VarChar(150)
+  numeroDocumento String?                @map("numero_documento") @db.VarChar(100)
+  notas           String?                @db.VarChar(250)
+  total           Decimal                @db.Decimal(14, 2)
+  estado          EstadoCompra           @default(RECIBIDA)
+  creadoEn        DateTime               @default(now()) @map("creado_en")
+  anuladaEn       DateTime?              @map("anulada_en")
+  proveedor       Proveedor              @relation(fields: [proveedorId], references: [id], onDelete: Restrict)
+  usuario         Usuario                @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  detalles        CompraDetalle[]
+  movimientos     MovimientoInventario[]
+
+  @@index([proveedorId])
+  @@index([usuarioId])
+  @@index([creadoEn])
+  @@index([estado])
+  @@map("compras")
+}
+
+model CompraDetalle {
+  id                      Int                  @id @default(autoincrement())
+  compraId                Int                  @map("compra_id")
+  productoId              Int                  @map("producto_id")
+  presentacionId          Int                  @map("presentacion_id")
+  productoNombre          String               @map("producto_nombre") @db.VarChar(150)
+  presentacionNombre      String               @map("presentacion_nombre") @db.VarChar(80)
+  cantidad                Decimal              @db.Decimal(16, 3)
+  factorInventario        Decimal              @map("factor_inventario") @db.Decimal(14, 3)
+  cantidadInventario      Decimal              @map("cantidad_inventario") @db.Decimal(16, 3)
+  costoPresentacion       Decimal              @map("costo_presentacion") @db.Decimal(14, 4)
+  costoUnitarioInventario Decimal              @map("costo_unitario_inventario") @db.Decimal(14, 4)
+  subtotal                Decimal              @db.Decimal(14, 2)
+  compra                  Compra               @relation(fields: [compraId], references: [id], onDelete: Cascade)
+  producto                Producto             @relation(fields: [productoId], references: [id], onDelete: Restrict)
+  presentacion            PresentacionProducto @relation(fields: [presentacionId], references: [id], onDelete: Restrict)
+
+  @@index([compraId])
+  @@index([productoId])
+  @@index([presentacionId])
+  @@map("compras_detalle")
 }

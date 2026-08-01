@@ -6,6 +6,9 @@ import { InventarioPage } from "./modules/inventario/InventarioPage.jsx";
 import { VentasPage } from "./modules/ventas/VentasPage.jsx";
 import { CajaPage } from "./modules/caja/CajaPage.jsx";
 import { ClientesPage } from "./modules/clientes/ClientesPage.jsx";
+import { ProveedoresPage } from "./modules/proveedores/ProveedoresPage.jsx";
+import { ComprasPage } from "./modules/compras/ComprasPage.jsx";
+import { ReportesPage } from "./modules/reportes/ReportesPage.jsx";
 
 const MODULE_ICONS = {
   VENTAS: "🛒",
@@ -26,6 +29,9 @@ const IMPLEMENTED_MODULES = new Set([
   "PRODUCTOS",
   "INVENTARIO",
   "CLIENTES",
+  "PROVEEDORES",
+  "COMPRAS",
+  "REPORTES",
 ]);
 
 function LoginScreen({ onLogin }) {
@@ -90,9 +96,7 @@ function LoginScreen({ onLogin }) {
               autoComplete="username"
               autoFocus
               disabled={loading}
-              onChange={(event) =>
-                setUsuario(event.target.value)
-              }
+              onChange={(event) => setUsuario(event.target.value)}
               placeholder="Escribe tu usuario"
               required
               value={usuario}
@@ -104,9 +108,7 @@ function LoginScreen({ onLogin }) {
             <input
               autoComplete="current-password"
               disabled={loading}
-              onChange={(event) =>
-                setContrasena(event.target.value)
-              }
+              onChange={(event) => setContrasena(event.target.value)}
               placeholder="Escribe tu contraseña"
               required
               type="password"
@@ -120,11 +122,7 @@ function LoginScreen({ onLogin }) {
             </p>
           ) : null}
 
-          <button
-            className="primary-button"
-            disabled={loading}
-            type="submit"
-          >
+          <button className="primary-button" disabled={loading} type="submit">
             {loading ? "Ingresando..." : "Ingresar"}
           </button>
         </form>
@@ -133,13 +131,7 @@ function LoginScreen({ onLogin }) {
   );
 }
 
-function Sidebar({
-  activeModule,
-  modules,
-  onLogout,
-  onOpenModule,
-  session,
-}) {
+function Sidebar({ activeModule, modules, onLogout, onOpenModule, session }) {
   const [closingSession, setClosingSession] = useState(false);
 
   async function handleLogout() {
@@ -163,16 +155,11 @@ function Sidebar({
         </div>
       </div>
 
-      <nav
-        className="sidebar__nav"
-        aria-label="Módulos del sistema"
-      >
+      <nav className="sidebar__nav" aria-label="Módulos del sistema">
         <p className="sidebar__section-label">Menú</p>
 
         {modules.map((module) => {
-          const implemented = IMPLEMENTED_MODULES.has(
-            module.codigo,
-          );
+          const implemented = IMPLEMENTED_MODULES.has(module.codigo);
           const selected = activeModule === module.codigo;
 
           return (
@@ -185,19 +172,14 @@ function Sidebar({
               onClick={() => onOpenModule(module.codigo)}
               type="button"
             >
-              <span
-                className="sidebar__item-icon"
-                aria-hidden="true"
-              >
+              <span className="sidebar__item-icon" aria-hidden="true">
                 {MODULE_ICONS[module.codigo] ?? "•"}
               </span>
 
               <span className="sidebar__item-text">
                 <strong>{module.nombre}</strong>
 
-                {!implemented ? (
-                  <small>Próximamente</small>
-                ) : null}
+                {!implemented ? <small>Próximamente</small> : null}
               </span>
             </button>
           );
@@ -206,10 +188,7 @@ function Sidebar({
 
       <div className="sidebar__footer">
         <div className="sidebar__user">
-          <span
-            className="sidebar__avatar"
-            aria-hidden="true"
-          >
+          <span className="sidebar__avatar" aria-hidden="true">
             {session.usuario.nombre.charAt(0).toUpperCase()}
           </span>
 
@@ -225,9 +204,7 @@ function Sidebar({
           onClick={handleLogout}
           type="button"
         >
-          {closingSession
-            ? "Cerrando..."
-            : "Cerrar sesión"}
+          {closingSession ? "Cerrando..." : "Cerrar sesión"}
         </button>
       </div>
     </aside>
@@ -255,13 +232,23 @@ function SystemContent({ activeModule, token }) {
     return <ClientesPage token={token} />;
   }
 
+  if (activeModule === "PROVEEDORES") {
+    return <ProveedoresPage token={token} />;
+  }
+
+  if (activeModule === "COMPRAS") {
+    return <ComprasPage token={token} />;
+  }
+
+  if (activeModule === "REPORTES") {
+    return <ReportesPage token={token} />;
+  }
+
   return (
     <section className="module-placeholder">
       <p className="eyebrow">Minisúper POS</p>
       <h1>Selecciona una opción del menú</h1>
-      <p>
-        Los módulos disponibles aparecen en el lado izquierdo.
-      </p>
+      <p>Los módulos disponibles aparecen en el lado izquierdo.</p>
     </section>
   );
 }
@@ -272,9 +259,7 @@ function DesktopSystem({ session, onLogout }) {
       IMPLEMENTED_MODULES.has(module.codigo),
     )?.codigo ?? null;
 
-  const [activeModule, setActiveModule] = useState(
-    firstImplementedModule,
-  );
+  const [activeModule, setActiveModule] = useState(firstImplementedModule);
 
   return (
     <div className="desktop-layout">
@@ -287,10 +272,7 @@ function DesktopSystem({ session, onLogout }) {
       />
 
       <section className="desktop-content">
-        <SystemContent
-          activeModule={activeModule}
-          token={session.token}
-        />
+        <SystemContent activeModule={activeModule} token={session.token} />
       </section>
     </div>
   );
@@ -303,10 +285,5 @@ export function App() {
     return <LoginScreen onLogin={setSession} />;
   }
 
-  return (
-    <DesktopSystem
-      onLogout={() => setSession(null)}
-      session={session}
-    />
-  );
+  return <DesktopSystem onLogout={() => setSession(null)} session={session} />;
 }

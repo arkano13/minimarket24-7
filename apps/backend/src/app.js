@@ -22,16 +22,28 @@ import {
 } from "./modules/ventas/ventas.routes.js";
 
 import {
-  errorMiddleware,
-} from "./middleware/error.middleware.js";
-
-import {
-   cashRouter 
+  cashRouter,
 } from "./modules/caja/caja.routes.js";
 
-import { 
-  clientsRouter
- } from "./modules/clientes/clientes.routes.js";
+import {
+  clientsRouter,
+} from "./modules/clientes/clientes.routes.js";
+
+import {
+  suppliersRouter,
+} from "./modules/proveedores/proveedores.routes.js";
+
+import {
+  purchasesRouter,
+} from "./modules/compras/compras.routes.js";
+
+import {
+  reportsRouter,
+} from "./modules/reportes/reportes.routes.js";
+
+import {
+  errorMiddleware,
+} from "./middleware/error.middleware.js";
 
 const allowedOrigins = new Set([
   "http://127.0.0.1:5173",
@@ -95,10 +107,28 @@ app.use(
 
 app.use(
   "/api/caja",
-   cashRouter
+  cashRouter,
 );
 
-app.use("/api/clientes", clientsRouter);
+app.use(
+  "/api/clientes",
+  clientsRouter,
+);
+
+app.use(
+  "/api/proveedores",
+  suppliersRouter,
+);
+
+app.use(
+  "/api/compras",
+  purchasesRouter,
+);
+
+app.use(
+  "/api/reportes",
+  reportsRouter,
+);
 
 app.use((req, res) => {
   res.status(404).json({

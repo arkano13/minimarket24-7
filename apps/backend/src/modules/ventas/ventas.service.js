@@ -1,94 +1,45 @@
-import {
-  Prisma,
-} from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
-import {
-  prisma,
-} from "../../lib/prisma.js";
+import { prisma } from "../../lib/prisma.js";
 
-import {
-  AppError,
-} from "../../utils/AppError.js";
+import { AppError } from "../../utils/AppError.js";
 
-const PAYMENT_METHODS = new Set([
-  "EFECTIVO",
-  "TARJETA",
-  "TRANSFERENCIA",
-]);
+const PAYMENT_METHODS = new Set(["EFECTIVO", "TARJETA", "TRANSFERENCIA"]);
 
-function positiveInteger(
-  value,
-  field,
-) {
+function positiveInteger(value, field) {
   const number = Number(value);
 
-  if (
-    !Number.isInteger(number) ||
-    number <= 0
-  ) {
-    throw new AppError(
-      `${field} no es válido.`,
-      400,
-    );
+  if (!Number.isInteger(number) || number <= 0) {
+    throw new AppError(`${field} no es válido.`, 400);
   }
 
   return number;
 }
 
-function optionalPositiveInteger(
-  value,
-  field,
-) {
-  if (
-    value === undefined ||
-    value === null ||
-    value === ""
-  ) {
+function optionalPositiveInteger(value, field) {
+  if (value === undefined || value === null || value === "") {
     return null;
   }
 
-  return positiveInteger(
-    value,
-    field,
-  );
+  return positiveInteger(value, field);
 }
 
-function positiveDecimal(
-  value,
-  field,
-) {
+function positiveDecimal(value, field) {
   const number = Number(value);
 
-  if (
-    !Number.isFinite(number) ||
-    number <= 0
-  ) {
-    throw new AppError(
-      `${field} debe ser mayor que cero.`,
-      400,
-    );
+  if (!Number.isFinite(number) || number <= 0) {
+    throw new AppError(`${field} debe ser mayor que cero.`, 400);
   }
 
-  return new Prisma.Decimal(
-    String(number),
-  );
+  return new Prisma.Decimal(String(number));
 }
 
-function optionalText(
-  value,
-  maxLength,
-) {
-  if (
-    value === undefined ||
-    value === null ||
-    value === ""
-  ) {
+function optionalText(value, maxLength) {
+  if (value === undefined || value === null || value === "") {
     return null;
   }
 
-  const text = String(value)
-    .trim()
-    .replace(/\s+/g, " ");
+  const text = String(value).trim().replace(/\s+/g, " ");
 
   if (text.length > maxLength) {
     throw new AppError(
@@ -100,73 +51,35 @@ function optionalText(
   return text || null;
 }
 
-function currentMinute(
-  date = new Date(),
-) {
-  return (
-    date.getHours() * 60 +
-    date.getMinutes()
-  );
+function currentMinute(date = new Date()) {
+  return date.getHours() * 60 + date.getMinutes();
 }
 
-function shiftContainsMinute(
-  shift,
-  minute,
-) {
-  if (
-    shift.minutoInicio <
-    shift.minutoFin
-  ) {
-    return (
-      minute >=
-        shift.minutoInicio &&
-      minute <
-        shift.minutoFin
-    );
+function shiftContainsMinute(shift, minute) {
+  if (shift.minutoInicio < shift.minutoFin) {
+    return minute >= shift.minutoInicio && minute < shift.minutoFin;
   }
 
-  return (
-    minute >=
-      shift.minutoInicio ||
-    minute <
-      shift.minutoFin
-  );
+  return minute >= shift.minutoInicio || minute < shift.minutoFin;
 }
 
-function getCurrentPrice(
-  presentation,
-  priceMode,
-  minute,
-) {
-  const specialPrice =
-    presentation
-      .preciosEspeciales?.[0];
+function getCurrentPrice(presentation, priceMode, minute) {
+  const specialPrice = presentation.preciosEspeciales?.[0];
 
   if (specialPrice) {
     return {
-      price:
-        new Prisma.Decimal(
-          specialPrice.precio,
-        ),
+      price: new Prisma.Decimal(specialPrice.precio),
 
-      origin:
-        "CLIENTE_ESPECIAL",
+      origin: "CLIENTE_ESPECIAL",
 
       shift: null,
       special: true,
     };
   }
 
-  if (
-    priceMode !==
-    "POR_HORARIO"
-  ) {
+  if (priceMode !== "POR_HORARIO") {
     return {
-      price:
-        new Prisma.Decimal(
-          presentation
-            .precioBase,
-        ),
+      price: new Prisma.Decimal(presentation.precioBase),
 
       origin: "NORMAL",
       shift: null,
@@ -174,23 +87,15 @@ function getCurrentPrice(
     };
   }
 
-  const currentShiftPrice =
-    presentation.preciosHorario.find(
-      (shiftPrice) =>
-        shiftPrice.franja.activo &&
-        shiftContainsMinute(
-          shiftPrice.franja,
-          minute,
-        ),
-    );
+  const currentShiftPrice = presentation.preciosHorario.find(
+    (shiftPrice) =>
+      shiftPrice.franja.activo &&
+      shiftContainsMinute(shiftPrice.franja, minute),
+  );
 
   if (!currentShiftPrice) {
     return {
-      price:
-        new Prisma.Decimal(
-          presentation
-            .precioBase,
-        ),
+      price: new Prisma.Decimal(presentation.precioBase),
 
       origin: "NORMAL",
       shift: null,
@@ -199,137 +104,84 @@ function getCurrentPrice(
   }
 
   return {
-    price:
-      new Prisma.Decimal(
-        currentShiftPrice.precio,
-      ),
+    price: new Prisma.Decimal(currentShiftPrice.precio),
 
-    origin:
-      `TURNO_${currentShiftPrice.franja.orden}`,
+    origin: `TURNO_${currentShiftPrice.franja.orden}`,
 
     shift: {
-      numero:
-        currentShiftPrice
-          .franja.orden,
+      numero: currentShiftPrice.franja.orden,
 
-      nombre:
-        currentShiftPrice
-          .franja.nombre,
+      nombre: currentShiftPrice.franja.nombre,
     },
 
     special: false,
   };
 }
 
-function principalBarcode(
-  presentation,
-) {
+function principalBarcode(presentation) {
   return (
-    presentation.codigosBarra.find(
-      (barcode) =>
-        barcode.principal,
-    )?.codigo ??
-    presentation
-      .codigosBarra[0]
-      ?.codigo ??
+    presentation.codigosBarra.find((barcode) => barcode.principal)?.codigo ??
+    presentation.codigosBarra[0]?.codigo ??
     null
   );
 }
 
 function serializeSale(sale) {
-  const payment =
-    sale.pagos[0] ?? null;
+  const payment = sale.pagos[0] ?? null;
 
   return {
     id: sale.id,
     estado: sale.estado,
-    subtotal:
-      Number(sale.subtotal),
-    total:
-      Number(sale.total),
-    creadoEn:
-      sale.creadoEn,
+    subtotal: Number(sale.subtotal),
+    total: Number(sale.total),
+    creadoEn: sale.creadoEn,
 
-    cliente:
-      sale.clienteEspecialId
-        ? {
-            id:
-              sale.clienteEspecialId,
+    cliente: sale.clienteEspecialId
+      ? {
+          id: sale.clienteEspecialId,
 
-            nombre:
-              sale.clienteNombre,
-          }
-        : null,
+          nombre: sale.clienteNombre,
+        }
+      : null,
 
     usuario: {
       id: sale.usuario.id,
-      nombre:
-        sale.usuario.nombre,
+      nombre: sale.usuario.nombre,
     },
 
     pago: payment
       ? {
-          metodo:
-            payment.metodo,
+          metodo: payment.metodo,
 
-          monto:
-            Number(
-              payment.monto,
-            ),
+          monto: Number(payment.monto),
 
-          recibido:
-            payment.recibido
-              ? Number(
-                  payment.recibido,
-                )
-              : null,
+          recibido: payment.recibido ? Number(payment.recibido) : null,
 
-          cambio:
-            Number(
-              payment.cambio,
-            ),
+          cambio: Number(payment.cambio),
 
-          referencia:
-            payment.referencia,
+          referencia: payment.referencia,
         }
       : null,
 
-    productos:
-      sale.detalles.map(
-        (detail) => ({
-          id: detail.id,
+    productos: sale.detalles.map((detail) => ({
+      id: detail.id,
 
-          productoId:
-            detail.productoId,
+      productoId: detail.productoId,
 
-          presentacionId:
-            detail.presentacionId,
+      presentacionId: detail.presentacionId,
 
-          nombre:
-            detail.productoNombre,
+      nombre: detail.productoNombre,
 
-          presentacion:
-            detail.presentacionNombre,
+      presentacion: detail.presentacionNombre,
 
-          cantidad:
-            Number(
-              detail.cantidad,
-            ),
+      cantidad: Number(detail.cantidad),
 
-          precio:
-            Number(
-              detail.precioUnitario,
-            ),
+      precio: Number(detail.precioUnitario),
 
-          subtotal:
-            Number(
-              detail.subtotal,
-            ),
+      subtotal: Number(detail.subtotal),
 
-          precioOrigen:
-            detail.precioOrigen,
-        }),
-      ),
+      precioOrigen: detail.precioOrigen,
+    })),
   };
 }
 
@@ -387,117 +239,275 @@ export async function searchSaleClients(search = "") {
     },
     take: 50,
   });
-}   
+}
 
-export async function searchSaleProducts(
-  search = "",
-  clientIdInput = null,
-) {
-  const term =
-    typeof search === "string"
-      ? search.trim()
-      : "";
+export async function searchSaleProducts(search = "", clientIdInput = null) {
+  const term = typeof search === "string" ? search.trim() : "";
 
-  const clientId =
-    optionalPositiveInteger(
-      clientIdInput,
-      "El cliente",
-    );
+  const clientId = optionalPositiveInteger(clientIdInput, "El cliente");
 
-  const minute =
-    currentMinute();
+  const minute = currentMinute();
 
   if (clientId) {
-    const client =
-      await prisma.clienteEspecial.findFirst({
-        where: {
-          id: clientId,
-          activo: true,
-        },
+    const client = await prisma.clienteEspecial.findFirst({
+      where: {
+        id: clientId,
+        activo: true,
+      },
 
-        select: {
-          id: true,
-        },
-      });
+      select: {
+        id: true,
+      },
+    });
 
     if (!client) {
-      throw new AppError(
-        "El cliente especial no existe o está inactivo.",
-        404,
-      );
+      throw new AppError("El cliente especial no existe o está inactivo.", 404);
     }
   }
 
-  const presentations =
-    await prisma.presentacionProducto.findMany({
+  const presentations = await prisma.presentacionProducto.findMany({
+    where: {
+      activo: true,
+
+      producto: {
+        activo: true,
+      },
+
+      ...(term
+        ? {
+            OR: [
+              {
+                producto: {
+                  nombre: {
+                    contains: term,
+
+                    mode: "insensitive",
+                  },
+                },
+              },
+
+              {
+                producto: {
+                  sku: {
+                    contains: term,
+
+                    mode: "insensitive",
+                  },
+                },
+              },
+
+              {
+                codigosBarra: {
+                  some: {
+                    activo: true,
+
+                    codigo: {
+                      contains: term,
+                    },
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+    },
+
+    include: {
+      producto: {
+        include: {
+          categoria: {
+            select: {
+              id: true,
+              nombre: true,
+            },
+          },
+        },
+      },
+
+      codigosBarra: {
+        where: {
+          activo: true,
+        },
+      },
+
+      preciosHorario: {
+        include: {
+          franja: true,
+        },
+      },
+
+      preciosEspeciales: {
+        where: {
+          activo: true,
+
+          clienteId: clientId ?? -1,
+        },
+
+        take: 1,
+      },
+    },
+
+    orderBy: [
+      {
+        producto: {
+          nombre: "asc",
+        },
+      },
+
+      {
+        id: "asc",
+      },
+    ],
+
+    take: 50,
+  });
+
+  return presentations
+    .map((presentation) => {
+      const factor = Number(presentation.factorInventario);
+
+      const currentPrice = getCurrentPrice(
+        presentation,
+        presentation.producto.modoPrecio,
+        minute,
+      );
+
+      const barcode = principalBarcode(presentation);
+
+      return {
+        presentacionId: presentation.id,
+
+        productoId: presentation.producto.id,
+
+        nombre: presentation.producto.nombre,
+
+        presentacion: presentation.nombre,
+
+        tipoVenta: presentation.tipo,
+
+        codigoBarra: barcode,
+
+        sku: presentation.producto.sku,
+
+        categoria: presentation.producto.categoria,
+
+        stock: Number(presentation.producto.stockActual) / factor,
+
+        precio: Number(currentPrice.price),
+
+        precioOrigen: currentPrice.origin,
+
+        turno: currentPrice.shift,
+
+        precioEspecial: currentPrice.special,
+
+        coincidenciaExacta:
+          Boolean(term) &&
+          presentation.codigosBarra.some((item) => item.codigo === term),
+      };
+    })
+    .sort(
+      (first, second) =>
+        Number(second.coincidenciaExacta) - Number(first.coincidenciaExacta),
+    );
+}
+
+export async function createSale(data, userId) {
+  if (!Array.isArray(data.productos) || data.productos.length === 0) {
+    throw new AppError("Agrega al menos un producto a la venta.", 400);
+  }
+
+  if (data.productos.length > 100) {
+    throw new AppError("La venta no puede superar 100 productos.", 400);
+  }
+
+  const paymentMethod = String(data.metodoPago ?? "").toUpperCase();
+
+  const clientId = optionalPositiveInteger(data.clienteId, "El cliente");
+
+  if (!PAYMENT_METHODS.has(paymentMethod)) {
+    throw new AppError("Selecciona un método de pago válido.", 400);
+  }
+
+  const reference = optionalText(data.referencia, 100);
+
+  const combinedItems = new Map();
+
+  for (const item of data.productos) {
+    const presentationId = positiveInteger(
+      item.presentacionId,
+      "La presentación",
+    );
+
+    const quantity = positiveDecimal(item.cantidad, "La cantidad");
+
+    const current = combinedItems.get(presentationId);
+
+    combinedItems.set(
+      presentationId,
+
+      current ? current.add(quantity) : quantity,
+    );
+  }
+
+  const presentationIds = [...combinedItems.keys()];
+
+  const saleMinute = currentMinute();
+
+  return prisma.$transaction(async (transaction) => {
+    const openCashShift = await transaction.turnoCaja.findFirst({
       where: {
+        estado: "ABIERTO",
+      },
+
+      select: {
+        id: true,
+      },
+
+      orderBy: {
+        abiertoEn: "desc",
+      },
+    });
+
+    if (!openCashShift) {
+      throw new AppError("Debes abrir la caja antes de vender.", 400);
+    }
+
+    const specialClient = clientId
+      ? await transaction.clienteEspecial.findFirst({
+          where: {
+            id: clientId,
+            activo: true,
+          },
+
+          select: {
+            id: true,
+            nombre: true,
+          },
+        })
+      : null;
+
+    if (clientId && !specialClient) {
+      throw new AppError("El cliente especial no existe o está inactivo.", 404);
+    }
+
+    const presentations = await transaction.presentacionProducto.findMany({
+      where: {
+        id: {
+          in: presentationIds,
+        },
+
         activo: true,
 
         producto: {
           activo: true,
+
+          controlaInventario: true,
         },
-
-        ...(term
-          ? {
-              OR: [
-                {
-                  producto: {
-                    nombre: {
-                      contains:
-                        term,
-
-                      mode:
-                        "insensitive",
-                    },
-                  },
-                },
-
-                {
-                  producto: {
-                    sku: {
-                      contains:
-                        term,
-
-                      mode:
-                        "insensitive",
-                    },
-                  },
-                },
-
-                {
-                  codigosBarra: {
-                    some: {
-                      activo: true,
-
-                      codigo: {
-                        contains:
-                          term,
-                      },
-                    },
-                  },
-                },
-              ],
-            }
-          : {}),
       },
 
       include: {
-        producto: {
-          include: {
-            categoria: {
-              select: {
-                id: true,
-                nombre: true,
-              },
-            },
-          },
-        },
-
-        codigosBarra: {
-          where: {
-            activo: true,
-          },
-        },
+        producto: true,
 
         preciosHorario: {
           include: {
@@ -509,584 +519,194 @@ export async function searchSaleProducts(
           where: {
             activo: true,
 
-            clienteId:
-              clientId ?? -1,
+            clienteId: clientId ?? -1,
           },
 
           take: 1,
         },
       },
-
-      orderBy: [
-        {
-          producto: {
-            nombre: "asc",
-          },
-        },
-
-        {
-          id: "asc",
-        },
-      ],
-
-      take: 50,
     });
 
-  return presentations
-    .map((presentation) => {
-      const factor =
-        Number(
-          presentation
-            .factorInventario,
-        );
+    if (presentations.length !== presentationIds.length) {
+      throw new AppError("Uno de los productos ya no está disponible.", 400);
+    }
 
-      const currentPrice =
-        getCurrentPrice(
-          presentation,
-          presentation.producto
-            .modoPrecio,
-          minute,
-        );
+    const deductionsByProduct = new Map();
 
-      const barcode =
-        principalBarcode(
-          presentation,
-        );
+    const details = [];
 
-      return {
-        presentacionId:
-          presentation.id,
+    let total = new Prisma.Decimal(0);
 
-        productoId:
-          presentation.producto.id,
+    for (const presentation of presentations) {
+      const quantity = combinedItems.get(presentation.id);
 
-        nombre:
-          presentation.producto
-            .nombre,
+      const factor = new Prisma.Decimal(presentation.factorInventario);
 
-        presentacion:
-          presentation.nombre,
+      const inventoryQuantity = quantity.mul(factor);
 
-        tipoVenta:
-          presentation.tipo,
+      const currentPrice = getCurrentPrice(
+        presentation,
 
-        codigoBarra:
-          barcode,
+        presentation.producto.modoPrecio,
 
-        sku:
-          presentation.producto
-            .sku,
-
-        categoria:
-          presentation.producto
-            .categoria,
-
-        stock:
-          Number(
-            presentation.producto
-              .stockActual,
-          ) / factor,
-
-        precio:
-          Number(
-            currentPrice.price,
-          ),
-
-        precioOrigen:
-          currentPrice.origin,
-
-        turno:
-          currentPrice.shift,
-
-        precioEspecial:
-          currentPrice.special,
-
-        coincidenciaExacta:
-          Boolean(term) &&
-          presentation.codigosBarra.some(
-            (item) =>
-              item.codigo === term,
-          ),
-      };
-    })
-    .sort(
-      (first, second) =>
-        Number(
-          second
-            .coincidenciaExacta,
-        ) -
-        Number(
-          first
-            .coincidenciaExacta,
-        ),
-    );
-}
-
-export async function createSale(
-  data,
-  userId,
-) {
-  if (
-    !Array.isArray(
-      data.productos,
-    ) ||
-    data.productos.length === 0
-  ) {
-    throw new AppError(
-      "Agrega al menos un producto a la venta.",
-      400,
-    );
-  }
-
-  if (
-    data.productos.length > 100
-  ) {
-    throw new AppError(
-      "La venta no puede superar 100 productos.",
-      400,
-    );
-  }
-
-  const paymentMethod =
-    String(
-      data.metodoPago ?? "",
-    ).toUpperCase();
-
-  const clientId =
-    optionalPositiveInteger(
-      data.clienteId,
-      "El cliente",
-    );
-
-  if (
-    !PAYMENT_METHODS.has(
-      paymentMethod,
-    )
-  ) {
-    throw new AppError(
-      "Selecciona un método de pago válido.",
-      400,
-    );
-  }
-
-  const reference =
-    optionalText(
-      data.referencia,
-      100,
-    );
-
-  const combinedItems =
-    new Map();
-
-  for (
-    const item
-    of data.productos
-  ) {
-    const presentationId =
-      positiveInteger(
-        item.presentacionId,
-        "La presentación",
+        saleMinute,
       );
 
-    const quantity =
-      positiveDecimal(
-        item.cantidad,
-        "La cantidad",
+      const subtotal = quantity.mul(currentPrice.price).toDecimalPlaces(2);
+
+      const visibleCost = new Prisma.Decimal(
+        presentation.producto.costoPromedio,
+      ).mul(factor);
+
+      const currentDeduction = deductionsByProduct.get(presentation.productoId);
+
+      deductionsByProduct.set(
+        presentation.productoId,
+
+        {
+          product: presentation.producto,
+
+          quantity: currentDeduction
+            ? currentDeduction.quantity.add(inventoryQuantity)
+            : inventoryQuantity,
+        },
       );
 
-    const current =
-      combinedItems.get(
-        presentationId,
-      );
+      details.push({
+        productoId: presentation.productoId,
 
-    combinedItems.set(
-      presentationId,
+        presentacionId: presentation.id,
 
-      current
-        ? current.add(quantity)
-        : quantity,
-    );
-  }
+        productoNombre: presentation.producto.nombre,
 
-  const presentationIds = [
-    ...combinedItems.keys(),
-  ];
+        presentacionNombre: presentation.nombre,
 
-  const saleMinute =
-    currentMinute();
+        cantidad: quantity,
 
-  return prisma.$transaction(
-    async (transaction) => {
-      const openCashShift =
-        await transaction.turnoCaja.findFirst({
-          where: {
-            estado: "ABIERTO",
-          },
+        factorInventario: factor,
 
-          select: {
-            id: true,
-          },
+        cantidadInventario: inventoryQuantity,
 
-          orderBy: {
-            abiertoEn: "desc",
-          },
-        });
+        costoUnitario: visibleCost,
 
-      if (!openCashShift) {
+        precioUnitario: currentPrice.price,
+
+        subtotal,
+
+        precioOrigen: currentPrice.origin,
+      });
+
+      total = total.add(subtotal);
+    }
+
+    for (const deduction of deductionsByProduct.values()) {
+      if (deduction.quantity.greaterThan(deduction.product.stockActual)) {
         throw new AppError(
-          "Debes abrir la caja antes de vender.",
+          `No hay existencia suficiente de ${deduction.product.nombre}.`,
           400,
         );
       }
+    }
 
-      const specialClient =
-        clientId
-          ? await transaction.clienteEspecial.findFirst({
-              where: {
-                id: clientId,
-                activo: true,
-              },
+    let received = null;
 
-              select: {
-                id: true,
-                nombre: true,
-              },
-            })
-          : null;
+    let change = new Prisma.Decimal(0);
 
-      if (
-        clientId &&
-        !specialClient
-      ) {
+    if (paymentMethod === "EFECTIVO") {
+      received = positiveDecimal(data.montoRecibido, "El monto recibido");
+
+      if (received.lessThan(total)) {
+        throw new AppError("El efectivo recibido es menor que el total.", 400);
+      }
+
+      change = received.sub(total).toDecimalPlaces(2);
+    }
+
+    const sale = await transaction.venta.create({
+      data: {
+        usuarioId: userId,
+
+        turnoCajaId: openCashShift.id,
+
+        clienteEspecialId: specialClient?.id ?? null,
+
+        clienteNombre: specialClient?.nombre ?? null,
+
+        subtotal: total,
+
+        total,
+
+        detalles: {
+          create: details,
+        },
+
+        pagos: {
+          create: {
+            metodo: paymentMethod,
+
+            monto: total,
+
+            recibido: received,
+
+            cambio: change,
+
+            referencia: reference,
+          },
+        },
+      },
+
+      include: SALE_INCLUDE,
+    });
+
+    for (const [productId, deduction] of deductionsByProduct.entries()) {
+      const updateResult = await transaction.producto.updateMany({
+        where: {
+          id: productId,
+
+          stockActual: {
+            gte: deduction.quantity,
+          },
+        },
+
+        data: {
+          stockActual: {
+            decrement: deduction.quantity,
+          },
+        },
+      });
+
+      if (updateResult.count !== 1) {
         throw new AppError(
-          "El cliente especial no existe o está inactivo.",
-          404,
+          `La existencia de ${deduction.product.nombre} cambió. Intenta nuevamente.`,
+          409,
         );
       }
 
-      const presentations =
-        await transaction.presentacionProducto.findMany({
-          where: {
-            id: {
-              in:
-                presentationIds,
-            },
+      const updatedProduct = await transaction.producto.findUnique({
+        where: {
+          id: productId,
+        },
 
-            activo: true,
+        select: {
+          stockActual: true,
+          costoPromedio: true,
+        },
+      });
 
-            producto: {
-              activo: true,
+      await transaction.movimientoInventario.create({
+        data: {
+          productoId: productId,
+          usuarioId: userId,
+          ventaId: sale.id,
+          tipo: "VENTA",
+          cantidad: deduction.quantity,
+          saldoPosterior: updatedProduct.stockActual,
+          costoUnitario: updatedProduct.costoPromedio,
+          motivo: `Venta #${sale.id}.`,
+        },
+      });
+    }
 
-              controlaInventario:
-                true,
-            },
-          },
-
-          include: {
-            producto: true,
-
-            preciosHorario: {
-              include: {
-                franja: true,
-              },
-            },
-
-            preciosEspeciales: {
-              where: {
-                activo: true,
-
-                clienteId:
-                  clientId ?? -1,
-              },
-
-              take: 1,
-            },
-          },
-        });
-
-      if (
-        presentations.length !==
-        presentationIds.length
-      ) {
-        throw new AppError(
-          "Uno de los productos ya no está disponible.",
-          400,
-        );
-      }
-
-      const deductionsByProduct =
-        new Map();
-
-      const details = [];
-
-      let total =
-        new Prisma.Decimal(0);
-
-      for (
-        const presentation
-        of presentations
-      ) {
-        const quantity =
-          combinedItems.get(
-            presentation.id,
-          );
-
-        const factor =
-          new Prisma.Decimal(
-            presentation
-              .factorInventario,
-          );
-
-        const inventoryQuantity =
-          quantity.mul(factor);
-
-        const currentPrice =
-          getCurrentPrice(
-            presentation,
-
-            presentation.producto
-              .modoPrecio,
-
-            saleMinute,
-          );
-
-        const subtotal =
-          quantity
-            .mul(
-              currentPrice.price,
-            )
-            .toDecimalPlaces(2);
-
-        const visibleCost =
-          new Prisma.Decimal(
-            presentation.producto
-              .costoPromedio,
-          ).mul(factor);
-
-        const currentDeduction =
-          deductionsByProduct.get(
-            presentation.productoId,
-          );
-
-        deductionsByProduct.set(
-          presentation.productoId,
-
-          {
-            product:
-              presentation.producto,
-
-            quantity:
-              currentDeduction
-                ? currentDeduction.quantity.add(
-                    inventoryQuantity,
-                  )
-                : inventoryQuantity,
-          },
-        );
-
-        details.push({
-          productoId:
-            presentation.productoId,
-
-          presentacionId:
-            presentation.id,
-
-          productoNombre:
-            presentation.producto
-              .nombre,
-
-          presentacionNombre:
-            presentation.nombre,
-
-          cantidad:
-            quantity,
-
-          factorInventario:
-            factor,
-
-          cantidadInventario:
-            inventoryQuantity,
-
-          costoUnitario:
-            visibleCost,
-
-          precioUnitario:
-            currentPrice.price,
-
-          subtotal,
-
-          precioOrigen:
-            currentPrice.origin,
-        });
-
-        total =
-          total.add(subtotal);
-      }
-
-      for (
-        const deduction
-        of deductionsByProduct.values()
-      ) {
-        if (
-          deduction.quantity.greaterThan(
-            deduction.product
-              .stockActual,
-          )
-        ) {
-          throw new AppError(
-            `No hay existencia suficiente de ${deduction.product.nombre}.`,
-            400,
-          );
-        }
-      }
-
-      let received = null;
-
-      let change =
-        new Prisma.Decimal(0);
-
-      if (
-        paymentMethod ===
-        "EFECTIVO"
-      ) {
-        received =
-          positiveDecimal(
-            data.montoRecibido,
-            "El monto recibido",
-          );
-
-        if (
-          received.lessThan(
-            total,
-          )
-        ) {
-          throw new AppError(
-            "El efectivo recibido es menor que el total.",
-            400,
-          );
-        }
-
-        change =
-          received
-            .sub(total)
-            .toDecimalPlaces(2);
-      }
-
-      const sale =
-        await transaction.venta.create({
-          data: {
-            usuarioId:
-              userId,
-
-            turnoCajaId:
-              openCashShift.id,
-
-            clienteEspecialId:
-              specialClient?.id ??
-              null,
-
-            clienteNombre:
-              specialClient?.nombre ??
-              null,
-
-            subtotal:
-              total,
-
-            total,
-
-            detalles: {
-              create: details,
-            },
-
-            pagos: {
-              create: {
-                metodo:
-                  paymentMethod,
-
-                monto: total,
-
-                recibido:
-                  received,
-
-                cambio:
-                  change,
-
-                referencia:
-                  reference,
-              },
-            },
-          },
-
-          include:
-            SALE_INCLUDE,
-        });
-
-      for (
-        const [
-          productId,
-          deduction,
-        ]
-        of deductionsByProduct.entries()
-      ) {
-        const updateResult =
-          await transaction.producto.updateMany({
-            where: {
-              id:
-                productId,
-
-              stockActual: {
-                gte:
-                  deduction.quantity,
-              },
-            },
-
-            data: {
-              stockActual: {
-                decrement:
-                  deduction.quantity,
-              },
-            },
-          });
-
-        if (
-          updateResult.count !== 1
-        ) {
-          throw new AppError(
-            `La existencia de ${deduction.product.nombre} cambió. Intenta nuevamente.`,
-            409,
-          );
-        }
-
-        const updatedProduct =
-          await transaction.producto.findUnique({
-            where: {
-              id:
-                productId,
-            },
-
-            select: {
-              stockActual: true,
-              costoPromedio: true,
-            },
-          });
-
-   await transaction.movimientoInventario.create({
-  data: {
-    productoId: productId,
-    usuarioId: userId,
-    ventaId: sale.id,
-    tipo: "VENTA",
-    cantidad: deduction.quantity,
-    saldoPosterior: updatedProduct.stockActual,
-    costoUnitario: updatedProduct.costoPromedio,
-    motivo: `Venta #${sale.id}.`,
-  },
-});
-      }
-
-      return serializeSale(
-        sale,
-      );
-    },
-  );
+    return serializeSale(sale);
+  });
 }

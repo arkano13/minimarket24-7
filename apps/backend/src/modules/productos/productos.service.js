@@ -31,11 +31,19 @@ const TIPOS_VENTA = {
 };
 
 function cleanText(value, field, maxLength) {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new AppError(`${field} es obligatorio.`, 400);
+  if (
+    typeof value !== "string" ||
+    !value.trim()
+  ) {
+    throw new AppError(
+      `${field} es obligatorio.`,
+      400,
+    );
   }
 
-  const text = value.trim().replace(/\s+/g, " ");
+  const text = value
+    .trim()
+    .replace(/\s+/g, " ");
 
   if (text.length > maxLength) {
     throw new AppError(
@@ -82,7 +90,9 @@ function decimalValue(
   ) {
     throw new AppError(
       `${field} debe ser un número ${
-        positive ? "mayor que cero" : "válido"
+        positive
+          ? "mayor que cero"
+          : "válido"
       }.`,
       400,
     );
@@ -163,7 +173,11 @@ async function getShiftPrices(
     (shift) => shift.orden === 3,
   );
 
-  if (!shiftOne || !shiftTwo || !shiftThree) {
+  if (
+    !shiftOne ||
+    !shiftTwo ||
+    !shiftThree
+  ) {
     throw new AppError(
       "No están configurados los tres turnos de precio.",
       400,
@@ -189,7 +203,8 @@ async function getShiftPrices(
 function serializeProduct(product) {
   const principal =
     product.presentaciones.find(
-      (presentation) => presentation.esPrincipal,
+      (presentation) =>
+        presentation.esPrincipal,
     ) ??
     product.presentaciones[0] ??
     null;
@@ -206,9 +221,13 @@ function serializeProduct(product) {
     categoria: product.categoria,
     modoPrecio: product.modoPrecio,
     activo: product.activo,
-    stock: Number(product.stockActual) / factor,
+
+    stock:
+      Number(product.stockActual) / factor,
+
     stockMinimo:
       Number(product.stockMinimo) / factor,
+
     costo:
       Number(product.costoPromedio) * factor,
 
@@ -217,26 +236,36 @@ function serializeProduct(product) {
           id: principal.id,
           nombre: principal.nombre,
           tipo: principal.tipo,
-          precio: Number(principal.precioBase),
+          precio: Number(
+            principal.precioBase,
+          ),
           factorInventario: factor,
 
           codigoBarra:
             principal.codigosBarra.find(
-              (barcode) => barcode.principal,
+              (barcode) =>
+                barcode.principal,
             )?.codigo ??
-            principal.codigosBarra[0]?.codigo ??
+            principal.codigosBarra[0]
+              ?.codigo ??
             null,
 
           preciosTurno:
             principal.preciosHorario.map(
               (shiftPrice) => ({
-                turno: shiftPrice.franja.orden,
-                nombre: shiftPrice.franja.nombre,
+                turno:
+                  shiftPrice.franja.orden,
+                nombre:
+                  shiftPrice.franja.nombre,
                 minutoInicio:
-                  shiftPrice.franja.minutoInicio,
+                  shiftPrice.franja
+                    .minutoInicio,
                 minutoFin:
-                  shiftPrice.franja.minutoFin,
-                precio: Number(shiftPrice.precio),
+                  shiftPrice.franja
+                    .minutoFin,
+                precio: Number(
+                  shiftPrice.precio,
+                ),
               }),
             ),
         }
@@ -244,94 +273,99 @@ function serializeProduct(product) {
   };
 }
 
-export async function listProducts(search = "") {
+export async function listProducts(
+  search = "",
+) {
   const term =
     typeof search === "string"
       ? search.trim()
       : "";
 
-  const products = await prisma.producto.findMany({
-    where: {
-      activo: true,
+  const products =
+    await prisma.producto.findMany({
+      where: {
+        activo: true,
 
-      ...(term
-        ? {
-            OR: [
-              {
-                nombre: {
-                  contains: term,
-                  mode: "insensitive",
+        ...(term
+          ? {
+              OR: [
+                {
+                  nombre: {
+                    contains: term,
+                    mode: "insensitive",
+                  },
                 },
-              },
-              {
-                sku: {
-                  contains: term,
-                  mode: "insensitive",
+
+                {
+                  sku: {
+                    contains: term,
+                    mode: "insensitive",
+                  },
                 },
-              },
-              {
-                presentaciones: {
-                  some: {
-                    codigosBarra: {
-                      some: {
-                        codigo: {
-                          contains: term,
+
+                {
+                  presentaciones: {
+                    some: {
+                      codigosBarra: {
+                        some: {
+                          codigo: {
+                            contains: term,
+                          },
                         },
                       },
                     },
                   },
                 },
-              },
-            ],
-          }
-        : {}),
-    },
-
-    include: {
-      categoria: {
-        select: {
-          id: true,
-          nombre: true,
-        },
+              ],
+            }
+          : {}),
       },
 
-      presentaciones: {
-        where: {
-          activo: true,
-        },
-
-        include: {
-          codigosBarra: {
-            where: {
-              activo: true,
-            },
-          },
-
-          preciosHorario: {
-            include: {
-              franja: true,
-            },
-
-            orderBy: {
-              franja: {
-                orden: "asc",
-              },
-            },
+      include: {
+        categoria: {
+          select: {
+            id: true,
+            nombre: true,
           },
         },
 
-        orderBy: {
-          id: "asc",
+        presentaciones: {
+          where: {
+            activo: true,
+          },
+
+          include: {
+            codigosBarra: {
+              where: {
+                activo: true,
+              },
+            },
+
+            preciosHorario: {
+              include: {
+                franja: true,
+              },
+
+              orderBy: {
+                franja: {
+                  orden: "asc",
+                },
+              },
+            },
+          },
+
+          orderBy: {
+            id: "asc",
+          },
         },
       },
-    },
 
-    orderBy: {
-      nombre: "asc",
-    },
+      orderBy: {
+        nombre: "asc",
+      },
 
-    take: 100,
-  });
+      take: 100,
+    });
 
   return products.map(serializeProduct);
 }
@@ -351,7 +385,10 @@ export async function createProduct(
     300,
   );
 
-  const sku = optionalText(data.sku, 40);
+  const sku = optionalText(
+    data.sku,
+    40,
+  );
 
   const barcode = optionalText(
     data.codigoBarra,
@@ -362,7 +399,8 @@ export async function createProduct(
     data.categoriaId,
   );
 
-  const saleType = TIPOS_VENTA[data.tipoVenta];
+  const saleType =
+    TIPOS_VENTA[data.tipoVenta];
 
   if (!saleType) {
     throw new AppError(
@@ -445,16 +483,18 @@ export async function createProduct(
 
         if (categoryId) {
           const category =
-            await transaction.categoria.findFirst({
-              where: {
-                id: categoryId,
-                activo: true,
-              },
+            await transaction.categoria.findFirst(
+              {
+                where: {
+                  id: categoryId,
+                  activo: true,
+                },
 
-              select: {
-                id: true,
+                select: {
+                  id: true,
+                },
               },
-            });
+            );
 
           if (!category) {
             throw new AppError(
@@ -470,12 +510,14 @@ export async function createProduct(
               sku,
               nombre: name,
               descripcion: description,
-              categoriaId,
+              categoriaId: categoryId,
               unidadInventario:
                 saleType.unidadInventario,
+
               modoPrecio: changesByShift
                 ? "POR_HORARIO"
                 : "UNICO",
+
               stockActual: internalStock,
               stockMinimo: internalMinimum,
               costoPromedio: internalCost,
@@ -484,6 +526,7 @@ export async function createProduct(
                 create: {
                   nombre:
                     saleType.nombrePresentacion,
+
                   tipo: data.tipoVenta,
                   factorInventario: factor,
                   precioBase: price,
@@ -539,19 +582,30 @@ export async function createProduct(
             },
           });
 
-        if (internalStock.greaterThan(0)) {
-          await transaction.movimientoInventario.create({
-            data: {
-              productoId: product.id,
-              usuarioId: userId,
-              tipo: "INVENTARIO_INICIAL",
-              cantidad: internalStock,
-              saldoPosterior: internalStock,
-              costoUnitario: internalCost,
-              motivo:
-                "Existencia registrada al crear el producto.",
+        if (
+          internalStock.greaterThan(0)
+        ) {
+          await transaction.movimientoInventario.create(
+            {
+              data: {
+                productoId: product.id,
+                usuarioId: userId,
+
+                tipo:
+                  "INVENTARIO_INICIAL",
+
+                cantidad: internalStock,
+                saldoPosterior:
+                  internalStock,
+
+                costoUnitario:
+                  internalCost,
+
+                motivo:
+                  "Existencia registrada al crear el producto.",
+              },
             },
-          });
+          );
         }
 
         return serializeProduct(product);
@@ -583,8 +637,9 @@ export async function updateProduct(
   data,
   userId,
 ) {
-  const productId =
-    productIdValue(productIdInput);
+  const productId = productIdValue(
+    productIdInput,
+  );
 
   const name = cleanText(
     data.nombre,
@@ -597,7 +652,10 @@ export async function updateProduct(
     300,
   );
 
-  const sku = optionalText(data.sku, 40);
+  const sku = optionalText(
+    data.sku,
+    40,
+  );
 
   const barcode = optionalText(
     data.codigoBarra,
@@ -658,28 +716,30 @@ export async function updateProduct(
     return await prisma.$transaction(
       async (transaction) => {
         const currentProduct =
-          await transaction.producto.findFirst({
-            where: {
-              id: productId,
-              activo: true,
-            },
+          await transaction.producto.findFirst(
+            {
+              where: {
+                id: productId,
+                activo: true,
+              },
 
-            include: {
-              presentaciones: {
-                where: {
-                  activo: true,
-                },
+              include: {
+                presentaciones: {
+                  where: {
+                    activo: true,
+                  },
 
-                include: {
-                  codigosBarra: true,
-                },
+                  include: {
+                    codigosBarra: true,
+                  },
 
-                orderBy: {
-                  id: "asc",
+                  orderBy: {
+                    id: "asc",
+                  },
                 },
               },
             },
-          });
+          );
 
         if (!currentProduct) {
           throw new AppError(
@@ -705,16 +765,18 @@ export async function updateProduct(
 
         if (categoryId) {
           const category =
-            await transaction.categoria.findFirst({
-              where: {
-                id: categoryId,
-                activo: true,
-              },
+            await transaction.categoria.findFirst(
+              {
+                where: {
+                  id: categoryId,
+                  activo: true,
+                },
 
-              select: {
-                id: true,
+                select: {
+                  id: true,
+                },
               },
-            });
+            );
 
           if (!category) {
             throw new AppError(
@@ -724,9 +786,10 @@ export async function updateProduct(
           }
         }
 
-        const factor = new Prisma.Decimal(
-          principal.factorInventario,
-        );
+        const factor =
+          new Prisma.Decimal(
+            principal.factorInventario,
+          );
 
         const internalStock =
           visibleStock.mul(factor);
@@ -751,25 +814,26 @@ export async function updateProduct(
             )
           : [];
 
-        await transaction
-          .precioPresentacionHorario
-          .deleteMany({
+        await transaction.precioPresentacionHorario.deleteMany(
+          {
             where: {
-              presentacionId: principal.id,
+              presentacionId:
+                principal.id,
             },
-          });
+          },
+        );
 
-        await transaction
-          .codigoBarraProducto
-          .deleteMany({
+        await transaction.codigoBarraProducto.deleteMany(
+          {
             where: {
-              presentacionId: principal.id,
+              presentacionId:
+                principal.id,
             },
-          });
+          },
+        );
 
-        await transaction
-          .presentacionProducto
-          .update({
+        await transaction.presentacionProducto.update(
+          {
             where: {
               id: principal.id,
             },
@@ -796,7 +860,8 @@ export async function updateProduct(
                   }
                 : {}),
             },
-          });
+          },
+        );
 
         const product =
           await transaction.producto.update({
@@ -808,10 +873,12 @@ export async function updateProduct(
               sku,
               nombre: name,
               descripcion: description,
-              categoriaId,
+              categoriaId: categoryId,
+
               modoPrecio: changesByShift
                 ? "POR_HORARIO"
                 : "UNICO",
+
               stockActual: internalStock,
               stockMinimo: internalMinimum,
               costoPromedio: internalCost,
@@ -858,15 +925,16 @@ export async function updateProduct(
           });
 
         if (!stockDifference.isZero()) {
-          await transaction
-            .movimientoInventario
-            .create({
+          await transaction.movimientoInventario.create(
+            {
               data: {
-                productoId,
+                productoId: productId,
                 usuarioId: userId,
 
                 tipo:
-                  stockDifference.greaterThan(0)
+                  stockDifference.greaterThan(
+                    0,
+                  )
                     ? "AJUSTE_POSITIVO"
                     : "AJUSTE_NEGATIVO",
 
@@ -882,7 +950,8 @@ export async function updateProduct(
                 motivo:
                   "Existencia ajustada al editar el producto.",
               },
-            });
+            },
+          );
         }
 
         return serializeProduct(product);

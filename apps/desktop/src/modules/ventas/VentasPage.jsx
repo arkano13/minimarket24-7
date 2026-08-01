@@ -880,4 +880,4 @@ export function VentasPage({ token }) {
       ) : null}
     </main>
   );
-}
+}   

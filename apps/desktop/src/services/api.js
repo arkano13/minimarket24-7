@@ -266,3 +266,152 @@ export function removeClientSpecialPrice(
     },
   );
 }
+
+export function listSuppliers(
+  token,
+  search = "",
+) {
+  const query = search
+    ? `?buscar=${encodeURIComponent(search)}`
+    : "";
+
+  return request(`/proveedores${query}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+
+export function createSupplier(token, data) {
+  return request("/proveedores", {
+    method: "POST",
+
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateSupplier(
+  token,
+  supplierId,
+  data,
+) {
+  return request(
+    `/proveedores/${supplierId}`,
+    {
+      method: "PATCH",
+
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+export function listPurchases(
+  token,
+  search = "",
+) {
+  const query = search
+    ? `?buscar=${encodeURIComponent(search)}`
+    : "";
+
+  return request(`/compras${query}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+
+export function getPurchase(
+  token,
+  purchaseId,
+) {
+  return request(`/compras/${purchaseId}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+
+export function searchPurchaseSuppliers(
+  token,
+  search = "",
+) {
+  const query = search
+    ? `?buscar=${encodeURIComponent(search)}`
+    : "";
+
+  return request(
+    `/compras/proveedores${query}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
+export function searchPurchaseProducts(
+  token,
+  search = "",
+) {
+  const query = search
+    ? `?buscar=${encodeURIComponent(search)}`
+    : "";
+
+  return request(
+    `/compras/productos${query}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}
+
+export function createPurchase(token, data) {
+  return request("/compras", {
+    method: "POST",
+
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+
+    body: JSON.stringify(data),
+  });
+} 
+
+export function getSalesReport(
+  token,
+  from,
+  to,
+) {
+  const params = new URLSearchParams();
+
+  if (from) {
+    params.set("desde", from);
+  }
+
+  if (to) {
+    params.set("hasta", to);
+  }
+
+  const query = params.size
+    ? `?${params.toString()}`
+    : "";
+
+  return request(
+    `/reportes/ventas${query}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+}

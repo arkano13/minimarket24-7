@@ -45,6 +45,8 @@ import {
   errorMiddleware,
 } from "./middleware/error.middleware.js";
 
+import { usuariosRouter } from "./modules/usuarios/usuarios.routes.js";
+
 const allowedOrigins = new Set([
   "http://127.0.0.1:5173",
   "http://localhost:5173",
@@ -129,6 +131,8 @@ app.use(
   "/api/reportes",
   reportsRouter,
 );
+
+app.use("/api/usuarios", usuariosRouter);
 
 app.use((req, res) => {
   res.status(404).json({

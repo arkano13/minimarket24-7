@@ -84,3 +84,22 @@ export function requireModule(moduloCodigo) {
     }
   };
 }
+
+export function requireAdministrator(req, res, next) {
+  try {
+    if (!req.auth?.usuario?.id) {
+      throw new AppError("Sesión no válida.", 401);
+    }
+
+    if (req.auth.usuario.rol !== "ADMINISTRADOR") {
+      throw new AppError(
+        "Solo un administrador puede realizar esta acción.",
+        403,
+      );
+    }
+
+    next();
+  } catch (error) {
+    next(error);
+  }
+}

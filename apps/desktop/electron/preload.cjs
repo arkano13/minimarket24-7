@@ -6,10 +6,10 @@ const {
 contextBridge.exposeInMainWorld("desktop", {
   platform: process.platform,
 
-  saveReportPdf: (suggestedName) =>
+  saveReportPdf: (payload) =>
     ipcRenderer.invoke(
       "reports:save-pdf",
-      suggestedName,
+      payload,
     ),
 
   versions: {

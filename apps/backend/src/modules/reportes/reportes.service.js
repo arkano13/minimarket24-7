@@ -317,8 +317,7 @@ export async function getSalesReport(
       .sort(
         (first, second) =>
           second.ventas - first.ventas,
-      )
-      .slice(0, 20),
+      ),
 
     horas: [...hours.values()]
       .map((hour) => ({

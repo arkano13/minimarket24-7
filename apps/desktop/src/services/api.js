@@ -415,3 +415,67 @@ export function getSalesReport(
     },
   );
 }
+
+export function listUsers(token) {
+  return request("/usuarios", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+
+export function listUserModules(token) {
+  return request("/usuarios/modulos", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+
+export function createUser(token, user) {
+  return request("/usuarios", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(user),
+  });
+}
+
+export function updateUser(token, userId, user) {
+  return request(`/usuarios/${userId}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(user),
+  });
+}
+
+export function updateUserStatus(token, userId, active) {
+  return request(`/usuarios/${userId}/estado`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      activo: active,
+    }),
+  });
+}
+
+export function resetUserPassword(
+  token,
+  userId,
+  password,
+) {
+  return request(`/usuarios/${userId}/contrasena`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      contrasena: password,
+    }),
+  });
+}

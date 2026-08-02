@@ -479,3 +479,24 @@ export function resetUserPassword(
     }),
   });
 }
+
+export function getConfiguration(token) {
+  return request("/configuracion", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+
+export function updateConfiguration(
+  token,
+  configuration,
+) {
+  return request("/configuracion", {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(configuration),
+  });
+}

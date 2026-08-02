@@ -431,3 +431,17 @@ model CompraDetalle {
   @@index([presentacionId])
   @@map("compras_detalle")
 }
+
+model ConfiguracionSistema {
+  id              Int      @id @default(1)
+  nombreNegocio   String   @default("Minisúper") @map("nombre_negocio") @db.VarChar(120)
+  direccion       String?  @db.VarChar(250)
+  telefono        String?  @db.VarChar(30)
+  simboloMoneda   String   @default("L") @map("simbolo_moneda") @db.VarChar(10)
+  fondoInicial    Decimal  @default(500) @map("fondo_inicial") @db.Decimal(14, 2)
+  mensajeReportes String?  @map("mensaje_reportes") @db.VarChar(300)
+  creadoEn        DateTime @default(now()) @map("creado_en")
+  actualizadoEn   DateTime @updatedAt @map("actualizado_en")
+
+  @@map("configuracion_sistema")
+}

@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 
 import { AppError } from "../../utils/AppError.js";
+import { registrarBitacora } from "../bitacora/bitacora.service.js";
 
 const PAYMENT_METHODS = new Set(["EFECTIVO", "TARJETA", "TRANSFERENCIA"]);
 
@@ -709,4 +710,134 @@ export async function createSale(data, userId) {
 
     return serializeSale(sale);
   });
+}
+
+export async function cancelSale(saleIdInput, userId) {
+  const saleId = positiveInteger(saleIdInput, "La venta");
+
+  const resultado = await prisma.$transaction(async (transaction) => {
+    const sale = await transaction.venta.findUnique({
+      where: {
+        id: saleId,
+      },
+
+      include: {
+        detalles: true,
+      },
+    });
+
+    if (!sale) {
+      throw new AppError("La venta no existe.", 404);
+    }
+
+    if (sale.estado === "CANCELADA") {
+      throw new AppError("La venta ya está cancelada.", 400);
+    }
+
+    const restoreByProduct = new Map();
+
+    for (const detail of sale.detalles) {
+      const current = restoreByProduct.get(detail.productoId);
+
+      restoreByProduct.set(
+        detail.productoId,
+
+        current
+          ? current.add(detail.cantidadInventario)
+          : detail.cantidadInventario,
+      );
+    }
+
+    for (const [productId, quantity] of restoreByProduct.entries()) {
+      const updatedProduct = await transaction.producto.update({
+        where: {
+          id: productId,
+        },
+
+        data: {
+          stockActual: {
+            increment: quantity,
+          },
+        },
+
+        select: {
+          stockActual: true,
+          costoPromedio: true,
+        },
+      });
+
+      await transaction.movimientoInventario.create({
+        data: {
+          productoId: productId,
+          usuarioId: userId,
+          ventaId: sale.id,
+          tipo: "CANCELACION_VENTA",
+          cantidad: quantity,
+          saldoPosterior: updatedProduct.stockActual,
+          costoUnitario: updatedProduct.costoPromedio,
+          motivo: `Cancelación de venta #${sale.id}.`,
+        },
+      });
+    }
+
+    const canceledSale = await transaction.venta.update({
+      where: {
+        id: saleId,
+      },
+
+      data: {
+        estado: "CANCELADA",
+        canceladoEn: new Date(),
+      },
+
+      include: SALE_INCLUDE,
+    });
+
+    return canceledSale;
+  });
+
+  await registrarBitacora({
+    usuarioId: userId,
+    accion: "CANCELAR_VENTA",
+    entidad: "Venta",
+    entidadId: resultado.id,
+    detalle: {
+      total: Number(resultado.total),
+    },
+  });
+
+  return serializeSale(resultado);
+}
+
+export async function listSales(search = "") {
+  const term = typeof search === "string" ? search.trim() : "";
+
+  const sales = await prisma.venta.findMany({
+    where: term
+      ? {
+          OR: [
+            {
+              clienteNombre: {
+                contains: term,
+                mode: "insensitive",
+              },
+            },
+            {
+              usuario: {
+                nombre: {
+                  contains: term,
+                  mode: "insensitive",
+                },
+              },
+            },
+          ],
+        }
+      : undefined,
+
+    include: SALE_INCLUDE,
+    orderBy: { creadoEn: "desc" },
+    take: 100,
+  });
+
+  return sales.map(serializeSale);
 }

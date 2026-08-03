@@ -12,6 +12,9 @@ import { ComprasPage } from "./modules/compras/ComprasPage.jsx";
 import { ReportesPage } from "./modules/reportes/ReportesPage.jsx";
 import UsuariosPage from "./modules/usuarios/UsuariosPage.jsx";
 import { ConfiguracionPage } from "./modules/configuracion/ConfiguracionPage.jsx";
+import { BitacoraPage } from "./modules/bitacora/BitacoraPage.jsx";
+import { CancelacionesPage } from "./modules/cancelaciones/CancelacionesPage.jsx";
+
 
 const MODULE_ICONS = {
   VENTAS: "🛒",
@@ -24,6 +27,9 @@ const MODULE_ICONS = {
   REPORTES: "📊",
   USUARIOS: "👤",
   CONFIGURACION: "⚙️",
+  BITACORA: "🗒️",
+  DEVOLUCIONES: "↩️",
+
 };
 
 const IMPLEMENTED_MODULES = new Set([
@@ -37,6 +43,8 @@ const IMPLEMENTED_MODULES = new Set([
   "REPORTES",
   "USUARIOS",
   "CONFIGURACION",
+  "BITACORA",
+  "DEVOLUCIONES"
 ]);
 
 function LoginScreen({ onLogin }) {
@@ -51,10 +59,7 @@ function LoginScreen({ onLogin }) {
     setLoading(true);
 
     try {
-      const session = await login(
-        usuario,
-        contrasena,
-      );
+      const session = await login(usuario, contrasena);
 
       onLogin(session);
     } catch (requestError) {
@@ -75,15 +80,12 @@ function LoginScreen({ onLogin }) {
           M
         </div>
 
-        <p className="eyebrow">
-          Sistema de escritorio
-        </p>
+        <p className="eyebrow">Sistema de escritorio</p>
 
         <h1>{NOMBRE_SISTEMA}</h1>
 
         <p className="login-brand__description">
-          Ventas, caja e inventario del minisúper en un
-          solo lugar.
+          Ventas, caja e inventario del minisúper en un solo lugar.
         </p>
 
         <div className="local-badge">
@@ -93,20 +95,14 @@ function LoginScreen({ onLogin }) {
       </section>
 
       <section className="login-panel">
-        <form
-          className="login-card"
-          onSubmit={handleSubmit}
-        >
+        <form className="login-card" onSubmit={handleSubmit}>
           <div>
-            <p className="eyebrow">
-              Acceso al sistema
-            </p>
+            <p className="eyebrow">Acceso al sistema</p>
 
             <h2>Iniciar sesión</h2>
 
             <p className="login-card__description">
-              Ingresa con el usuario asignado para
-              comenzar.
+              Ingresa con el usuario asignado para comenzar.
             </p>
           </div>
 
@@ -117,9 +113,7 @@ function LoginScreen({ onLogin }) {
               autoComplete="username"
               autoFocus
               disabled={loading}
-              onChange={(event) =>
-                setUsuario(event.target.value)
-              }
+              onChange={(event) => setUsuario(event.target.value)}
               placeholder="Escribe tu usuario"
               required
               value={usuario}
@@ -132,9 +126,7 @@ function LoginScreen({ onLogin }) {
             <input
               autoComplete="current-password"
               disabled={loading}
-              onChange={(event) =>
-                setContrasena(event.target.value)
-              }
+              onChange={(event) => setContrasena(event.target.value)}
               placeholder="Escribe tu contraseña"
               required
               type="password"
@@ -148,14 +140,8 @@ function LoginScreen({ onLogin }) {
             </p>
           ) : null}
 
-          <button
-            className="primary-button"
-            disabled={loading}
-            type="submit"
-          >
-            {loading
-              ? "Ingresando..."
-              : "Ingresar"}
+          <button className="primary-button" disabled={loading} type="submit">
+            {loading ? "Ingresando..." : "Ingresar"}
           </button>
         </form>
       </section>
@@ -163,15 +149,8 @@ function LoginScreen({ onLogin }) {
   );
 }
 
-function Sidebar({
-  activeModule,
-  modules,
-  onLogout,
-  onOpenModule,
-  session,
-}) {
-  const [closingSession, setClosingSession] =
-    useState(false);
+function Sidebar({ activeModule, modules, onLogout, onOpenModule, session }) {
+  const [closingSession, setClosingSession] = useState(false);
 
   async function handleLogout() {
     setClosingSession(true);
@@ -194,51 +173,32 @@ function Sidebar({
         </div>
       </div>
 
-      <nav
-        className="sidebar__nav"
-        aria-label="Módulos del sistema"
-      >
-        <p className="sidebar__section-label">
-          Menú
-        </p>
+      <nav className="sidebar__nav" aria-label="Módulos del sistema">
+        <p className="sidebar__section-label">Menú</p>
 
         {modules.map((module) => {
-          const implemented =
-            IMPLEMENTED_MODULES.has(
-              module.codigo,
-            );
+          const implemented = IMPLEMENTED_MODULES.has(module.codigo);
 
-          const selected =
-            activeModule === module.codigo;
+          const selected = activeModule === module.codigo;
 
           return (
             <button
               className={`sidebar__item ${
-                selected
-                  ? "sidebar__item--active"
-                  : ""
+                selected ? "sidebar__item--active" : ""
               }`}
               disabled={!implemented}
               key={module.codigo}
-              onClick={() =>
-                onOpenModule(module.codigo)
-              }
+              onClick={() => onOpenModule(module.codigo)}
               type="button"
             >
-              <span
-                className="sidebar__item-icon"
-                aria-hidden="true"
-              >
-                {MODULE_ICONS[module.codigo] ??
-                  "•"}
+              <span className="sidebar__item-icon" aria-hidden="true">
+                {MODULE_ICONS[module.codigo] ?? "•"}
               </span>
 
               <span className="sidebar__item-text">
                 <strong>{module.nombre}</strong>
 
-                {!implemented ? (
-                  <small>Próximamente</small>
-                ) : null}
+                {!implemented ? <small>Próximamente</small> : null}
               </span>
             </button>
           );
@@ -247,19 +207,12 @@ function Sidebar({
 
       <div className="sidebar__footer">
         <div className="sidebar__user">
-          <span
-            className="sidebar__avatar"
-            aria-hidden="true"
-          >
-            {session.usuario.nombre
-              .charAt(0)
-              .toUpperCase()}
+          <span className="sidebar__avatar" aria-hidden="true">
+            {session.usuario.nombre.charAt(0).toUpperCase()}
           </span>
 
           <div>
-            <strong>
-              {session.usuario.nombre}
-            </strong>
+            <strong>{session.usuario.nombre}</strong>
 
             <small>{session.usuario.rol}</small>
           </div>
@@ -271,20 +224,14 @@ function Sidebar({
           onClick={handleLogout}
           type="button"
         >
-          {closingSession
-            ? "Cerrando..."
-            : "Cerrar sesión"}
+          {closingSession ? "Cerrando..." : "Cerrar sesión"}
         </button>
       </div>
     </aside>
   );
 }
 
-function SystemContent({
-  activeModule,
-  token,
-  currentUser,
-}) {
+function SystemContent({ activeModule, token, currentUser }) {
   if (activeModule === "VENTAS") {
     return <VentasPage token={token} />;
   }
@@ -318,49 +265,40 @@ function SystemContent({
   }
 
   if (activeModule === "USUARIOS") {
-    return (
-      <UsuariosPage
-        currentUser={currentUser}
-        token={token}
-      />
-    );
+    return <UsuariosPage currentUser={currentUser} token={token} />;
   }
 
   if (activeModule === "CONFIGURACION") {
-    return (
-      <ConfiguracionPage token={token} />
-    );
+    return <ConfiguracionPage token={token} />;
   }
+
+  if (activeModule === "BITACORA") {
+    return <BitacoraPage token={token} />;
+  }
+
+    if (activeModule === "DEVOLUCIONES") {
+    return <CancelacionesPage token={token} />;
+  }
+ 
 
   return (
     <section className="module-placeholder">
-      <p className="eyebrow">
-        Minisúper POS
-      </p>
+      <p className="eyebrow">Minisúper POS</p>
 
-      <h1>
-        Selecciona una opción del menú
-      </h1>
+      <h1>Selecciona una opción del menú</h1>
 
-      <p>
-        Los módulos disponibles aparecen en el lado
-        izquierdo.
-      </p>
+      <p>Los módulos disponibles aparecen en el lado izquierdo.</p>
     </section>
   );
 }
 
-function DesktopSystem({
-  session,
-  onLogout,
-}) {
+function DesktopSystem({ session, onLogout }) {
   const firstImplementedModule =
     session.usuario.modulos.find((module) =>
       IMPLEMENTED_MODULES.has(module.codigo),
     )?.codigo ?? null;
 
-  const [activeModule, setActiveModule] =
-    useState(firstImplementedModule);
+  const [activeModule, setActiveModule] = useState(firstImplementedModule);
 
   return (
     <div className="desktop-layout">
@@ -384,19 +322,11 @@ function DesktopSystem({
 }
 
 export function App() {
-  const [session, setSession] =
-    useState(null);
+  const [session, setSession] = useState(null);
 
   if (!session) {
-    return (
-      <LoginScreen onLogin={setSession} />
-    );
+    return <LoginScreen onLogin={setSession} />;
   }
 
-  return (
-    <DesktopSystem
-      onLogout={() => setSession(null)}
-      session={session}
-    />
-  );
+  return <DesktopSystem onLogout={() => setSession(null)} session={session} />;
 }

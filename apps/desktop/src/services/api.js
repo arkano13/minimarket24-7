@@ -159,6 +159,25 @@ export function createSale(token, sale) {
   });
 }
 
+export function listSales(token, search = "") {
+  const query = search ? `?buscar=${encodeURIComponent(search)}` : "";
+
+  return request(`/ventas${query}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+
+export function cancelSale(token, saleId) {
+  return request(`/ventas/${saleId}/cancelar`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+
 export function getCurrentCashShift(token) {
   return request("/caja/actual", {
     headers: {
@@ -385,7 +404,16 @@ export function createPurchase(token, data) {
 
     body: JSON.stringify(data),
   });
-} 
+}
+
+export function cancelPurchase(token, purchaseId) {
+  return request(`/compras/${purchaseId}/anular`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
 
 export function getSalesReport(
   token,
@@ -498,5 +526,37 @@ export function updateConfiguration(
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(configuration),
+  });
+}
+
+export function listBitacora(token, filters = {}) {
+  const params = new URLSearchParams();
+
+  if (filters.desde) {
+    params.set("desde", filters.desde);
+  }
+
+  if (filters.hasta) {
+    params.set("hasta", filters.hasta);
+  }
+
+  if (filters.usuarioId) {
+    params.set("usuarioId", filters.usuarioId);
+  }
+
+  if (filters.origen) {
+    params.set("origen", filters.origen);
+  }
+
+  if (filters.page) {
+    params.set("page", filters.page);
+  }
+
+  const query = params.size ? `?${params.toString()}` : "";
+
+  return request(`/bitacora${query}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
   });
 }

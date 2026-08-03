@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import {
+  cancelPurchase,
   createPurchase,
   listPurchases,
   searchPurchaseProducts,
@@ -77,6 +78,7 @@ export function ComprasPage({ token }) {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [canceling, setCanceling] = useState(false);
 
   const total = useMemo(
     () =>
@@ -89,6 +91,47 @@ export function ComprasPage({ token }) {
       ),
     [items],
   );
+
+  async function handleCancelPurchase() {
+    if (!selectedPurchase || canceling) {
+      return;
+    }
+
+    const confirmado = window.confirm(
+      `¿Anular la compra #${selectedPurchase.id}? Esto revierte el inventario recibido.`,
+    );
+
+    if (!confirmado) {
+      return;
+    }
+
+    setCanceling(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const result = await cancelPurchase(
+        token,
+        selectedPurchase.id,
+      );
+
+      setSelectedPurchase(result.compra);
+
+      setPurchases((current) =>
+        current.map((purchase) =>
+          purchase.id === result.compra.id
+            ? result.compra
+            : purchase,
+        ),
+      );
+
+      setSuccess(result.mensaje);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setCanceling(false);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -742,12 +785,32 @@ export function ComprasPage({ token }) {
                     </p>
                   </div>
 
-                  <strong>
-                    L{" "}
-                    {money(
-                      selectedPurchase.total,
+                  <div className="purchase-detail-actions">
+                    <strong>
+                      L{" "}
+                      {money(
+                        selectedPurchase.total,
+                      )}
+                    </strong>
+
+                    {selectedPurchase.estado ===
+                    "ANULADA" ? (
+                      <span className="purchase-status purchase-status--anulada">
+                        Anulada
+                      </span>
+                    ) : (
+                      <button
+                        className="secondary-button purchase-cancel-button"
+                        disabled={canceling}
+                        onClick={handleCancelPurchase}
+                        type="button"
+                      >
+                        {canceling
+                          ? "Anulando..."
+                          : "Anular compra"}
+                      </button>
                     )}
-                  </strong>
+                  </div>
                 </header>
 
                 <div className="purchase-detail-summary">

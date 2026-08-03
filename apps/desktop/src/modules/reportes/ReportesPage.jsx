@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getSalesReport } from "../../services/api.js";
+import { cancelSale, getSalesReport } from "../../services/api.js";
 
 const PAYMENT_LABELS = {
   EFECTIVO: "Efectivo",
@@ -327,7 +327,9 @@ function ExecutiveView({ report, maximumHourlyTotal }) {
 }
 
 function OperationalView({
+  cancelingSaleId,
   filteredSales,
+  onCancelSale,
   report,
   saleSearch,
   selectedSaleId,
@@ -574,6 +576,86 @@ function OperationalView({
           </p>
         )}
       </section>
+
+      <section className="reports-panel reports-sales-panel">
+        <header className="reports-panel__header">
+          <div>
+            <h2>Historial de ventas</h2>
+
+            <p>Detalle de cada operación del periodo</p>
+          </div>
+
+          <input
+            className="reports-sales-search"
+            onChange={(event) => setSaleSearch(event.target.value)}
+            placeholder="Buscar por cliente, producto o usuario"
+            value={saleSearch}
+          />
+        </header>
+
+        {filteredSales.length === 0 ? (
+          <p className="reports-empty">
+            No hay ventas que coincidan con la búsqueda.
+          </p>
+        ) : (
+          <div className="reports-sales-list">
+            {filteredSales.map((sale) => (
+              <article className="reports-sale-item" key={sale.id}>
+                <button
+                  className="reports-sale-summary"
+                  onClick={() =>
+                    setSelectedSaleId((current) =>
+                      current === sale.id ? null : sale.id,
+                    )
+                  }
+                  type="button"
+                >
+                  <span>
+                    <strong>Venta #{sale.id}</strong>
+
+                    <small>
+                      {sale.cliente?.nombre ?? "Cliente general"} ·{" "}
+                      {sale.usuario?.nombre}
+                    </small>
+                  </span>
+
+                  <strong>L {money(sale.total)}</strong>
+                </button>
+
+                {selectedSaleId === sale.id ? (
+                  <div className="reports-sale-detail">
+                    {sale.productos.map((product) => (
+                      <div key={product.id}>
+                        <span>
+                          {product.nombre} · {product.presentacion}
+                        </span>
+
+                        <span>
+                          {quantity(product.cantidad)} × L{" "}
+                          {money(product.precio)}
+                        </span>
+
+                        <strong>L {money(product.subtotal)}</strong>
+                      </div>
+                    ))}
+
+                    <button
+                      className="secondary-button reports-sale-cancel"
+                      disabled={cancelingSaleId === sale.id}
+                      onClick={() => onCancelSale(sale.id)}
+                      type="button"
+                    >
+                      {cancelingSaleId === sale.id
+                        ? "Cancelando..."
+                        : "Cancelar venta"}
+                    </button>
+                  </div>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -587,6 +669,7 @@ export function ReportesPage({ token }) {
   const [report, setReport] = useState(null);
   const [saleSearch, setSaleSearch] = useState("");
   const [selectedSaleId, setSelectedSaleId] = useState(null);
+  const [cancelingSaleId, setCancelingSaleId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [savingPdf, setSavingPdf] = useState(false);
   const [error, setError] = useState("");
@@ -641,6 +724,35 @@ export function ReportesPage({ token }) {
   useEffect(() => {
     loadReport(today, today);
   }, [token]);
+
+  async function handleCancelSale(saleId) {
+    if (cancelingSaleId) {
+      return;
+    }
+
+    const confirmado = window.confirm(
+      `¿Cancelar la venta #${saleId}? Esto devuelve el stock vendido al inventario.`,
+    );
+
+    if (!confirmado) {
+      return;
+    }
+
+    setCancelingSaleId(saleId);
+    setError("");
+    setMessage("");
+
+    try {
+      const result = await cancelSale(token, saleId);
+
+      setMessage(result.mensaje);
+      await loadReport();
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setCancelingSaleId(null);
+    }
+  }
 
   function applyQuickPeriod(type) {
     const current = new Date();
@@ -866,7 +978,9 @@ export function ReportesPage({ token }) {
             />
           ) : (
             <OperationalView
+              cancelingSaleId={cancelingSaleId}
               filteredSales={filteredSales}
+              onCancelSale={handleCancelSale}
               report={report}
               saleSearch={saleSearch}
               selectedSaleId={selectedSaleId}

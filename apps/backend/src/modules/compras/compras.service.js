@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/AppError.js";
+import { registrarBitacora } from "../bitacora/bitacora.service.js";
 
 const PURCHASE_INCLUDE = {
   proveedor: {
@@ -637,4 +638,140 @@ export async function createPurchase(
       return serializePurchase(purchase);
     },
   );
+}
+
+export async function cancelPurchase(purchaseIdInput, userId) {
+  const purchaseId = positiveInteger(
+    purchaseIdInput,
+    "La compra",
+  );
+
+  const resultado = await prisma.$transaction(
+    async (transaction) => {
+      const purchase = await transaction.compra.findUnique({
+        where: {
+          id: purchaseId,
+        },
+
+        include: {
+          detalles: true,
+        },
+      });
+
+      if (!purchase) {
+        throw new AppError(
+          "La compra no existe.",
+          404,
+        );
+      }
+
+      if (purchase.estado === "ANULADA") {
+        throw new AppError(
+          "La compra ya está anulada.",
+          400,
+        );
+      }
+
+      const restoreByProduct = new Map();
+
+      for (const detail of purchase.detalles) {
+        const current = restoreByProduct.get(
+          detail.productoId,
+        );
+
+        restoreByProduct.set(
+          detail.productoId,
+
+          current
+            ? current.add(detail.cantidadInventario)
+            : detail.cantidadInventario,
+        );
+      }
+
+      for (const [
+        productId,
+        quantity,
+      ] of restoreByProduct.entries()) {
+        const product =
+          await transaction.producto.findUnique({
+            where: {
+              id: productId,
+            },
+
+            select: {
+              nombre: true,
+              stockActual: true,
+            },
+          });
+
+        if (quantity.greaterThan(product.stockActual)) {
+          throw new AppError(
+            `No se puede anular: parte del inventario de ${product.nombre} ya se vendió.`,
+            400,
+          );
+        }
+
+        const updatedProduct =
+          await transaction.producto.update({
+            where: {
+              id: productId,
+            },
+
+            data: {
+              stockActual: {
+                decrement: quantity,
+              },
+            },
+
+            select: {
+              stockActual: true,
+              costoPromedio: true,
+            },
+          });
+
+        await transaction.movimientoInventario.create({
+          data: {
+            productoId: productId,
+            usuarioId: userId,
+            compraId: purchase.id,
+            tipo: "ANULACION_COMPRA",
+            cantidad: quantity.negated(),
+            saldoPosterior:
+              updatedProduct.stockActual,
+            costoUnitario:
+              updatedProduct.costoPromedio,
+            motivo: `Anulación de compra #${purchase.id}.`,
+          },
+        });
+      }
+
+      const canceledPurchase =
+        await transaction.compra.update({
+          where: {
+            id: purchaseId,
+          },
+
+          data: {
+            estado: "ANULADA",
+            anuladaEn: new Date(),
+          },
+
+          include: PURCHASE_INCLUDE,
+        });
+
+      return canceledPurchase;
+    },
+  );
+
+  await registrarBitacora({
+    usuarioId: userId,
+    accion: "ANULAR_COMPRA",
+    entidad: "Compra",
+    entidadId: resultado.id,
+    detalle: {
+      total: Number(resultado.total),
+    },
+  });
+
+  return serializePurchase(resultado);
 }

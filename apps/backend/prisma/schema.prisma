@@ -41,6 +41,7 @@ enum TipoMovimientoInventario {
   AJUSTE_POSITIVO
   AJUSTE_NEGATIVO
   CANCELACION_VENTA
+  ANULACION_COMPRA
 }
 
 enum EstadoVenta {
@@ -86,6 +87,8 @@ model Usuario {
   turnosCajaCerrados    TurnoCaja[]            @relation("UsuarioCierreCaja")
   movimientosCaja       MovimientoCaja[]
   compras               Compra[]
+  bitacora  Bitacora[]
+  devoluciones           Devolucion[] 
 
   @@map("usuarios")
 }
@@ -141,6 +144,7 @@ model Producto {
   movimientos        MovimientoInventario[]
   detallesVenta      VentaDetalle[]
   detallesCompra     CompraDetalle[]
+  detallesDevolucion DevolucionDetalle[]
 
   @@index([nombre])
   @@index([categoriaId])
@@ -164,6 +168,7 @@ model PresentacionProducto {
   detallesVenta     VentaDetalle[]
   preciosEspeciales PrecioEspecialCliente[]
   detallesCompra    CompraDetalle[]
+    detallesDevolucion DevolucionDetalle[]
 
   @@unique([productoId, nombre])
   @@index([productoId])
@@ -226,6 +231,7 @@ model MovimientoInventario {
   @@index([usuarioId])
   @@index([ventaId])
   @@index([compraId])
+  @@index([creadoEn])
   @@map("movimientos_inventario")
 }
 
@@ -246,6 +252,7 @@ model Venta {
   detalles          VentaDetalle[]
   pagos             PagoVenta[]
   movimientos       MovimientoInventario[]
+  devoluciones      Devolucion[]
 
   @@index([creadoEn])
   @@index([usuarioId])
@@ -324,6 +331,7 @@ model MovimientoCaja {
   usuario     Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
 
   @@index([turnoCajaId, creadoEn])
+  @@index([creadoEn])
   @@index([usuarioId])
   @@map("movimientos_caja")
 }
@@ -401,6 +409,7 @@ model Compra {
   usuario         Usuario                @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
   detalles        CompraDetalle[]
   movimientos     MovimientoInventario[]
+   devoluciones    Devolucion[]
 
   @@index([proveedorId])
   @@index([usuarioId])
@@ -444,4 +453,67 @@ model ConfiguracionSistema {
   actualizadoEn   DateTime @updatedAt @map("actualizado_en")
 
   @@map("configuracion_sistema")
+}
+
+model Bitacora {
+  id        Int      @id @default(autoincrement())
+  usuarioId Int?     @map("usuario_id")
+  accion    String   @db.VarChar(60)
+  entidad   String   @db.VarChar(60)
+  entidadId Int?     @map("entidad_id")
+  detalle   Json?
+  creadoEn  DateTime @default(now()) @map("creado_en")
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  @@index([entidad, entidadId])
+  @@index([usuarioId])
+  @@index([creadoEn])
+  @@map("bitacora")
+}
+
+enum TipoDevolucion {
+  CLIENTE
+  PROVEEDOR
+}
+
+model Devolucion {
+  id       Int            @id @default(autoincrement())
+  tipo     TipoDevolucion
+  ventaId  Int?           @map("venta_id")
+  compraId Int?           @map("compra_id")
+  usuarioId Int           @map("usuario_id")
+  total    Decimal        @db.Decimal(14, 2)
+  motivo   String?        @db.VarChar(250)
+  creadoEn DateTime       @default(now()) @map("creado_en")
+  venta    Venta?         @relation(fields: [ventaId], references: [id], onDelete: SetNull)
+  compra   Compra?        @relation(fields: [compraId], references: [id], onDelete: SetNull)
+  usuario  Usuario        @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  detalles DevolucionDetalle[]
+
+  @@index([ventaId])
+  @@index([compraId])
+  @@index([usuarioId])
+  @@index([creadoEn])
+  @@map("devoluciones")
+}
+
+model DevolucionDetalle {
+  id                 Int                  @id @default(autoincrement())
+  devolucionId       Int                  @map("devolucion_id")
+  productoId         Int                  @map("producto_id")
+  presentacionId     Int                  @map("presentacion_id")
+  productoNombre     String               @map("producto_nombre") @db.VarChar(150)
+  presentacionNombre String               @map("presentacion_nombre") @db.VarChar(80)
+  cantidad           Decimal              @db.Decimal(16, 3)
+  factorInventario   Decimal              @map("factor_inventario") @db.Decimal(14, 3)
+  cantidadInventario Decimal              @map("cantidad_inventario") @db.Decimal(16, 3)
+  precioUnitario     Decimal              @map("precio_unitario") @db.Decimal(14, 4)
+  subtotal           Decimal              @db.Decimal(14, 2)
+  devolucion         Devolucion           @relation(fields: [devolucionId], references: [id], onDelete: Cascade)
+  producto           Producto             @relation(fields: [productoId], references: [id], onDelete: Restrict)
+  presentacion       PresentacionProducto @relation(fields: [presentacionId], references: [id], onDelete: Restrict)
+
+  @@index([devolucionId])
+  @@index([productoId])
+  @@map("devoluciones_detalle")
 }

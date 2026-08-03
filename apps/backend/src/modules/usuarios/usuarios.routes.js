@@ -82,7 +82,10 @@ usuariosRouter.get("/", async (req, res, next) => {
 
 usuariosRouter.post("/", async (req, res, next) => {
   try {
-    const usuario = await createUser(req.body);
+    const usuario = await createUser(
+      req.body,
+      req.auth.usuario.id,
+    );
 
     res.status(201).json({
       usuario,

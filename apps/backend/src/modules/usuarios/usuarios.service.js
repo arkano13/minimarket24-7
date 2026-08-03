@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/AppError.js";
 import { deleteUserSessions } from "../auth/session.store.js";
+import { registrarBitacora } from "../bitacora/bitacora.service.js";
 
 const ROLES_VALIDOS = [
   "ADMINISTRADOR",
@@ -266,7 +267,7 @@ export async function listUsers() {
   return usuarios.map(formatearUsuario);
 }
 
-export async function createUser(payload = {}) {
+export async function createUser(payload = {}, creadoPorId = null) {
   const nombre = normalizarNombre(payload.nombre);
   const usuario = normalizarUsuario(payload.usuario);
   const contrasena = String(payload.contrasena ?? "");
@@ -306,6 +307,17 @@ export async function createUser(payload = {}) {
         });
       },
     );
+
+    await registrarBitacora({
+      usuarioId: creadoPorId,
+      accion: "CREAR_USUARIO",
+      entidad: "Usuario",
+      entidadId: usuarioCreado.id,
+      detalle: {
+        usuario: usuarioCreado.usuario,
+        rol: usuarioCreado.rol,
+      },
+    });
 
     return formatearUsuario(usuarioCreado);
   } catch (error) {
@@ -411,6 +423,14 @@ export async function updateUser(
       usuarioId === actorUsuarioId ? actorToken : null,
     );
 
+    await registrarBitacora({
+      usuarioId: actorUsuarioId,
+      accion: "EDITAR_USUARIO",
+      entidad: "Usuario",
+      entidadId: usuarioId,
+      detalle: { nombre, usuario, rol },
+    });
+
     return formatearUsuario(usuarioActualizado);
   } catch (error) {
     manejarErrorPrisma(error);
@@ -480,6 +500,13 @@ export async function setUserActive(
     deleteUserSessions(usuarioId);
   }
 
+  await registrarBitacora({
+    usuarioId: actorUsuarioId,
+    accion: activoValue ? "ACTIVAR_USUARIO" : "DESACTIVAR_USUARIO",
+    entidad: "Usuario",
+    entidadId: usuarioId,
+  });
+
   return formatearUsuario(usuarioActualizado);
 }
 
@@ -523,6 +550,13 @@ export async function resetUserPassword(
     usuarioId,
     usuarioId === actorUsuarioId ? actorToken : null,
   );
+
+  await registrarBitacora({
+    usuarioId: actorUsuarioId,
+    accion: "RESET_CONTRASENA",
+    entidad: "Usuario",
+    entidadId: usuarioId,
+  });
 
   return {
     mensaje: "Contraseña actualizada correctamente.",

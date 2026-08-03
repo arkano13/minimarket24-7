@@ -27,6 +27,9 @@ import { configuracionRouter } from "./modules/configuracion/configuracion.route
 
 import { usuariosRouter } from "./modules/usuarios/usuarios.routes.js";
 
+import { bitacoraRouter } from "./modules/bitacora/bitacora.routes.js";
+  
+
 const allowedOrigins = new Set([
   "http://127.0.0.1:5173",
   "http://localhost:5173",
@@ -78,6 +81,10 @@ app.use("/api/reportes", reportsRouter);
 app.use("/api/configuracion", configuracionRouter);
 
 app.use("/api/usuarios", usuariosRouter);
+
+app.use("/api/bitacora", bitacoraRouter);
+
+
 
 app.use((req, res) => {
   res.status(404).json({

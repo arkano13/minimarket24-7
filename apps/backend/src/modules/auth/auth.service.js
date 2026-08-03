@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/AppError.js";
 import { createSession } from "./session.store.js";
+import { registrarBitacora } from "../bitacora/bitacora.service.js";
 
 export async function login({ usuario, contrasena }) {
   if (
@@ -35,7 +36,13 @@ export async function login({ usuario, contrasena }) {
     },
   });
 
-  if (!usuarioEncontrado || !usuarioEncontrado.activo) {
+ if (!usuarioEncontrado || !usuarioEncontrado.activo) {
+    await registrarBitacora({
+      accion: "LOGIN_FALLIDO",
+      entidad: "Usuario",
+      detalle: { usuario: usuario.trim().toLowerCase() },
+    });
+
     throw new AppError(
       "Usuario o contraseña incorrectos.",
       401,
@@ -48,6 +55,13 @@ export async function login({ usuario, contrasena }) {
   );
 
   if (!contrasenaCorrecta) {
+    await registrarBitacora({
+      usuarioId: usuarioEncontrado.id,
+      accion: "LOGIN_FALLIDO",
+      entidad: "Usuario",
+      entidadId: usuarioEncontrado.id,
+    });
+
     throw new AppError(
       "Usuario o contraseña incorrectos.",
       401,
@@ -61,6 +75,12 @@ export async function login({ usuario, contrasena }) {
     data: {
       ultimoAcceso: new Date(),
     },
+  });
+    await registrarBitacora({
+    usuarioId: usuarioEncontrado.id,
+    accion: "LOGIN",
+    entidad: "Usuario",
+    entidadId: usuarioEncontrado.id,
   });
 
   const token = createSession(usuarioEncontrado.id);

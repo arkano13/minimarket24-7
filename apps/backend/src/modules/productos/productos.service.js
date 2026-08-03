@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/AppError.js";
+import { registrarBitacora } from "../bitacora/bitacora.service.js";
 
 const TIPOS_VENTA = {
   UNIDAD: {
@@ -713,7 +714,7 @@ export async function updateProduct(
   );
 
   try {
-    return await prisma.$transaction(
+    const resultado = await prisma.$transaction(
       async (transaction) => {
         const currentProduct =
           await transaction.producto.findFirst(
@@ -785,6 +786,10 @@ export async function updateProduct(
             );
           }
         }
+
+        const precioAnterior = new Prisma.Decimal(
+          principal.precioBase,
+        );
 
         const factor =
           new Prisma.Decimal(
@@ -954,9 +959,28 @@ export async function updateProduct(
           );
         }
 
-        return serializeProduct(product);
+        return {
+          product,
+          precioAnterior,
+        };
       },
     );
+
+    if (!price.equals(resultado.precioAnterior)) {
+      await registrarBitacora({
+        usuarioId: userId,
+        accion: "CAMBIO_PRECIO",
+        entidad: "Producto",
+        entidadId: productId,
+        detalle: {
+          nombre: resultado.product.nombre,
+          precioAnterior: Number(resultado.precioAnterior),
+          precioNuevo: Number(price),
+        },
+      });
+    }
+
+    return serializeProduct(resultado.product);
   } catch (error) {
     if (error instanceof AppError) {
       throw error;

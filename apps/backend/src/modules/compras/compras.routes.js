@@ -6,6 +6,7 @@ import {
 } from "../auth/auth.middleware.js";
 
 import {
+  cancelPurchase,
   createPurchase,
   getPurchase,
   listPurchases,
@@ -102,6 +103,25 @@ purchasesRouter.post(
 
       res.status(201).json({
         compra: purchase,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+purchasesRouter.post(
+  "/:compraId/anular",
+  async (req, res, next) => {
+    try {
+      const purchase = await cancelPurchase(
+        req.params.compraId,
+        req.auth.usuario.id,
+      );
+
+      res.json({
+        compra: purchase,
+        mensaje: "Compra anulada correctamente.",
       });
     } catch (error) {
       next(error);

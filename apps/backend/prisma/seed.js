@@ -53,6 +53,16 @@ const modulos = [
     nombre: "Configuración",
     tipo: "ADMINISTRATIVO",
   },
+  {
+    codigo: "BITACORA",
+    nombre: "Bitácora",
+    tipo: "ADMINISTRATIVO",
+  },
+  {
+    codigo: "DEVOLUCIONES",
+    nombre: "Cancelar ventas",
+    tipo: "OPERATIVO",
+  },
 ];
 
 const franjasPrecio = [

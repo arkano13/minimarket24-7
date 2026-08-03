@@ -28,6 +28,7 @@ import { configuracionRouter } from "./modules/configuracion/configuracion.route
 import { usuariosRouter } from "./modules/usuarios/usuarios.routes.js";
 
 import { bitacoraRouter } from "./modules/bitacora/bitacora.routes.js";
+import { AppError } from "./utils/AppError.js";
   
 
 const allowedOrigins = new Set([
@@ -47,7 +48,7 @@ app.use(
         return;
       }
 
-      callback(new Error("Origen no permitido."));
+      callback(new AppError("Origen no permitido.", 403));
     },
   }),
 );

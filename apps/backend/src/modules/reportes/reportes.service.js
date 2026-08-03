@@ -24,7 +24,16 @@ function localDate(
     `${value}T${time}`,
   );
 
-  if (Number.isNaN(date.getTime())) {
+  const [year, month, day] = value
+    .split("-")
+    .map(Number);
+
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
     throw new AppError(
       `${field} no es válida.`,
       400,

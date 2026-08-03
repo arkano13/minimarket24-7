@@ -10,7 +10,9 @@
   "scripts": {
     "dev": "concurrently -k -s first -n VITE,ELECTRON -c magenta,cyan \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "start": "electron .",
-    "build": "vite build"
+    "build": "vite build",
+    "test": "node --test",
+    "test:coverage": "node --experimental-test-coverage --test"
   },
   "dependencies": {
     "@minisuper/shared": "*",

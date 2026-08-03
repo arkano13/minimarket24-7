@@ -64,6 +64,7 @@ purchasesRouter.get(
       const purchases =
         await listPurchases(
           req.query.buscar,
+          req.query.proveedorId,
         );
 
       res.json({

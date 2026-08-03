@@ -2681,6 +2681,46 @@ small {
   line-height: 1.45;
 }
 
+.supplier-purchases {
+  margin-top: 8px;
+}
+
+.supplier-purchases h3 {
+  margin: 0 0 12px;
+  color: #f8fafc;
+  font-size: 1.05rem;
+}
+
+.supplier-purchases-list {
+  display: grid;
+  gap: 8px;
+}
+
+.supplier-purchases-list article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 12px;
+  padding: 12px 16px;
+  background: rgba(30, 41, 59, 0.45);
+}
+
+.supplier-purchases-list article span {
+  display: grid;
+  gap: 3px;
+}
+
+.supplier-purchases-list article span:last-child {
+  justify-items: end;
+  text-align: right;
+}
+
+.supplier-purchases-list small {
+  color: #94a3b8;
+}
+
 .supplier-deactivate-area {
   display: flex;
   justify-content: flex-end;
@@ -5925,4 +5965,4 @@ small {
   .returns-workspace {
     grid-template-columns: 1fr;
   }
-}
+} 

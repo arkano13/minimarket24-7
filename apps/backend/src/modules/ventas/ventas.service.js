@@ -413,6 +413,121 @@ export async function searchSaleProducts(search = "", clientIdInput = null) {
     );
 }
 
+export async function repriceCartForClient(
+  presentationIdsInput,
+  clientIdInput,
+) {
+  const presentationIds = Array.isArray(presentationIdsInput)
+    ? presentationIdsInput.map((id) =>
+        positiveInteger(id, "El producto"),
+      )
+    : [];
+
+  if (presentationIds.length === 0) {
+    return [];
+  }
+
+  const clientId = optionalPositiveInteger(
+    clientIdInput,
+    "El cliente",
+  );
+
+  const minute = currentMinute();
+
+  if (clientId) {
+    const client = await prisma.clienteEspecial.findFirst({
+      where: {
+        id: clientId,
+        activo: true,
+      },
+
+      select: {
+        id: true,
+      },
+    });
+
+    if (!client) {
+      throw new AppError(
+        "El cliente especial no existe o está inactivo.",
+        404,
+      );
+    }
+  }
+
+  const presentations = await prisma.presentacionProducto.findMany({
+    where: {
+      id: { in: presentationIds },
+      activo: true,
+
+      producto: {
+        activo: true,
+      },
+    },
+
+    include: {
+      producto: {
+        include: {
+          categoria: {
+            select: {
+              id: true,
+              nombre: true,
+            },
+          },
+        },
+      },
+
+      codigosBarra: {
+        where: {
+          activo: true,
+        },
+      },
+
+      preciosHorario: {
+        include: {
+          franja: true,
+        },
+      },
+
+      preciosEspeciales: {
+        where: {
+          activo: true,
+          clienteId: clientId ?? -1,
+        },
+
+        take: 1,
+      },
+    },
+  });
+
+  return presentations.map((presentation) => {
+    const factor = Number(presentation.factorInventario);
+
+    const currentPrice = getCurrentPrice(
+      presentation,
+      presentation.producto.modoPrecio,
+      minute,
+    );
+
+    const barcode = principalBarcode(presentation);
+
+    return {
+      presentacionId: presentation.id,
+      productoId: presentation.producto.id,
+      nombre: presentation.producto.nombre,
+      presentacion: presentation.nombre,
+      tipoVenta: presentation.tipo,
+      codigoBarra: barcode,
+      sku: presentation.producto.sku,
+      categoria: presentation.producto.categoria,
+      stock: Number(presentation.producto.stockActual) / factor,
+      precio: Number(currentPrice.price),
+      precioOrigen: currentPrice.origin,
+      turno: currentPrice.shift,
+      precioEspecial: currentPrice.special,
+    };
+  });
+}
+
 export async function createSale(data, userId) {
   if (!Array.isArray(data.productos) || data.productos.length === 0) {
     throw new AppError("Agrega al menos un producto a la venta.", 400);

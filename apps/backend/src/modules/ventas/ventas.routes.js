@@ -7,6 +7,7 @@ import {
   cancelSale,
   createSale,
   listSales,
+  repriceCartForClient,
   searchSaleClients,
   searchSaleProducts,
 } from "./ventas.service.js";
@@ -66,6 +67,19 @@ salesRouter.get("/", async (req, res, next) => {
   try {
     const sales = await listSales(req.query.buscar);
     res.json({ ventas: sales });
+  } catch (error) {
+    next(error);
+  }
+});
+
+salesRouter.post("/reprecio", async (req, res, next) => {
+  try {
+    const productos = await repriceCartForClient(
+      req.body.presentacionIds,
+      req.body.clienteId,
+    );
+
+    res.json({ productos });
   } catch (error) {
     next(error);
   }

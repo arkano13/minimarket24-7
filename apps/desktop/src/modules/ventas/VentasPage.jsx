@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createSale,
   getCurrentCashShift,
+  repriceCart,
   searchSaleClients,
   searchSaleProducts,
 } from "../../services/api.js";
@@ -90,6 +91,7 @@ export function VentasPage({ token }) {
   const [clientResults, setClientResults] = useState([]);
   const [searchingClients, setSearchingClients] =
     useState(false);
+     const [repricing, setRepricing] = useState(false);
 
   const total = useMemo(
     () =>
@@ -360,33 +362,70 @@ export function VentasPage({ token }) {
     setError("");
   }
 
-  function openClientPicker() {
-    if (cart.length > 0) {
-      setError(
-        "Vacía el carrito antes de cambiar el cliente.",
-      );
-      return;
-    }
-
+ function openClientPicker() {
     setError("");
     setShowClientPicker((current) => !current);
     setClientSearch("");
   }
 
-  function selectSaleClient(client) {
-    if (cart.length > 0) {
-      setError(
-        "Vacía el carrito antes de cambiar el cliente.",
-      );
-      return;
-    }
+  
 
-    setSelectedClient(client);
+   async function selectSaleClient(client) {
     setShowClientPicker(false);
     setClientSearch("");
     setSearch("");
     setProducts([]);
     setError("");
+
+    if (cart.length === 0) {
+      setSelectedClient(client);
+      return;
+    }
+
+    setRepricing(true);
+
+    try {
+      const presentationIds = cart.map(
+        (item) => item.presentacionId,
+      );
+
+      const result = await repriceCart(
+        token,
+        presentationIds,
+        client?.id,
+      );
+
+      setCart((current) =>
+        current.map((item) => {
+          const updated = result.productos.find(
+            (product) =>
+              product.presentacionId ===
+              item.presentacionId,
+          );
+
+          if (!updated) {
+            return item;
+          }
+
+          const cantidad =
+            Number(item.cantidad) > updated.stock
+              ? String(updated.stock)
+              : item.cantidad;
+
+          return {
+            ...item,
+            ...updated,
+            cantidad,
+          };
+        }),
+      );
+
+      setSelectedClient(client);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setRepricing(false);
+    }
   }
 
   async function handleCharge() {
@@ -496,8 +535,10 @@ export function VentasPage({ token }) {
             {selectedClient?.nombre ?? "Venta normal"}
           </strong>
 
-          <small>
-            {selectedClient
+        <small>
+            {repricing
+              ? "Actualizando precios del carrito..."
+              : selectedClient
               ? "Se aplicarán sus precios especiales."
               : "Se usarán los precios normales o por turno."}
           </small>
@@ -505,7 +546,7 @@ export function VentasPage({ token }) {
 
         <button
           className="secondary-button"
-          disabled={!cashShift}
+         disabled={!cashShift || repricing}
           onClick={openClientPicker}
           type="button"
         >

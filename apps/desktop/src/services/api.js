@@ -178,6 +178,19 @@ export function cancelSale(token, saleId) {
   });
 }
 
+export function repriceCart(token, presentacionIds, clienteId) {
+  return request(`/ventas/reprecio`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      presentacionIds,
+      clienteId: clienteId ?? null,
+    }),
+  });
+}
+
 export function getCurrentCashShift(token) {
   return request("/caja/actual", {
     headers: {
@@ -335,9 +348,20 @@ export function updateSupplier(
 export function listPurchases(
   token,
   search = "",
+  proveedorId = "",
 ) {
-  const query = search
-    ? `?buscar=${encodeURIComponent(search)}`
+  const params = new URLSearchParams();
+
+  if (search) {
+    params.set("buscar", search);
+  }
+
+  if (proveedorId) {
+    params.set("proveedorId", proveedorId);
+  }
+
+  const query = params.size
+    ? `?${params.toString()}`
     : "";
 
   return request(`/compras${query}`, {

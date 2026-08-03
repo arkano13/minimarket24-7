@@ -1,28 +1,37 @@
 import { useEffect, useState } from "react";
 import {
   createSupplier,
+  listPurchases,
   listSuppliers,
   updateSupplier,
 } from "../../services/api.js";
 
 const EMPTY_FORM = {
   nombre: "",
-  contacto: "",
   telefono: "",
-  correo: "",
-  direccion: "",
   notas: "",
 };
 
 function supplierForm(supplier) {
   return {
     nombre: supplier.nombre ?? "",
-    contacto: supplier.contacto ?? "",
     telefono: supplier.telefono ?? "",
-    correo: supplier.correo ?? "",
-    direccion: supplier.direccion ?? "",
     notas: supplier.notas ?? "",
   };
+}
+
+function money(value) {
+  return new Intl.NumberFormat("es-HN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(value ?? 0));
+}
+
+function dateTime(value) {
+  return new Intl.DateTimeFormat("es-HN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }
 
 export function ProveedoresPage({ token }) {
@@ -41,6 +50,11 @@ export function ProveedoresPage({ token }) {
     confirmingDeactivate,
     setConfirmingDeactivate,
   ] = useState(false);
+
+  const [supplierPurchases, setSupplierPurchases] =
+    useState([]);
+  const [loadingPurchases, setLoadingPurchases] =
+    useState(false);
 
   useEffect(() => {
     let active = true;
@@ -213,13 +227,29 @@ export function ProveedoresPage({ token }) {
     }
   }
 
-  function selectSupplier(supplier) {
+  async function selectSupplier(supplier) {
     setSelectedSupplier(supplier);
     setShowForm(false);
     setEditingId(null);
     setConfirmingDeactivate(false);
     setError("");
     setSuccess("");
+    setSupplierPurchases([]);
+    setLoadingPurchases(true);
+
+    try {
+      const result = await listPurchases(
+        token,
+        "",
+        supplier.id,
+      );
+
+      setSupplierPurchases(result.compras);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setLoadingPurchases(false);
+    }
   }
 
   return (
@@ -315,22 +345,6 @@ export function ProveedoresPage({ token }) {
             </label>
 
             <label className="field">
-              <span>Persona de contacto</span>
-
-              <input
-                maxLength="120"
-                onChange={(event) =>
-                  changeField(
-                    "contacto",
-                    event.target.value,
-                  )
-                }
-                placeholder="Opcional"
-                value={form.contacto}
-              />
-            </label>
-
-            <label className="field">
               <span>Teléfono</span>
 
               <input
@@ -343,39 +357,6 @@ export function ProveedoresPage({ token }) {
                 }
                 placeholder="Opcional"
                 value={form.telefono}
-              />
-            </label>
-
-            <label className="field">
-              <span>Correo</span>
-
-              <input
-                maxLength="150"
-                onChange={(event) =>
-                  changeField(
-                    "correo",
-                    event.target.value,
-                  )
-                }
-                placeholder="Opcional"
-                type="email"
-                value={form.correo}
-              />
-            </label>
-
-            <label className="field supplier-form__wide">
-              <span>Dirección</span>
-
-              <input
-                maxLength="250"
-                onChange={(event) =>
-                  changeField(
-                    "direccion",
-                    event.target.value,
-                  )
-                }
-                placeholder="Opcional"
-                value={form.direccion}
               />
             </label>
 
@@ -444,8 +425,7 @@ export function ProveedoresPage({ token }) {
 
                   <small>
                     {supplier.telefono ||
-                      supplier.contacto ||
-                      "Sin información de contacto"}
+                      "Sin teléfono registrado"}
                   </small>
                 </button>
               ))
@@ -461,8 +441,7 @@ export function ProveedoresPage({ token }) {
               <h2>Selecciona un proveedor</h2>
 
               <p>
-                Aquí aparecerán sus datos de
-                contacto.
+                Aquí aparecerán su teléfono y notas.
               </p>
             </div>
           ) : (
@@ -489,38 +468,11 @@ export function ProveedoresPage({ token }) {
 
               <div className="supplier-information-grid">
                 <article>
-                  <span>Persona de contacto</span>
-
-                  <strong>
-                    {selectedSupplier.contacto ||
-                      "No registrada"}
-                  </strong>
-                </article>
-
-                <article>
                   <span>Teléfono</span>
 
                   <strong>
                     {selectedSupplier.telefono ||
                       "No registrado"}
-                  </strong>
-                </article>
-
-                <article>
-                  <span>Correo</span>
-
-                  <strong>
-                    {selectedSupplier.correo ||
-                      "No registrado"}
-                  </strong>
-                </article>
-
-                <article>
-                  <span>Dirección</span>
-
-                  <strong>
-                    {selectedSupplier.direccion ||
-                      "No registrada"}
                   </strong>
                 </article>
 
@@ -534,20 +486,48 @@ export function ProveedoresPage({ token }) {
                 </article>
               </div>
 
-              <div className="supplier-purchases-note">
-                <span aria-hidden="true">🧾</span>
+              <div className="supplier-purchases">
+                <h3>Historial de compras</h3>
 
-                <div>
-                  <strong>
-                    Historial de compras
-                  </strong>
-
-                  <p>
-                    Las compras de este proveedor
-                    aparecerán aquí cuando construyamos
-                    el siguiente módulo.
+                {loadingPurchases ? (
+                  <p className="empty-state">
+                    Cargando compras...
                   </p>
-                </div>
+                ) : supplierPurchases.length === 0 ? (
+                  <p className="empty-state">
+                    Este proveedor todavía no tiene
+                    compras registradas.
+                  </p>
+                ) : (
+                  <div className="supplier-purchases-list">
+                    {supplierPurchases.map((purchase) => (
+                      <article key={purchase.id}>
+                        <span>
+                          <strong>
+                            Compra #{purchase.id}
+                          </strong>
+
+                          <small>
+                            {dateTime(purchase.creadoEn)}
+                          </small>
+                        </span>
+
+                        <span>
+                          {purchase.estado ===
+                          "ANULADA" ? (
+                            <small className="returns-status-cancelada">
+                              Anulada
+                            </small>
+                          ) : null}
+
+                          <strong>
+                            L {money(purchase.total)}
+                          </strong>
+                        </span>
+                      </article>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="supplier-deactivate-area">
@@ -601,4 +581,4 @@ export function ProveedoresPage({ token }) {
       </div>
     </main>
   );
-}
+} 

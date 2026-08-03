@@ -293,14 +293,23 @@ export async function searchPurchaseProducts(
 
 export async function listPurchases(
   search = "",
+  proveedorIdInput = null,
 ) {
   const term =
     typeof search === "string"
       ? search.trim()
       : "";
 
+  const proveedorId = proveedorIdInput
+    ? Number(proveedorIdInput)
+    : null;
+
   const purchases = await prisma.compra.findMany({
-    where: term
+    where: proveedorId
+      ? {
+          proveedorId,
+        }
+      : term
       ? {
           OR: [
             {

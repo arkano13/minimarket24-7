@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import "./ComprasPage.css";
 
 import {
   cancelPurchase,
@@ -25,57 +26,28 @@ function dateTime(value) {
 function decimalValue(setter, value, decimals) {
   const normalized = value.replace(",", ".");
 
-  const expression = new RegExp(
-    `^\\d+(\\.\\d{0,${decimals}})?$`,
-  );
+  const expression = new RegExp(`^\\d+(\\.\\d{0,${decimals}})?$`);
 
-  if (
-    normalized === "" ||
-    expression.test(normalized)
-  ) {
+  if (normalized === "" || expression.test(normalized)) {
     setter(normalized);
   }
 }
 
 export function ComprasPage({ token }) {
   const [purchases, setPurchases] = useState([]);
-
-  const [
-    selectedPurchase,
-    setSelectedPurchase,
-  ] = useState(null);
-
-  const [historySearch, setHistorySearch] =
-    useState("");
-
+  const [selectedPurchase, setSelectedPurchase] = useState(null);
+  const [historySearch, setHistorySearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [suppliers, setSuppliers] = useState([]);
   const [supplierId, setSupplierId] = useState("");
-
-  const [
-    documentNumber,
-    setDocumentNumber,
-  ] = useState("");
-
+  const [documentNumber, setDocumentNumber] = useState("");
   const [notes, setNotes] = useState("");
-
-  const [productSearch, setProductSearch] =
-    useState("");
-
-  const [productResults, setProductResults] =
-    useState([]);
-
+  const [productSearch, setProductSearch] = useState("");
+  const [productResults, setProductResults] = useState([]);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
-
-  const [
-    searchingProducts,
-    setSearchingProducts,
-  ] = useState(false);
-
-  const [confirming, setConfirming] =
-    useState(false);
-
+  const [searchingProducts, setSearchingProducts] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [canceling, setCanceling] = useState(false);
@@ -83,10 +55,7 @@ export function ComprasPage({ token }) {
   const total = useMemo(
     () =>
       items.reduce(
-        (sum, item) =>
-          sum +
-          Number(item.cantidad || 0) *
-            Number(item.costo || 0),
+        (sum, item) => sum + Number(item.cantidad || 0) * Number(item.costo || 0),
         0,
       ),
     [items],
@@ -110,19 +79,12 @@ export function ComprasPage({ token }) {
     setSuccess("");
 
     try {
-      const result = await cancelPurchase(
-        token,
-        selectedPurchase.id,
-      );
+      const result = await cancelPurchase(token, selectedPurchase.id);
 
       setSelectedPurchase(result.compra);
 
       setPurchases((current) =>
-        current.map((purchase) =>
-          purchase.id === result.compra.id
-            ? result.compra
-            : purchase,
-        ),
+        current.map((purchase) => (purchase.id === result.compra.id ? result.compra : purchase)),
       );
 
       setSuccess(result.mensaje);
@@ -138,21 +100,13 @@ export function ComprasPage({ token }) {
 
     const timer = window.setTimeout(async () => {
       try {
-        const result = await listPurchases(
-          token,
-          historySearch.trim(),
-        );
+        const result = await listPurchases(token, historySearch.trim());
 
         if (active) {
           setPurchases(result.compras);
 
           setSelectedPurchase((current) =>
-            current
-              ? result.compras.find(
-                  (purchase) =>
-                    purchase.id === current.id,
-                ) ?? null
-              : null,
+            current ? result.compras.find((purchase) => purchase.id === current.id) ?? null : null,
           );
         }
       } catch (requestError) {
@@ -203,11 +157,7 @@ export function ComprasPage({ token }) {
       setSearchingProducts(true);
 
       try {
-        const result =
-          await searchPurchaseProducts(
-            token,
-            term,
-          );
+        const result = await searchPurchaseProducts(token, term);
 
         if (active) {
           setProductResults(result.productos);
@@ -249,15 +199,11 @@ export function ComprasPage({ token }) {
 
   function addProduct(product) {
     const alreadyAdded = items.some(
-      (item) =>
-        item.presentacionId ===
-        product.presentacionId,
+      (item) => item.presentacionId === product.presentacionId,
     );
 
     if (alreadyAdded) {
-      setError(
-        "Ese producto ya está agregado a la compra.",
-      );
+      setError("Ese producto ya está agregado a la compra.");
       return;
     }
 
@@ -266,13 +212,7 @@ export function ComprasPage({ token }) {
       {
         ...product,
         cantidad: "1",
-
-        costo:
-          Number(product.costoSugerido) > 0
-            ? Number(
-                product.costoSugerido,
-              ).toFixed(2)
-            : "",
+        costo: Number(product.costoSugerido) > 0 ? Number(product.costoSugerido).toFixed(2) : "",
       },
     ]);
 
@@ -282,19 +222,10 @@ export function ComprasPage({ token }) {
     setError("");
   }
 
-  function updateItem(
-    presentationId,
-    field,
-    value,
-  ) {
+  function updateItem(presentationId, field, value) {
     setItems((current) =>
       current.map((item) =>
-        item.presentacionId === presentationId
-          ? {
-              ...item,
-              [field]: value,
-            }
-          : item,
+        item.presentacionId === presentationId ? { ...item, [field]: value } : item,
       ),
     );
 
@@ -302,12 +233,7 @@ export function ComprasPage({ token }) {
   }
 
   function removeItem(presentationId) {
-    setItems((current) =>
-      current.filter(
-        (item) =>
-          item.presentacionId !== presentationId,
-      ),
-    );
+    setItems((current) => current.filter((item) => item.presentacionId !== presentationId));
 
     setConfirming(false);
   }
@@ -322,15 +248,9 @@ export function ComprasPage({ token }) {
 
     if (
       items.length === 0 ||
-      items.some(
-        (item) =>
-          Number(item.cantidad) <= 0 ||
-          Number(item.costo) <= 0,
-      )
+      items.some((item) => Number(item.cantidad) <= 0 || Number(item.costo) <= 0)
     ) {
-      setError(
-        "Revisa las cantidades y costos de los productos.",
-      );
+      setError("Revisa las cantidades y costos de los productos.");
       return;
     }
 
@@ -341,27 +261,20 @@ export function ComprasPage({ token }) {
         proveedorId: Number(supplierId),
         numeroDocumento: documentNumber,
         notas: notes,
-
         productos: items.map((item) => ({
-          presentacionId:
-            item.presentacionId,
+          presentacionId: item.presentacionId,
           cantidad: item.cantidad,
           costo: item.costo,
         })),
       });
 
-      setPurchases((current) => [
-        result.compra,
-        ...current,
-      ]);
+      setPurchases((current) => [result.compra, ...current]);
 
       setSelectedPurchase(result.compra);
       setShowForm(false);
       resetForm();
 
-      setSuccess(
-        "Mercancía registrada e inventario actualizado. No se descontó dinero de caja.",
-      );
+      setSuccess("Mercancía registrada e inventario actualizado. No se descontó dinero de caja.");
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -373,42 +286,26 @@ export function ComprasPage({ token }) {
     <main className="purchases-page">
       <header className="purchases-header">
         <div>
-          <p className="eyebrow">
-            Entradas de mercancía
-          </p>
+          <p className="eyebrow">Entradas de mercancía</p>
 
           <h1>Compras</h1>
 
-          <p>
-            Registra productos recibidos. Esta
-            operación no paga al proveedor ni afecta
-            la caja.
-          </p>
+          <p>Registra productos recibidos. Esta operación no paga al proveedor ni afecta la caja.</p>
         </div>
 
-        <button
-          className="primary-button"
-          onClick={openForm}
-          type="button"
-        >
+        <button className="primary-button" onClick={openForm} type="button">
           + Registrar mercancía
         </button>
       </header>
 
       {error ? (
-        <p
-          className="form-error page-message"
-          role="alert"
-        >
+        <p className="form-error page-message" role="alert">
           {error}
         </p>
       ) : null}
 
       {success ? (
-        <p
-          className="form-success page-message"
-          role="status"
-        >
+        <p className="form-success page-message" role="status">
           {success}
         </p>
       ) : null}
@@ -417,16 +314,12 @@ export function ComprasPage({ token }) {
         <section className="purchase-form-card">
           <div className="purchase-form-heading">
             <div>
-              <p className="eyebrow">
-                Mercancía recibida
-              </p>
+              <p className="eyebrow">Mercancía recibida</p>
 
               <h2>Registrar entrada</h2>
             </div>
 
-            <strong>
-              Costo total: L {money(total)}
-            </strong>
+            <strong>Costo total: L {money(total)}</strong>
           </div>
 
           <div className="purchase-general-fields">
@@ -435,24 +328,16 @@ export function ComprasPage({ token }) {
 
               <select
                 onChange={(event) => {
-                  setSupplierId(
-                    event.target.value,
-                  );
-
+                  setSupplierId(event.target.value);
                   setConfirming(false);
                 }}
                 required
                 value={supplierId}
               >
-                <option value="">
-                  Selecciona un proveedor
-                </option>
+                <option value="">Selecciona un proveedor</option>
 
                 {suppliers.map((supplier) => (
-                  <option
-                    key={supplier.id}
-                    value={supplier.id}
-                  >
+                  <option key={supplier.id} value={supplier.id}>
                     {supplier.nombre}
                   </option>
                 ))}
@@ -460,17 +345,11 @@ export function ComprasPage({ token }) {
             </label>
 
             <label className="field">
-              <span>
-                Número de documento opcional
-              </span>
+              <span>Número de documento opcional</span>
 
               <input
                 maxLength="100"
-                onChange={(event) =>
-                  setDocumentNumber(
-                    event.target.value,
-                  )
-                }
+                onChange={(event) => setDocumentNumber(event.target.value)}
                 placeholder="Factura o recibo del proveedor"
                 value={documentNumber}
               />
@@ -481,9 +360,7 @@ export function ComprasPage({ token }) {
 
               <input
                 maxLength="250"
-                onChange={(event) =>
-                  setNotes(event.target.value)
-                }
+                onChange={(event) => setNotes(event.target.value)}
                 placeholder="Información adicional"
                 value={notes}
               />
@@ -493,11 +370,7 @@ export function ComprasPage({ token }) {
           <div className="purchase-product-search">
             <input
               autoFocus
-              onChange={(event) =>
-                setProductSearch(
-                  event.target.value,
-                )
-              }
+              onChange={(event) => setProductSearch(event.target.value)}
               placeholder="Buscar producto por nombre, SKU o código"
               value={productSearch}
             />
@@ -507,34 +380,21 @@ export function ComprasPage({ token }) {
                 {searchingProducts ? (
                   <p>Buscando...</p>
                 ) : productResults.length === 0 ? (
-                  <p>
-                    No se encontraron productos.
-                  </p>
+                  <p>No se encontraron productos.</p>
                 ) : (
                   productResults.map((product) => (
                     <button
                       key={product.presentacionId}
-                      onClick={() =>
-                        addProduct(product)
-                      }
+                      onClick={() => addProduct(product)}
                       type="button"
                     >
                       <span>
-                        <strong>
-                          {product.nombre}
-                        </strong>
+                        <strong>{product.nombre}</strong>
 
-                        <small>
-                          {product.presentacion}
-                        </small>
+                        <small>{product.presentacion}</small>
                       </span>
 
-                      <small>
-                        Costo anterior: L{" "}
-                        {money(
-                          product.costoSugerido,
-                        )}
-                      </small>
+                      <small>Costo anterior: L {money(product.costoSugerido)}</small>
                     </button>
                   ))
                 )}
@@ -543,22 +403,15 @@ export function ComprasPage({ token }) {
           </div>
 
           {items.length === 0 ? (
-            <p className="empty-state">
-              Busca y agrega los productos recibidos.
-            </p>
+            <p className="empty-state">Busca y agrega los productos recibidos.</p>
           ) : (
             <div className="purchase-items">
               {items.map((item) => (
-                <article
-                  className="purchase-item"
-                  key={item.presentacionId}
-                >
+                <article className="purchase-item" key={item.presentacionId}>
                   <div className="purchase-item__name">
                     <strong>{item.nombre}</strong>
 
-                    <small>
-                      {item.presentacion}
-                    </small>
+                    <small>{item.presentacion}</small>
                   </div>
 
                   <label>
@@ -568,12 +421,7 @@ export function ComprasPage({ token }) {
                       autoComplete="off"
                       onChange={(event) =>
                         decimalValue(
-                          (value) =>
-                            updateItem(
-                              item.presentacionId,
-                              "cantidad",
-                              value,
-                            ),
+                          (value) => updateItem(item.presentacionId, "cantidad", value),
                           event.target.value,
                           3,
                         )
@@ -584,21 +432,13 @@ export function ComprasPage({ token }) {
                   </label>
 
                   <label>
-                    <span>
-                      Costo por{" "}
-                      {item.presentacion.toLowerCase()}
-                    </span>
+                    <span>Costo por {item.presentacion.toLowerCase()}</span>
 
                     <input
                       autoComplete="off"
                       onChange={(event) =>
                         decimalValue(
-                          (value) =>
-                            updateItem(
-                              item.presentacionId,
-                              "costo",
-                              value,
-                            ),
+                          (value) => updateItem(item.presentacionId, "costo", value),
                           event.target.value,
                           4,
                         )
@@ -609,22 +449,12 @@ export function ComprasPage({ token }) {
                     />
                   </label>
 
-                  <strong>
-                    L{" "}
-                    {money(
-                      Number(item.cantidad) *
-                        Number(item.costo),
-                    )}
-                  </strong>
+                  <strong>L {money(Number(item.cantidad) * Number(item.costo))}</strong>
 
                   <button
                     aria-label={`Quitar ${item.nombre}`}
                     className="cart-item__remove"
-                    onClick={() =>
-                      removeItem(
-                        item.presentacionId,
-                      )
-                    }
+                    onClick={() => removeItem(item.presentacionId)}
                     type="button"
                   >
                     ×
@@ -650,33 +480,18 @@ export function ComprasPage({ token }) {
             {!confirming ? (
               <button
                 className="primary-button"
-                disabled={
-                  items.length === 0 ||
-                  loading
-                }
-                onClick={() =>
-                  setConfirming(true)
-                }
+                disabled={items.length === 0 || loading}
+                onClick={() => setConfirming(true)}
                 type="button"
               >
                 Revisar entrada
               </button>
             ) : (
               <div className="purchase-confirmation">
-                <span>
-                  Costo total: L {money(total)}.
-                  No se descontará dinero de caja.
-                </span>
+                <span>Costo total: L {money(total)}. No se descontará dinero de caja.</span>
 
-                <button
-                  className="primary-button"
-                  disabled={loading}
-                  onClick={savePurchase}
-                  type="button"
-                >
-                  {loading
-                    ? "Registrando..."
-                    : "Sí, actualizar inventario"}
+                <button className="primary-button" disabled={loading} onClick={savePurchase} type="button">
+                  {loading ? "Registrando..." : "Sí, actualizar inventario"}
                 </button>
               </div>
             )}
@@ -686,63 +501,36 @@ export function ComprasPage({ token }) {
         <div className="purchases-layout">
           <aside className="purchase-history-card">
             <input
-              onChange={(event) =>
-                setHistorySearch(
-                  event.target.value,
-                )
-              }
+              onChange={(event) => setHistorySearch(event.target.value)}
               placeholder="Buscar por proveedor o documento"
               value={historySearch}
             />
 
             <div>
               {purchases.length === 0 ? (
-                <p className="empty-state">
-                  No hay entradas registradas.
-                </p>
+                <p className="empty-state">No hay entradas registradas.</p>
               ) : (
                 purchases.map((purchase) => (
                   <button
                     className={
-                      selectedPurchase?.id ===
-                      purchase.id
+                      selectedPurchase?.id === purchase.id
                         ? "purchase-history-item purchase-history-item--selected"
                         : "purchase-history-item"
                     }
                     key={purchase.id}
-                    onClick={() =>
-                      setSelectedPurchase(
-                        purchase,
-                      )
-                    }
+                    onClick={() => setSelectedPurchase(purchase)}
                     type="button"
                   >
                     <span>
-                      <strong>
-                        Entrada #{purchase.id}
-                      </strong>
+                      <strong>Entrada #{purchase.id}</strong>
 
-                      <small>
-                        {
-                          purchase.proveedor
-                            .nombre
-                        }
-                      </small>
+                      <small>{purchase.proveedor.nombre}</small>
                     </span>
 
                     <span>
-                      <b>
-                        L{" "}
-                        {money(
-                          purchase.total,
-                        )}
-                      </b>
+                      <b>L {money(purchase.total)}</b>
 
-                      <small>
-                        {dateTime(
-                          purchase.creadoEn,
-                        )}
-                      </small>
+                      <small>{dateTime(purchase.creadoEn)}</small>
                     </span>
                   </button>
                 ))
@@ -753,51 +541,34 @@ export function ComprasPage({ token }) {
           <section className="purchase-detail-card">
             {!selectedPurchase ? (
               <div className="purchase-detail-empty">
-                <span aria-hidden="true">🧾</span>
+                <span aria-hidden="true">
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 3h12l1 5H5Z" />
+                    <path d="M5 8v11a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V8" />
+                    <path d="M9.5 12a2.5 2.5 0 0 0 5 0" />
+                  </svg>
+                </span>
 
-                <h2>
-                  Selecciona una entrada
-                </h2>
+                <h2>Selecciona una entrada</h2>
 
-                <p>
-                  Aquí aparecerán el proveedor y
-                  los productos recibidos.
-                </p>
+                <p>Aquí aparecerán el proveedor y los productos recibidos.</p>
               </div>
             ) : (
               <>
                 <header className="purchase-detail-header">
                   <div>
-                    <p className="eyebrow">
-                      Mercancía recibida
-                    </p>
+                    <p className="eyebrow">Mercancía recibida</p>
 
-                    <h2>
-                      Entrada #
-                      {selectedPurchase.id}
-                    </h2>
+                    <h2>Entrada #{selectedPurchase.id}</h2>
 
-                    <p>
-                      {
-                        selectedPurchase
-                          .proveedor.nombre
-                      }
-                    </p>
+                    <p>{selectedPurchase.proveedor.nombre}</p>
                   </div>
 
                   <div className="purchase-detail-actions">
-                    <strong>
-                      L{" "}
-                      {money(
-                        selectedPurchase.total,
-                      )}
-                    </strong>
+                    <strong>L {money(selectedPurchase.total)}</strong>
 
-                    {selectedPurchase.estado ===
-                    "ANULADA" ? (
-                      <span className="purchase-status purchase-status--anulada">
-                        Anulada
-                      </span>
+                    {selectedPurchase.estado === "ANULADA" ? (
+                      <span className="purchase-status purchase-status--anulada">Anulada</span>
                     ) : (
                       <button
                         className="secondary-button purchase-cancel-button"
@@ -805,77 +576,43 @@ export function ComprasPage({ token }) {
                         onClick={handleCancelPurchase}
                         type="button"
                       >
-                        {canceling
-                          ? "Anulando..."
-                          : "Anular compra"}
+                        {canceling ? "Anulando..." : "Anular compra"}
                       </button>
                     )}
                   </div>
                 </header>
 
                 <div className="purchase-detail-summary">
-                  <span>
-                    Fecha:{" "}
-                    {dateTime(
-                      selectedPurchase.creadoEn,
-                    )}
-                  </span>
+                  <span>Fecha: {dateTime(selectedPurchase.creadoEn)}</span>
 
-                  <span>
-                    Documento:{" "}
-                    {selectedPurchase.numeroDocumento ||
-                      "No registrado"}
-                  </span>
+                  <span>Documento: {selectedPurchase.numeroDocumento || "No registrado"}</span>
 
-                  <span>
-                    Registró:{" "}
-                    {
-                      selectedPurchase.usuario
-                        .nombre
-                    }
-                  </span>
+                  <span>Registró: {selectedPurchase.usuario.nombre}</span>
 
-                  <span>
-                    Sin movimiento de caja
-                  </span>
+                  <span>Sin movimiento de caja</span>
                 </div>
 
                 <div className="purchase-detail-products">
-                  {selectedPurchase.productos.map(
-                    (product) => (
-                      <article key={product.id}>
-                        <span>
-                          <strong>
-                            {product.nombre}
-                          </strong>
+                  {selectedPurchase.productos.map((product) => (
+                    <article key={product.id}>
+                      <span>
+                        <strong>{product.nombre}</strong>
 
-                          <small>
-                            {
-                              product.presentacion
-                            }
-                          </small>
-                        </span>
+                        <small>{product.presentacion}</small>
+                      </span>
 
-                        <span>
-                          {product.cantidad} × L{" "}
-                          {money(product.costo)}
-                        </span>
+                      <span>
+                        {product.cantidad} × L {money(product.costo)}
+                      </span>
 
-                        <strong>
-                          L{" "}
-                          {money(
-                            product.subtotal,
-                          )}
-                        </strong>
-                      </article>
-                    ),
-                  )}
+                      <strong>L {money(product.subtotal)}</strong>
+                    </article>
+                  ))}
                 </div>
 
                 {selectedPurchase.notas ? (
                   <p className="purchase-detail-notes">
-                    <strong>Notas:</strong>{" "}
-                    {selectedPurchase.notas}
+                    <strong>Notas:</strong> {selectedPurchase.notas}
                   </p>
                 ) : null}
               </>

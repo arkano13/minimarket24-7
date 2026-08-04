@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { NOMBRE_SISTEMA } from "@minisuper/shared";
 
+import "./App.css";
+
 import { login, logout } from "./services/api.js";
 import { ProductosPage } from "./modules/productos/ProductosPage.jsx";
 import { InventarioPage } from "./modules/inventario/InventarioPage.jsx";
@@ -16,21 +18,110 @@ import { BitacoraPage } from "./modules/bitacora/BitacoraPage.jsx";
 import { CancelacionesPage } from "./modules/cancelaciones/CancelacionesPage.jsx";
 
 
-const MODULE_ICONS = {
-  VENTAS: "🛒",
-  CAJA: "💵",
-  PRODUCTOS: "📦",
-  INVENTARIO: "📋",
-  CLIENTES: "👥",
-  PROVEEDORES: "🚚",
-  COMPRAS: "🧾",
-  REPORTES: "📊",
-  USUARIOS: "👤",
-  CONFIGURACION: "⚙️",
-  BITACORA: "🗒️",
-  DEVOLUCIONES: "↩️",
+function ModuleIcon({ name }) {
+  const common = {
+    width: 20,
+    height: 20,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    "aria-hidden": "true",
+  };
 
-};
+  const paths = {
+    VENTAS: (
+      <svg {...common}>
+        <circle cx="9" cy="21" r="1" />
+        <circle cx="19" cy="21" r="1" />
+        <path d="M2.5 3h2l2.8 12.5a2 2 0 0 0 2 1.6h8.4a2 2 0 0 0 2-1.6L21.5 8H6" />
+      </svg>
+    ),
+    CAJA: (
+      <svg {...common}>
+        <rect x="2" y="6" width="20" height="12" rx="2" />
+        <circle cx="12" cy="12" r="2.5" />
+        <path d="M6 6v-.5A1.5 1.5 0 0 1 7.5 4h9A1.5 1.5 0 0 1 18 5.5V6" />
+      </svg>
+    ),
+    PRODUCTOS: (
+      <svg {...common}>
+        <path d="M21 8 12 3 3 8v8l9 5 9-5Z" />
+        <path d="M3 8l9 5 9-5" />
+        <path d="M12 13v8" />
+      </svg>
+    ),
+    INVENTARIO: (
+      <svg {...common}>
+        <rect x="4" y="3" width="16" height="18" rx="2" />
+        <path d="M9 3v3h6V3" />
+        <path d="M8 11h8M8 15h5" />
+      </svg>
+    ),
+    CLIENTES: (
+      <svg {...common}>
+        <circle cx="9" cy="8" r="3.2" />
+        <path d="M2.5 19.5c0-3.3 2.9-5.8 6.5-5.8s6.5 2.5 6.5 5.8" />
+        <path d="M16.5 5.2a3.2 3.2 0 0 1 0 6.2" />
+        <path d="M18.5 14.3c2.3.6 4 2.6 4 5.2" />
+      </svg>
+    ),
+    PROVEEDORES: (
+      <svg {...common}>
+        <rect x="1.5" y="7" width="13" height="9" rx="1" />
+        <path d="M14.5 10.5H18l3.5 3v2.5h-3" />
+        <circle cx="6" cy="18.5" r="1.6" />
+        <circle cx="17" cy="18.5" r="1.6" />
+      </svg>
+    ),
+    COMPRAS: (
+      <svg {...common}>
+        <path d="M6 3h12l1 5H5Z" />
+        <path d="M5 8v11a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V8" />
+        <path d="M9.5 12a2.5 2.5 0 0 0 5 0" />
+      </svg>
+    ),
+    REPORTES: (
+      <svg {...common}>
+        <path d="M4 20V10M12 20V4M20 20v-7" />
+        <path d="M2.5 20h19" />
+      </svg>
+    ),
+    USUARIOS: (
+      <svg {...common}>
+        <circle cx="12" cy="8" r="3.6" />
+        <path d="M4.5 20c0-3.9 3.4-6.8 7.5-6.8s7.5 2.9 7.5 6.8" />
+      </svg>
+    ),
+    CONFIGURACION: (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.8 7.8 0 0 0-1.7-1L15 3h-6l-.3 2.5a7.8 7.8 0 0 0-1.7 1l-2.4-1-2 3.4L4.6 11a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.8 7.8 0 0 0 1.7 1L9 21h6l.3-2.5a7.8 7.8 0 0 0 1.7-1l2.4 1 2-3.4Z" />
+      </svg>
+    ),
+    BITACORA: (
+      <svg {...common}>
+        <path d="M6 2.5h9.5L19 6v15.5H6a1.5 1.5 0 0 1-1.5-1.5V4A1.5 1.5 0 0 1 6 2.5Z" />
+        <path d="M15 2.5V6h4" />
+        <path d="M8 12h8M8 16h5" />
+      </svg>
+    ),
+    DEVOLUCIONES: (
+      <svg {...common}>
+        <path d="M4 10h10a5 5 0 0 1 5 5v0a5 5 0 0 1-5 5H9" />
+        <path d="M8 5 3 10l5 5" />
+      </svg>
+    ),
+  };
+
+  return paths[name] ?? (
+    <svg {...common}>
+      <circle cx="12" cy="12" r="9" />
+    </svg>
+  );
+}
 
 const IMPLEMENTED_MODULES = new Set([
   "VENTAS",
@@ -46,6 +137,29 @@ const IMPLEMENTED_MODULES = new Set([
   "BITACORA",
   "DEVOLUCIONES"
 ]);
+
+function ReceiptBarcode() {
+  const widths = [2, 1, 3, 1, 2, 1, 3, 1, 2, 1, 3, 2, 1, 3, 1, 2, 1, 3, 1, 2, 1, 3, 2];
+  let x = 0;
+
+  return (
+    <svg
+      aria-hidden="true"
+      className="login-barcode"
+      height="26"
+      viewBox="0 0 160 26"
+      width="160"
+    >
+      {widths.map((w, index) => {
+        const rect = (
+          <rect height="26" key={index} width={w} x={x} y="0" />
+        );
+        x += w + 2;
+        return rect;
+      })}
+    </svg>
+  );
+}
 
 function LoginScreen({ onLogin }) {
   const [usuario, setUsuario] = useState("");
@@ -75,79 +189,88 @@ function LoginScreen({ onLogin }) {
 
   return (
     <main className="login-page">
-      <section className="login-brand">
-        <div className="brand-mark" aria-hidden="true">
-          M
-        </div>
+      <div className="login-ticket-wrap">
+        <span className="login-sticker">Abierto 24/7</span>
 
-        <p className="eyebrow">Sistema de escritorio</p>
+        <article className="login-ticket">
+          <header className="login-ticket__brand">
+            <ReceiptBarcode />
+            <h1>{NOMBRE_SISTEMA}</h1>
+            <p>Sistema de punto de venta</p>
+          </header>
 
-        <h1>{NOMBRE_SISTEMA}</h1>
-
-        <p className="login-brand__description">
-          Ventas, caja e inventario del minisúper en un solo lugar.
-        </p>
-
-        <div className="local-badge">
-          <span className="local-badge__dot" />
-          Datos almacenados localmente
-        </div>
-      </section>
-
-      <section className="login-panel">
-        <form className="login-card" onSubmit={handleSubmit}>
-          <div>
-            <p className="eyebrow">Acceso al sistema</p>
+          <div className="login-ticket__intro">
+            <div className="login-ticket__intro-row">
+              <span className="eyebrow">Acceso al sistema</span>
+              <span className="login-ticket__number">N.° 0001</span>
+            </div>
 
             <h2>Iniciar sesión</h2>
-
             <p className="login-card__description">
               Ingresa con el usuario asignado para comenzar.
             </p>
           </div>
 
-          <label className="field">
-            <span>Usuario</span>
+          <form className="login-ticket__form" onSubmit={handleSubmit}>
+            <label className="field">
+              <span>Usuario</span>
 
-            <input
-              autoComplete="username"
-              autoFocus
-              disabled={loading}
-              onChange={(event) => setUsuario(event.target.value)}
-              placeholder="Escribe tu usuario"
-              required
-              value={usuario}
-            />
-          </label>
+              <input
+                autoComplete="username"
+                autoFocus
+                disabled={loading}
+                onChange={(event) => setUsuario(event.target.value)}
+                placeholder="Escribe tu usuario"
+                required
+                value={usuario}
+              />
+            </label>
 
-          <label className="field">
-            <span>Contraseña</span>
+            <label className="field">
+              <span>Contraseña</span>
 
-            <input
-              autoComplete="current-password"
-              disabled={loading}
-              onChange={(event) => setContrasena(event.target.value)}
-              placeholder="Escribe tu contraseña"
-              required
-              type="password"
-              value={contrasena}
-            />
-          </label>
+              <input
+                autoComplete="current-password"
+                disabled={loading}
+                onChange={(event) => setContrasena(event.target.value)}
+                placeholder="Escribe tu contraseña"
+                required
+                type="password"
+                value={contrasena}
+              />
+            </label>
 
-          {error ? (
-            <p className="form-error" role="alert">
-              {error}
-            </p>
-          ) : null}
+            {error ? (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            ) : null}
 
-          <button className="primary-button" disabled={loading} type="submit">
-            {loading ? "Ingresando..." : "Ingresar"}
-          </button>
-        </form>
-      </section>
+            <button className="primary-button" disabled={loading} type="submit">
+              {loading ? "Ingresando..." : "Ingresar"}
+            </button>
+          </form>
+
+          <footer className="login-ticket__footer">
+            <span className="local-badge">
+              <span className="local-badge__dot" />
+              Datos almacenados localmente
+            </span>
+          </footer>
+        </article>
+      </div>
     </main>
   );
 }
+
+const MENU_SECTIONS = [
+  { label: "Ventas", codes: ["VENTAS", "CAJA"] },
+  { label: "Catálogo", codes: ["PRODUCTOS", "INVENTARIO", "PROVEEDORES", "COMPRAS"] },
+  {
+    label: "Administración",
+    codes: ["CLIENTES", "REPORTES", "USUARIOS", "CONFIGURACION", "BITACORA", "DEVOLUCIONES"],
+  },
+];
 
 function Sidebar({ activeModule, modules, onLogout, onOpenModule, session }) {
   const [closingSession, setClosingSession] = useState(false);
@@ -168,39 +291,50 @@ function Sidebar({ activeModule, modules, onLogout, onOpenModule, session }) {
         <div className="sidebar__logo">M</div>
 
         <div>
-          <strong>Minisúper</strong>
+          <strong>Minimarket 24/7</strong>
           <span>Punto de venta</span>
         </div>
       </div>
 
       <nav className="sidebar__nav" aria-label="Módulos del sistema">
-        <p className="sidebar__section-label">Menú</p>
+        {MENU_SECTIONS.map((section) => {
+          const sectionModules = section.codes
+            .map((code) => modules.find((module) => module.codigo === code))
+            .filter(Boolean);
 
-        {modules.map((module) => {
-          const implemented = IMPLEMENTED_MODULES.has(module.codigo);
-
-          const selected = activeModule === module.codigo;
+          if (sectionModules.length === 0) {
+            return null;
+          }
 
           return (
-            <button
-              className={`sidebar__item ${
-                selected ? "sidebar__item--active" : ""
-              }`}
-              disabled={!implemented}
-              key={module.codigo}
-              onClick={() => onOpenModule(module.codigo)}
-              type="button"
-            >
-              <span className="sidebar__item-icon" aria-hidden="true">
-                {MODULE_ICONS[module.codigo] ?? "•"}
-              </span>
+            <div key={section.label}>
+              <p className="sidebar__section-label">{section.label}</p>
 
-              <span className="sidebar__item-text">
-                <strong>{module.nombre}</strong>
+              {sectionModules.map((module) => {
+                const implemented = IMPLEMENTED_MODULES.has(module.codigo);
+                const selected = activeModule === module.codigo;
 
-                {!implemented ? <small>Próximamente</small> : null}
-              </span>
-            </button>
+                return (
+                  <button
+                    className={`sidebar__item ${selected ? "sidebar__item--active" : ""}`}
+                    disabled={!implemented}
+                    key={module.codigo}
+                    onClick={() => onOpenModule(module.codigo)}
+                    type="button"
+                  >
+                    <span className="sidebar__item-icon" aria-hidden="true">
+                      <ModuleIcon name={module.codigo} />
+                    </span>
+
+                    <span className="sidebar__item-text">
+                      <strong>{module.nombre}</strong>
+
+                      {!implemented ? <small>Próximamente</small> : null}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           );
         })}
       </nav>
@@ -283,7 +417,7 @@ function SystemContent({ activeModule, token, currentUser }) {
 
   return (
     <section className="module-placeholder">
-      <p className="eyebrow">Minisúper POS</p>
+      <p className="eyebrow">Minimarket 24/7</p>
 
       <h1>Selecciona una opción del menú</h1>
 

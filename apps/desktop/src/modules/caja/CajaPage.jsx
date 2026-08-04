@@ -1,8 +1,5 @@
-import {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useEffect, useMemo, useState } from "react";
+import "./CajaPage.css";
 
 import {
   closeCashShift,
@@ -11,14 +8,58 @@ import {
   openCashShift,
 } from "../../services/api.js";
 
+function CashCardIcon({ name }) {
+  const common = {
+    width: 20,
+    height: 20,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    "aria-hidden": "true",
+  };
+
+  if (name === "ABRIR") {
+    return (
+      <svg {...common}>
+        <rect x="2" y="6" width="20" height="12" rx="2" />
+        <circle cx="12" cy="12" r="2.5" />
+      </svg>
+    );
+  }
+
+  if (name === "RESUMEN") {
+    return (
+      <svg {...common}>
+        <path d="M4 20V10M12 20V4M20 20v-7" />
+        <path d="M2.5 20h19" />
+      </svg>
+    );
+  }
+
+  if (name === "MOVIMIENTO") {
+    return (
+      <svg {...common}>
+        <path d="M7 17V7m0 0-3 3m3-3 3 3" />
+        <path d="M17 7v10m0 0 3-3m-3 3-3-3" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg {...common}>
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
 function formatMoney(value) {
-  return new Intl.NumberFormat(
-    "es-HN",
-    {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    },
-  ).format(Number(value ?? 0));
+  return new Intl.NumberFormat("es-HN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(value ?? 0));
 }
 
 function formatDate(value) {
@@ -26,126 +67,60 @@ function formatDate(value) {
     return "—";
   }
 
-  return new Intl.DateTimeFormat(
-    "es-HN",
-    {
-      dateStyle: "short",
-      timeStyle: "short",
-    },
-  ).format(new Date(value));
+  return new Intl.DateTimeFormat("es-HN", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(value));
 }
 
-function updateMoneyValue(
-  setter,
-  value,
-) {
-  const normalized =
-    value.replace(",", ".");
+function updateMoneyValue(setter, value) {
+  const normalized = value.replace(",", ".");
 
-  if (
-    normalized === "" ||
-    /^\d+(\.\d{0,2})?$/.test(
-      normalized,
-    )
-  ) {
+  if (normalized === "" || /^\d+(\.\d{0,2})?$/.test(normalized)) {
     setter(normalized);
   }
 }
 
-export function CajaPage({
-  token,
-}) {
-  const [shift, setShift] =
-    useState(undefined);
+export function CajaPage({ token }) {
+  const [shift, setShift] = useState(undefined);
+  const [lastClosedShift, setLastClosedShift] = useState(null);
+  const [initialFund, setInitialFund] = useState("500");
+  const [countedCash, setCountedCash] = useState("");
+  const [movementType, setMovementType] = useState("INGRESO");
+  const [movementAmount, setMovementAmount] = useState("");
+  const [movementReason, setMovementReason] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [confirmingClose, setConfirmingClose] = useState(false);
 
-  const [
-    lastClosedShift,
-    setLastClosedShift,
-  ] = useState(null);
+  const previewDifference = useMemo(() => {
+    if (!shift || countedCash === "") {
+      return null;
+    }
 
-  const [
-    initialFund,
-    setInitialFund,
-  ] = useState("500");
+    const amount = Number(countedCash);
 
-  const [
-    countedCash,
-    setCountedCash,
-  ] = useState("");
+    if (!Number.isFinite(amount) || amount < 0) {
+      return null;
+    }
 
-  const [
-    movementType,
-    setMovementType,
-  ] = useState("INGRESO");
-
-  const [
-    movementAmount,
-    setMovementAmount,
-  ] = useState("");
-
-  const [
-    movementReason,
-    setMovementReason,
-  ] = useState("");
-
-  const [loading, setLoading] =
-    useState(false);
-
-  const [error, setError] =
-    useState("");
-
-  const [success, setSuccess] =
-    useState("");
-
-  const [
-    confirmingClose,
-    setConfirmingClose,
-  ] = useState(false);
-
-  const previewDifference =
-    useMemo(() => {
-      if (
-        !shift ||
-        countedCash === ""
-      ) {
-        return null;
-      }
-
-      const amount =
-        Number(countedCash);
-
-      if (
-        !Number.isFinite(amount) ||
-        amount < 0
-      ) {
-        return null;
-      }
-
-      return (
-        amount -
-        shift.efectivoEsperado
-      );
-    }, [countedCash, shift]);
+    return amount - shift.efectivoEsperado;
+  }, [countedCash, shift]);
 
   useEffect(() => {
     let active = true;
 
     async function loadShift() {
       try {
-        const result =
-          await getCurrentCashShift(
-            token,
-          );
+        const result = await getCurrentCashShift(token);
 
         if (active) {
           setShift(result.turno);
         }
       } catch (requestError) {
         if (active) {
-          setError(
-            requestError.message,
-          );
-
+          setError(requestError.message);
           setShift(null);
         }
       }
@@ -158,9 +133,7 @@ export function CajaPage({
     };
   }, [token]);
 
-  async function handleOpen(
-    event,
-  ) {
+  async function handleOpen(event) {
     event.preventDefault();
 
     setError("");
@@ -168,34 +141,21 @@ export function CajaPage({
     setLoading(true);
 
     try {
-      const result =
-        await openCashShift(
-          token,
-          {
-            fondoInicial:
-              initialFund,
-          },
-        );
+      const result = await openCashShift(token, { fondoInicial: initialFund });
 
       setShift(result.turno);
       setLastClosedShift(null);
       setInitialFund("500");
 
-      setSuccess(
-        "Caja abierta correctamente.",
-      );
+      setSuccess("Caja abierta correctamente.");
     } catch (requestError) {
-      setError(
-        requestError.message,
-      );
+      setError(requestError.message);
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleMovement(
-    event,
-  ) {
+  async function handleMovement(event) {
     event.preventDefault();
 
     setError("");
@@ -203,15 +163,11 @@ export function CajaPage({
     setLoading(true);
 
     try {
-      const result =
-        await createCashMovement(
-          token,
-          {
-            tipo: movementType,
-            monto: movementAmount,
-            motivo: movementReason,
-          },
-        );
+      const result = await createCashMovement(token, {
+        tipo: movementType,
+        monto: movementAmount,
+        motivo: movementReason,
+      });
 
       setShift(result.turno);
       setMovementAmount("");
@@ -223,17 +179,13 @@ export function CajaPage({
           : "Retiro registrado correctamente.",
       );
     } catch (requestError) {
-      setError(
-        requestError.message,
-      );
+      setError(requestError.message);
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleClose(
-    event,
-  ) {
+  async function handleClose(event) {
     event.preventDefault();
 
     setError("");
@@ -247,30 +199,17 @@ export function CajaPage({
     setLoading(true);
 
     try {
-      const result =
-        await closeCashShift(
-          token,
-          {
-            efectivoContado:
-              countedCash,
-          },
-        );
+      const result = await closeCashShift(token, { efectivoContado: countedCash });
 
-      setLastClosedShift(
-        result.turno,
-      );
+      setLastClosedShift(result.turno);
 
       setShift(null);
       setCountedCash("");
       setConfirmingClose(false);
 
-      setSuccess(
-        "Caja cerrada correctamente.",
-      );
+      setSuccess("Caja cerrada correctamente.");
     } catch (requestError) {
-      setError(
-        requestError.message,
-      );
+      setError(requestError.message);
     } finally {
       setLoading(false);
     }
@@ -279,9 +218,7 @@ export function CajaPage({
   if (shift === undefined) {
     return (
       <main className="cash-page">
-        <p className="empty-state">
-          Cargando caja...
-        </p>
+        <p className="empty-state">Cargando caja...</p>
       </main>
     );
   }
@@ -290,46 +227,26 @@ export function CajaPage({
     <main className="cash-page">
       <header className="cash-header">
         <div>
-          <p className="eyebrow">
-            Control del dinero
-          </p>
+          <p className="eyebrow">Control del dinero</p>
 
           <h1>Caja y turnos</h1>
 
-          <p>
-            Abre la caja antes de
-            vender y ciérrala al
-            terminar.
-          </p>
+          <p>Abre la caja antes de vender y ciérrala al terminar.</p>
         </div>
 
-        <span
-          className={`cash-status ${
-            shift
-              ? "cash-status--open"
-              : "cash-status--closed"
-          }`}
-        >
-          {shift
-            ? "Caja abierta"
-            : "Caja cerrada"}
+        <span className={`cash-status ${shift ? "cash-status--open" : "cash-status--closed"}`}>
+          {shift ? "Caja abierta" : "Caja cerrada"}
         </span>
       </header>
 
       {error ? (
-        <p
-          className="form-error page-message"
-          role="alert"
-        >
+        <p className="form-error page-message" role="alert">
           {error}
         </p>
       ) : null}
 
       {success ? (
-        <p
-          className="form-success page-message"
-          role="status"
-        >
+        <p className="form-success page-message" role="status">
           {success}
         </p>
       ) : null}
@@ -339,51 +256,26 @@ export function CajaPage({
           {lastClosedShift ? (
             <section className="cash-close-result">
               <div>
-                <span>
-                  Efectivo esperado
-                </span>
+                <span>Efectivo esperado</span>
 
-                <strong>
-                  L{" "}
-                  {formatMoney(
-                    lastClosedShift
-                      .efectivoEsperado,
-                  )}
-                </strong>
+                <strong>L {formatMoney(lastClosedShift.efectivoEsperado)}</strong>
               </div>
 
               <div>
-                <span>
-                  Efectivo contado
-                </span>
+                <span>Efectivo contado</span>
 
-                <strong>
-                  L{" "}
-                  {formatMoney(
-                    lastClosedShift
-                      .efectivoContado,
-                  )}
-                </strong>
+                <strong>L {formatMoney(lastClosedShift.efectivoContado)}</strong>
               </div>
 
               <div>
-                <span>
-                  Diferencia
-                </span>
+                <span>Diferencia</span>
 
                 <strong
                   className={
-                    lastClosedShift
-                      .diferencia < 0
-                      ? "cash-negative"
-                      : "cash-positive"
+                    lastClosedShift.diferencia < 0 ? "cash-negative" : "cash-positive"
                   }
                 >
-                  L{" "}
-                  {formatMoney(
-                    lastClosedShift
-                      .diferencia,
-                  )}
+                  L {formatMoney(lastClosedShift.diferencia)}
                 </strong>
               </div>
             </section>
@@ -392,56 +284,34 @@ export function CajaPage({
           <section className="cash-open-card">
             <div className="cash-card-heading">
               <span aria-hidden="true">
-                💵
+                <CashCardIcon name="ABRIR" />
               </span>
 
               <div>
                 <h2>Abrir caja</h2>
 
-                <p>
-                  Confirma el efectivo
-                  disponible al
-                  comenzar.
-                </p>
+                <p>Confirma el efectivo disponible al comenzar.</p>
               </div>
             </div>
 
-            <form
-              onSubmit={handleOpen}
-            >
+            <form onSubmit={handleOpen}>
               <label className="field">
-                <span>
-                  Fondo inicial
-                </span>
+                <span>Fondo inicial</span>
 
                 <input
                   autoComplete="off"
-                  onChange={(event) =>
-                    updateMoneyValue(
-                      setInitialFund,
-                      event.target.value,
-                    )
-                  }
+                  onChange={(event) => updateMoneyValue(setInitialFund, event.target.value)}
                   placeholder="Escribe el monto"
                   required
                   type="text"
                   value={initialFund}
                 />
 
-                <small>
-                  El fondo habitual es
-                  de L 500.00.
-                </small>
+                <small>El fondo habitual es de L 500.00.</small>
               </label>
 
-              <button
-                className="primary-button"
-                disabled={loading}
-                type="submit"
-              >
-                {loading
-                  ? "Abriendo..."
-                  : "Abrir caja"}
+              <button className="primary-button" disabled={loading} type="submit">
+                {loading ? "Abriendo..." : "Abrir caja"}
               </button>
             </form>
           </section>
@@ -450,155 +320,74 @@ export function CajaPage({
         <>
           <section className="cash-summary-grid">
             <article>
-              <span>
-                Fondo inicial
-              </span>
+              <span>Fondo inicial</span>
 
-              <strong>
-                L{" "}
-                {formatMoney(
-                  shift.fondoInicial,
-                )}
-              </strong>
+              <strong>L {formatMoney(shift.fondoInicial)}</strong>
             </article>
 
             <article>
-              <span>
-                Ventas en efectivo
-              </span>
+              <span>Ventas en efectivo</span>
 
-              <strong>
-                L{" "}
-                {formatMoney(
-                  shift.totales
-                    .efectivo,
-                )}
-              </strong>
+              <strong>L {formatMoney(shift.totales.efectivo)}</strong>
             </article>
 
             <article className="cash-summary-grid__expected">
-              <span>
-                Efectivo esperado
-              </span>
+              <span>Efectivo esperado</span>
 
-              <strong>
-                L{" "}
-                {formatMoney(
-                  shift
-                    .efectivoEsperado,
-                )}
-              </strong>
+              <strong>L {formatMoney(shift.efectivoEsperado)}</strong>
             </article>
           </section>
 
           <section className="cash-details-card">
             <div className="cash-card-heading">
               <span aria-hidden="true">
-                📊
+                <CashCardIcon name="RESUMEN" />
               </span>
 
               <div>
-                <h2>
-                  Resumen del turno
-                </h2>
+                <h2>Resumen del turno</h2>
 
                 <p>
-                  Abierta por{" "}
-                  {
-                    shift
-                      .usuarioApertura
-                      .nombre
-                  }{" "}
-                  ·{" "}
-                  {formatDate(
-                    shift.abiertoEn,
-                  )}
+                  Abierta por {shift.usuarioApertura.nombre} · {formatDate(shift.abiertoEn)}
                 </p>
               </div>
             </div>
 
             <div className="cash-payment-summary">
               <div>
-                <span>
-                  Ventas realizadas
-                </span>
+                <span>Ventas realizadas</span>
 
-                <strong>
-                  {
-                    shift.totales
-                      .cantidadVentas
-                  }
-                </strong>
+                <strong>{shift.totales.cantidadVentas}</strong>
               </div>
 
               <div>
-                <span>
-                  Total vendido
-                </span>
+                <span>Total vendido</span>
 
-                <strong>
-                  L{" "}
-                  {formatMoney(
-                    shift.totales
-                      .ventas,
-                  )}
-                </strong>
+                <strong>L {formatMoney(shift.totales.ventas)}</strong>
               </div>
 
               <div>
-                <span>
-                  Tarjeta
-                </span>
+                <span>Tarjeta</span>
 
-                <strong>
-                  L{" "}
-                  {formatMoney(
-                    shift.totales
-                      .tarjeta,
-                  )}
-                </strong>
+                <strong>L {formatMoney(shift.totales.tarjeta)}</strong>
               </div>
 
               <div>
-                <span>
-                  Transferencia
-                </span>
+                <span>Transferencia</span>
 
-                <strong>
-                  L{" "}
-                  {formatMoney(
-                    shift.totales
-                      .transferencia,
-                  )}
-                </strong>
+                <strong>L {formatMoney(shift.totales.transferencia)}</strong>
               </div>
 
               <div>
-                <span>
-                  Otros ingresos
-                </span>
+                <span>Otros ingresos</span>
 
-                <strong>
-                  L{" "}
-                  {formatMoney(
-                    shift.totales
-                      .ingresos,
-                  )}
-                </strong>
+                <strong>L {formatMoney(shift.totales.ingresos)}</strong>
               </div>
 
               <div>
-                <span>
-                  Retiros
-                </span>
+                <span>Retiros</span>
 
-                <strong>
-                  L{" "}
-                  {formatMoney(
-                    shift.totales
-                      .retiros,
-                  )}
-                </strong>
+                <strong>L {formatMoney(shift.totales.retiros)}</strong>
               </div>
             </div>
           </section>
@@ -607,67 +396,38 @@ export function CajaPage({
             <section className="cash-action-card">
               <div className="cash-card-heading">
                 <span aria-hidden="true">
-                  ↕
+                  <CashCardIcon name="MOVIMIENTO" />
                 </span>
 
                 <div>
-                  <h2>
-                    Entrada o retiro
-                  </h2>
+                  <h2>Entrada o retiro</h2>
 
-                  <p>
-                    Registra dinero que
-                    no pertenece a una
-                    venta.
-                  </p>
+                  <p>Registra dinero que no pertenece a una venta.</p>
                 </div>
               </div>
 
-              <form
-                className="cash-action-form"
-                onSubmit={
-                  handleMovement
-                }
-              >
+              <form className="cash-action-form" onSubmit={handleMovement}>
                 <div className="cash-movement-types">
                   <label>
                     <input
-                      checked={
-                        movementType ===
-                        "INGRESO"
-                      }
+                      checked={movementType === "INGRESO"}
                       name="tipoMovimientoCaja"
-                      onChange={() =>
-                        setMovementType(
-                          "INGRESO",
-                        )
-                      }
+                      onChange={() => setMovementType("INGRESO")}
                       type="radio"
                     />
 
-                    <strong>
-                      Ingreso
-                    </strong>
+                    <strong>Ingreso</strong>
                   </label>
 
                   <label>
                     <input
-                      checked={
-                        movementType ===
-                        "RETIRO"
-                      }
+                      checked={movementType === "RETIRO"}
                       name="tipoMovimientoCaja"
-                      onChange={() =>
-                        setMovementType(
-                          "RETIRO",
-                        )
-                      }
+                      onChange={() => setMovementType("RETIRO")}
                       type="radio"
                     />
 
-                    <strong>
-                      Retiro
-                    </strong>
+                    <strong>Retiro</strong>
                   </label>
                 </div>
 
@@ -677,17 +437,12 @@ export function CajaPage({
                   <input
                     autoComplete="off"
                     onChange={(event) =>
-                      updateMoneyValue(
-                        setMovementAmount,
-                        event.target.value,
-                      )
+                      updateMoneyValue(setMovementAmount, event.target.value)
                     }
                     placeholder="Escribe el monto"
                     required
                     type="text"
-                    value={
-                      movementAmount
-                    }
+                    value={movementAmount}
                   />
                 </label>
 
@@ -696,27 +451,15 @@ export function CajaPage({
 
                   <input
                     maxLength="200"
-                    onChange={(event) =>
-                      setMovementReason(
-                        event.target.value,
-                      )
-                    }
+                    onChange={(event) => setMovementReason(event.target.value)}
                     placeholder="Ejemplo: pago a proveedor"
                     required
-                    value={
-                      movementReason
-                    }
+                    value={movementReason}
                   />
                 </label>
 
-                <button
-                  className="secondary-button"
-                  disabled={loading}
-                  type="submit"
-                >
-                  {loading
-                    ? "Guardando..."
-                    : "Registrar movimiento"}
+                <button className="secondary-button" disabled={loading} type="submit">
+                  {loading ? "Guardando..." : "Registrar movimiento"}
                 </button>
               </form>
             </section>
@@ -724,44 +467,25 @@ export function CajaPage({
             <section className="cash-action-card cash-close-card">
               <div className="cash-card-heading">
                 <span aria-hidden="true">
-                  ✓
+                  <CashCardIcon name="CERRAR" />
                 </span>
 
                 <div>
-                  <h2>
-                    Cerrar caja
-                  </h2>
+                  <h2>Cerrar caja</h2>
 
-                  <p>
-                    Cuenta todo el
-                    efectivo que quedó
-                    en caja.
-                  </p>
+                  <p>Cuenta todo el efectivo que quedó en caja.</p>
                 </div>
               </div>
 
-              <form
-                className="cash-action-form"
-                onSubmit={
-                  handleClose
-                }
-              >
+              <form className="cash-action-form" onSubmit={handleClose}>
                 <label className="field">
-                  <span>
-                    Efectivo contado
-                  </span>
+                  <span>Efectivo contado</span>
 
                   <input
                     autoComplete="off"
                     onChange={(event) => {
-                      updateMoneyValue(
-                        setCountedCash,
-                        event.target.value,
-                      );
-
-                      setConfirmingClose(
-                        false,
-                      );
+                      updateMoneyValue(setCountedCash, event.target.value);
+                      setConfirmingClose(false);
                     }}
                     placeholder="Escribe el monto"
                     required
@@ -771,39 +495,22 @@ export function CajaPage({
                 </label>
 
                 <div className="cash-difference-preview">
-                  <span>
-                    Diferencia
-                    calculada
-                  </span>
+                  <span>Diferencia calculada</span>
 
                   <strong
                     className={
-                      previewDifference !==
-                        null &&
-                      previewDifference < 0
+                      previewDifference !== null && previewDifference < 0
                         ? "cash-negative"
                         : "cash-positive"
                     }
                   >
-                    {previewDifference ===
-                    null
-                      ? "—"
-                      : `L ${formatMoney(
-                          previewDifference,
-                        )}`}
+                    {previewDifference === null ? "—" : `L ${formatMoney(previewDifference)}`}
                   </strong>
                 </div>
 
                 {confirmingClose ? (
-                  <p
-                    className="cash-close-confirmation"
-                    role="alert"
-                  >
-                    Revisa el efectivo
-                    contado. Pulsa
-                    nuevamente para
-                    confirmar el
-                    cierre.
+                  <p className="cash-close-confirmation" role="alert">
+                    Revisa el efectivo contado. Pulsa nuevamente para confirmar el cierre.
                   </p>
                 ) : null}
 
@@ -812,22 +519,14 @@ export function CajaPage({
                     <button
                       className="secondary-button"
                       disabled={loading}
-                      onClick={() =>
-                        setConfirmingClose(
-                          false,
-                        )
-                      }
+                      onClick={() => setConfirmingClose(false)}
                       type="button"
                     >
                       Cancelar
                     </button>
                   ) : null}
 
-                  <button
-                    className="danger-button"
-                    disabled={loading}
-                    type="submit"
-                  >
+                  <button className="danger-button" disabled={loading} type="submit">
                     {loading
                       ? "Cerrando..."
                       : confirmingClose

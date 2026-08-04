@@ -1,0 +1,199 @@
+/* =========================================================
+   INVENTARIO — específico de esta pantalla.
+   Reutiliza el shell y la tabla compartidos en tokens.css.
+   ========================================================= */
+
+.inventory-form-card,
+.inventory-history-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  margin-bottom: 18px;
+}
+
+.inventory-form-card {
+  padding: 24px;
+}
+
+.inventory-history-card {
+  padding: 20px 20px 8px;
+}
+
+.inventory-form {
+  display: grid;
+  gap: 16px;
+}
+
+/* --- Elegir entrada / salida (tarjetas grandes tipo radio) --- */
+
+.movement-type {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.movement-type legend {
+  padding: 0;
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+.movement-type__options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.movement-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.movement-option input {
+  position: absolute;
+  opacity: 0;
+}
+
+.movement-option span {
+  display: grid;
+  gap: 4px;
+}
+
+.movement-option strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink);
+  font-size: 0.94rem;
+  font-weight: 500;
+}
+
+.movement-option small {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.movement-option--entry:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.movement-option--entry strong {
+  color: var(--accent);
+}
+
+.movement-option--exit:has(input:checked) {
+  border-color: var(--danger);
+  background: var(--danger-tint);
+}
+
+.movement-option--exit strong {
+  color: var(--danger);
+}
+
+/* --- Búsqueda de producto dentro del formulario --- */
+
+.inventory-product-search {
+  display: flex;
+  gap: 10px;
+}
+
+.inventory-product-search input {
+  flex: 1;
+  min-height: 46px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 14px;
+  font-size: 0.95rem;
+}
+
+.inventory-product-search input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+  outline: none;
+}
+
+.stock-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  background: var(--bg);
+}
+
+.stock-summary span {
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+  font-weight: 500;
+}
+
+.stock-summary strong {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 1.02rem;
+}
+
+.inventory-form__reason {
+  margin-top: -4px;
+}
+
+/* --- Historial: insignias de movimiento y cantidades --- */
+
+.inventory-history__heading {
+  margin-bottom: 14px;
+}
+
+.movement-badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.74rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.movement-badge--positive {
+  color: var(--success-ink);
+  background: var(--success-tint);
+}
+
+.movement-badge--negative {
+  color: var(--danger);
+  background: var(--danger-tint);
+}
+
+.quantity-positive,
+.quantity-negative {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.quantity-positive {
+  color: var(--success-ink);
+}
+
+.quantity-negative {
+  color: var(--danger);
+}
+
+@media (max-width: 900px) {
+  .movement-type__options {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-product-search {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

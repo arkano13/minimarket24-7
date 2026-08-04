@@ -614,7 +614,7 @@ export function buildAdministrativeReportHtml(
         <div class="mark">M</div>
 
         <div>
-          <h1>Minisúper</h1>
+          <h1>Minimarket 24/7</h1>
 
           <p>
             Sistema de punto de venta

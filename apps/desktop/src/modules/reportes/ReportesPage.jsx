@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import "./ReportesPage.css";
 import { cancelSale, getSalesReport } from "../../services/api.js";
 
 const PAYMENT_LABELS = {
@@ -68,15 +69,7 @@ function periodLabel(from, to) {
     return formatter.format(parse(from));
   }
 
-  return (
-    `${formatter.format(parse(from))} — ` + `${formatter.format(parse(to))}`
-  );
-}
-
-function paymentTotal(report, method) {
-  return Number(
-    report.pagos.find((payment) => payment.metodo === method)?.total ?? 0,
-  );
+  return `${formatter.format(parse(from))} — ` + `${formatter.format(parse(to))}`;
 }
 
 function ExecutiveView({ report, maximumHourlyTotal }) {
@@ -89,14 +82,11 @@ function ExecutiveView({ report, maximumHourlyTotal }) {
   );
 
   const peakHour =
-    [...report.horas].sort(
-      (first, second) => Number(second.total) - Number(first.total),
-    )[0] ?? null;
+    [...report.horas].sort((first, second) => Number(second.total) - Number(first.total))[0] ??
+    null;
 
   const topSales = report.productos[0] ?? null;
-
   const topQuantity = productsByQuantity[0] ?? null;
-
   const topProfit = productsByProfit[0] ?? null;
 
   return (
@@ -104,33 +94,25 @@ function ExecutiveView({ report, maximumHourlyTotal }) {
       <section aria-label="Resumen financiero" className="reports-kpi-grid">
         <article className="reports-kpi reports-kpi--primary">
           <span>Total vendido</span>
-
           <strong>L {money(report.resumen.total)}</strong>
-
           <small>Ingresos del periodo</small>
         </article>
 
         <article className="reports-kpi reports-kpi--blue">
           <span>Ventas realizadas</span>
-
           <strong>{report.resumen.operaciones}</strong>
-
           <small>Operaciones completadas</small>
         </article>
 
         <article className="reports-kpi reports-kpi--green">
           <span>Ganancia estimada</span>
-
           <strong>L {money(report.resumen.gananciaEstimada)}</strong>
-
           <small>Costo: L {money(report.resumen.costoEstimado)}</small>
         </article>
 
         <article className="reports-kpi reports-kpi--violet">
           <span>Promedio por venta</span>
-
           <strong>L {money(report.resumen.promedio)}</strong>
-
           <small>Valor promedio por operación</small>
         </article>
       </section>
@@ -138,48 +120,28 @@ function ExecutiveView({ report, maximumHourlyTotal }) {
       <section className="reports-executive-highlights">
         <article>
           <span>Líder por ingresos</span>
-
           <strong>{topSales?.nombre ?? "Sin información"}</strong>
-
-          <small>
-            {topSales ? `L ${money(topSales.ventas)} vendidos` : "Sin ventas"}
-          </small>
+          <small>{topSales ? `L ${money(topSales.ventas)} vendidos` : "Sin ventas"}</small>
         </article>
 
         <article>
           <span>Mayor cantidad vendida</span>
-
           <strong>{topQuantity?.nombre ?? "Sin información"}</strong>
-
           <small>
-            {topQuantity
-              ? `${quantity(topQuantity.cantidad)} unidades`
-              : "Sin ventas"}
+            {topQuantity ? `${quantity(topQuantity.cantidad)} unidades` : "Sin ventas"}
           </small>
         </article>
 
         <article>
           <span>Mayor ganancia</span>
-
           <strong>{topProfit?.nombre ?? "Sin información"}</strong>
-
-          <small>
-            {topProfit
-              ? `L ${money(topProfit.ganancia)} estimados`
-              : "Sin ventas"}
-          </small>
+          <small>{topProfit ? `L ${money(topProfit.ganancia)} estimados` : "Sin ventas"}</small>
         </article>
 
         <article>
           <span>Hora con más ventas</span>
-
-          <strong>
-            {peakHour ? hourLabel(peakHour.hora) : "Sin información"}
-          </strong>
-
-          <small>
-            {peakHour ? `L ${money(peakHour.total)} vendidos` : "Sin ventas"}
-          </small>
+          <strong>{peakHour ? hourLabel(peakHour.hora) : "Sin información"}</strong>
+          <small>{peakHour ? `L ${money(peakHour.total)} vendidos` : "Sin ventas"}</small>
         </article>
       </section>
 
@@ -188,7 +150,6 @@ function ExecutiveView({ report, maximumHourlyTotal }) {
           <header className="reports-panel__header">
             <div>
               <h2>Métodos de pago</h2>
-
               <p>Distribución de los ingresos</p>
             </div>
           </header>
@@ -199,27 +160,16 @@ function ExecutiveView({ report, maximumHourlyTotal }) {
 
               return (
                 <div
-                  className={
-                    `reports-payment ` +
-                    `reports-payment--` +
-                    payment.metodo.toLowerCase()
-                  }
+                  className={`reports-payment reports-payment--${payment.metodo.toLowerCase()}`}
                   key={payment.metodo}
                 >
                   <div className="reports-payment__heading">
-                    <span>
-                      {PAYMENT_LABELS[payment.metodo] ?? payment.metodo}
-                    </span>
-
+                    <span>{PAYMENT_LABELS[payment.metodo] ?? payment.metodo}</span>
                     <strong>L {money(payment.total)}</strong>
                   </div>
 
                   <div className="reports-payment__track">
-                    <i
-                      style={{
-                        width: `${share}%`,
-                      }}
-                    />
+                    <i style={{ width: `${share}%` }} />
                   </div>
 
                   <small>
@@ -235,7 +185,6 @@ function ExecutiveView({ report, maximumHourlyTotal }) {
           <header className="reports-panel__header">
             <div>
               <h2>Actividad por hora</h2>
-
               <p>Horas con mayor movimiento</p>
             </div>
           </header>
@@ -249,10 +198,7 @@ function ExecutiveView({ report, maximumHourlyTotal }) {
                   <div>
                     <i
                       style={{
-                        width: `${Math.max(
-                          4,
-                          (Number(hour.total) / maximumHourlyTotal) * 100,
-                        )}%`,
+                        width: `${Math.max(4, (Number(hour.total) / maximumHourlyTotal) * 100)}%`,
                       }}
                     />
                   </div>
@@ -271,13 +217,10 @@ function ExecutiveView({ report, maximumHourlyTotal }) {
         <header className="reports-panel__header">
           <div>
             <h2>Productos con mejor rendimiento</h2>
-
             <p>Los 20 productos con mayor valor vendido</p>
           </div>
 
-          <span className="reports-panel__badge">
-            Top {Math.min(report.productos.length, 20)}
-          </span>
+          <span className="reports-panel__badge">Top {Math.min(report.productos.length, 20)}</span>
         </header>
 
         {report.productos.length ? (
@@ -308,18 +251,14 @@ function ExecutiveView({ report, maximumHourlyTotal }) {
 
                     <td>L {money(product.ventas)}</td>
 
-                    <td className="reports-positive">
-                      L {money(product.ganancia)}
-                    </td>
+                    <td className="reports-positive">L {money(product.ganancia)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ) : (
-          <p className="reports-empty">
-            No se vendieron productos en este periodo.
-          </p>
+          <p className="reports-empty">No se vendieron productos en este periodo.</p>
         )}
       </section>
     </div>
@@ -336,56 +275,30 @@ function OperationalView({
   setSaleSearch,
   setSelectedSaleId,
 }) {
-  const totalUnits = report.productos.reduce(
-    (sum, product) => sum + Number(product.cantidad),
-    0,
-  );
+  const totalUnits = report.productos.reduce((sum, product) => sum + Number(product.cantidad), 0);
 
   const largestSale =
-    [...report.ventas].sort(
-      (first, second) => Number(second.total) - Number(first.total),
-    )[0] ?? null;
+    [...report.ventas].sort((first, second) => Number(second.total) - Number(first.total))[0] ??
+    null;
 
   const shifts = [
-    {
-      id: 1,
-      name: "Turno 1",
-      schedule: "8:00 a. m. – 10:00 p. m.",
-      operations: 0,
-      total: 0,
-    },
-    {
-      id: 2,
-      name: "Turno 2",
-      schedule: "10:00 p. m. – 2:00 a. m.",
-      operations: 0,
-      total: 0,
-    },
-    {
-      id: 3,
-      name: "Turno 3",
-      schedule: "2:00 a. m. – 8:00 a. m.",
-      operations: 0,
-      total: 0,
-    },
+    { id: 1, name: "Turno 1", schedule: "8:00 a. m. – 10:00 p. m.", operations: 0, total: 0 },
+    { id: 2, name: "Turno 2", schedule: "10:00 p. m. – 2:00 a. m.", operations: 0, total: 0 },
+    { id: 3, name: "Turno 3", schedule: "2:00 a. m. – 8:00 a. m.", operations: 0, total: 0 },
   ];
 
   const users = new Map();
 
   for (const sale of report.ventas) {
     const saleDate = new Date(sale.creadoEn);
-
     const hour = saleDate.getHours();
-
     const shiftId = hour >= 8 && hour < 22 ? 1 : hour >= 22 || hour < 2 ? 2 : 3;
-
     const shift = shifts.find((item) => item.id === shiftId);
 
     shift.operations += 1;
     shift.total += Number(sale.total);
 
-    const userId =
-      sale.usuario?.id ?? `name-${sale.usuario?.nombre ?? "unknown"}`;
+    const userId = sale.usuario?.id ?? `name-${sale.usuario?.nombre ?? "unknown"}`;
 
     const user = users.get(userId) ?? {
       id: userId,
@@ -397,54 +310,38 @@ function OperationalView({
 
     user.operations += 1;
     user.total += Number(sale.total);
-
-    user.units += sale.productos.reduce(
-      (sum, product) => sum + Number(product.cantidad),
-      0,
-    );
+    user.units += sale.productos.reduce((sum, product) => sum + Number(product.cantidad), 0);
 
     users.set(userId, user);
   }
 
-  const userPerformance = [...users.values()].sort(
-    (first, second) => second.total - first.total,
-  );
+  const userPerformance = [...users.values()].sort((first, second) => second.total - first.total);
 
   return (
     <div className="reports-view-content">
       <section className="reports-operational-summary">
         <article>
           <span>Total vendido</span>
-
           <strong>L {money(report.resumen.total)}</strong>
-
           <small>Ingresos del periodo</small>
         </article>
 
         <article>
           <span>Operaciones</span>
-
           <strong>{report.resumen.operaciones}</strong>
-
           <small>Ventas completadas</small>
         </article>
 
         <article>
           <span>Unidades vendidas</span>
-
           <strong>{quantity(totalUnits)}</strong>
-
           <small>En todos los productos</small>
         </article>
 
         <article>
           <span>Venta más alta</span>
-
           <strong>L {money(largestSale?.total)}</strong>
-
-          <small>
-            {largestSale ? `Venta #${largestSale.id}` : "Sin operaciones"}
-          </small>
+          <small>{largestSale ? `Venta #${largestSale.id}` : "Sin operaciones"}</small>
         </article>
       </section>
 
@@ -453,7 +350,6 @@ function OperationalView({
           <header className="reports-panel__header">
             <div>
               <h2>Resultados por turno</h2>
-
               <p>Movimiento según los horarios del negocio</p>
             </div>
           </header>
@@ -465,13 +361,11 @@ function OperationalView({
 
                 <div>
                   <strong>{shift.name}</strong>
-
                   <small>{shift.schedule}</small>
                 </div>
 
                 <div>
                   <strong>L {money(shift.total)}</strong>
-
                   <small>{shift.operations} operaciones</small>
                 </div>
               </article>
@@ -483,7 +377,6 @@ function OperationalView({
           <header className="reports-panel__header">
             <div>
               <h2>Cobros registrados</h2>
-
               <p>Totales separados por método de pago</p>
             </div>
           </header>
@@ -492,18 +385,11 @@ function OperationalView({
             {report.pagos.map((payment) => (
               <article key={payment.metodo}>
                 <span
-                  className={
-                    `reports-collection-dot ` +
-                    `reports-collection-dot--` +
-                    payment.metodo.toLowerCase()
-                  }
+                  className={`reports-collection-dot reports-collection-dot--${payment.metodo.toLowerCase()}`}
                 />
 
                 <div>
-                  <strong>
-                    {PAYMENT_LABELS[payment.metodo] ?? payment.metodo}
-                  </strong>
-
+                  <strong>{PAYMENT_LABELS[payment.metodo] ?? payment.metodo}</strong>
                   <small>{payment.operaciones} operaciones</small>
                 </div>
 
@@ -514,7 +400,6 @@ function OperationalView({
 
           <div className="reports-collection-total">
             <span>Total de cobros</span>
-
             <strong>L {money(report.resumen.total)}</strong>
           </div>
         </article>
@@ -524,13 +409,10 @@ function OperationalView({
         <header className="reports-panel__header">
           <div>
             <h2>Rendimiento por usuario</h2>
-
             <p>Operaciones atendidas durante el periodo</p>
           </div>
 
-          <span className="reports-panel__badge">
-            {userPerformance.length} usuarios
-          </span>
+          <span className="reports-panel__badge">{userPerformance.length} usuarios</span>
         </header>
 
         {userPerformance.length ? (
@@ -557,12 +439,7 @@ function OperationalView({
 
                     <td>{quantity(user.units)}</td>
 
-                    <td>
-                      L{" "}
-                      {money(
-                        user.operations ? user.total / user.operations : 0,
-                      )}
-                    </td>
+                    <td>L {money(user.operations ? user.total / user.operations : 0)}</td>
 
                     <td className="reports-positive">L {money(user.total)}</td>
                   </tr>
@@ -571,9 +448,7 @@ function OperationalView({
             </table>
           </div>
         ) : (
-          <p className="reports-empty">
-            No hay actividad de usuarios en este periodo.
-          </p>
+          <p className="reports-empty">No hay actividad de usuarios en este periodo.</p>
         )}
       </section>
 
@@ -581,7 +456,6 @@ function OperationalView({
         <header className="reports-panel__header">
           <div>
             <h2>Historial de ventas</h2>
-
             <p>Detalle de cada operación del periodo</p>
           </div>
 
@@ -594,9 +468,7 @@ function OperationalView({
         </header>
 
         {filteredSales.length === 0 ? (
-          <p className="reports-empty">
-            No hay ventas que coincidan con la búsqueda.
-          </p>
+          <p className="reports-empty">No hay ventas que coincidan con la búsqueda.</p>
         ) : (
           <div className="reports-sales-list">
             {filteredSales.map((sale) => (
@@ -604,18 +476,14 @@ function OperationalView({
                 <button
                   className="reports-sale-summary"
                   onClick={() =>
-                    setSelectedSaleId((current) =>
-                      current === sale.id ? null : sale.id,
-                    )
+                    setSelectedSaleId((current) => (current === sale.id ? null : sale.id))
                   }
                   type="button"
                 >
                   <span>
                     <strong>Venta #{sale.id}</strong>
-
                     <small>
-                      {sale.cliente?.nombre ?? "Cliente general"} ·{" "}
-                      {sale.usuario?.nombre}
+                      {sale.cliente?.nombre ?? "Cliente general"} · {sale.usuario?.nombre}
                     </small>
                   </span>
 
@@ -631,8 +499,7 @@ function OperationalView({
                         </span>
 
                         <span>
-                          {quantity(product.cantidad)} × L{" "}
-                          {money(product.precio)}
+                          {quantity(product.cantidad)} × L {money(product.precio)}
                         </span>
 
                         <strong>L {money(product.subtotal)}</strong>
@@ -645,9 +512,7 @@ function OperationalView({
                       onClick={() => onCancelSale(sale.id)}
                       type="button"
                     >
-                      {cancelingSaleId === sale.id
-                        ? "Cancelando..."
-                        : "Cancelar venta"}
+                      {cancelingSaleId === sale.id ? "Cancelando..." : "Cancelar venta"}
                     </button>
                   </div>
                 ) : null}
@@ -676,8 +541,7 @@ export function ReportesPage({ token }) {
   const [message, setMessage] = useState("");
 
   const maximumHourlyTotal = useMemo(
-    () =>
-      Math.max(1, ...(report?.horas.map((item) => Number(item.total)) ?? [])),
+    () => Math.max(1, ...(report?.horas.map((item) => Number(item.total)) ?? [])),
     [report],
   );
 
@@ -792,15 +656,11 @@ export function ReportesPage({ token }) {
 
     try {
       const isAdministrative = activeView === "EXECUTIVE";
-
       const reportType = isAdministrative ? "ADMINISTRATIVE" : "OPERATIONAL";
-
       const reportLabel = isAdministrative ? "administrativo" : "operativo";
 
       const fileName =
-        `reporte-${reportLabel}-` +
-        `${report.periodo.desde}-a-` +
-        `${report.periodo.hasta}.pdf`;
+        `reporte-${reportLabel}-` + `${report.periodo.desde}-a-` + `${report.periodo.hasta}.pdf`;
 
       const result = await window.desktop.saveReportPdf({
         suggestedName: fileName,
@@ -823,28 +683,30 @@ export function ReportesPage({ token }) {
       <header className="reports-dashboard__header">
         <div>
           <p className="eyebrow">Panel de reportes</p>
-
           <h1>Información de ventas</h1>
-
           <p>Consulta el resumen del negocio o revisa cada operación.</p>
         </div>
 
-   
-          <button
-            className="reports-pdf-button"
-            disabled={!report || loading || savingPdf}
-            onClick={savePdf}
-            type="button"
-          >
-            <span aria-hidden="true">↓</span>
+        <button
+          className="reports-pdf-button"
+          disabled={!report || loading || savingPdf}
+          onClick={savePdf}
+          type="button"
+        >
+          <span aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3v13" />
+              <path d="m6 11 6 6 6-6" />
+              <path d="M4 20h16" />
+            </svg>
+          </span>
 
-            {savingPdf
-              ? "Guardando..."
-              : activeView === "EXECUTIVE"
-                ? "Guardar PDF administrativo"
-                : "Guardar PDF operativo"}
-          </button>
-     
+          {savingPdf
+            ? "Guardando..."
+            : activeView === "EXECUTIVE"
+              ? "Guardar PDF administrativo"
+              : "Guardar PDF operativo"}
+        </button>
       </header>
 
       <nav aria-label="Tipo de reporte" className="reports-view-switch">
@@ -856,12 +718,13 @@ export function ReportesPage({ token }) {
           type="button"
         >
           <span aria-hidden="true" className="reports-view-switch__icon">
-            ◆
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 20V10M12 20V4M20 20v-7" />
+            </svg>
           </span>
 
           <span>
-         <strong>Vista administrativa</strong>
-
+            <strong>Vista administrativa</strong>
             <small>Indicadores, ganancias y productos líderes</small>
           </span>
         </button>
@@ -874,12 +737,13 @@ export function ReportesPage({ token }) {
           type="button"
         >
           <span aria-hidden="true" className="reports-view-switch__icon">
-            ≡
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
           </span>
 
           <span>
             <strong>Vista operativa</strong>
-
             <small>Ventas, usuarios y productos de cada operación</small>
           </span>
         </button>
@@ -890,27 +754,15 @@ export function ReportesPage({ token }) {
           <span>Vista rápida</span>
 
           <div>
-            <button
-              disabled={loading}
-              onClick={() => applyQuickPeriod("TODAY")}
-              type="button"
-            >
+            <button disabled={loading} onClick={() => applyQuickPeriod("TODAY")} type="button">
               Hoy
             </button>
 
-            <button
-              disabled={loading}
-              onClick={() => applyQuickPeriod("WEEK")}
-              type="button"
-            >
+            <button disabled={loading} onClick={() => applyQuickPeriod("WEEK")} type="button">
               Últimos 7 días
             </button>
 
-            <button
-              disabled={loading}
-              onClick={() => applyQuickPeriod("MONTH")}
-              type="button"
-            >
+            <button disabled={loading} onClick={() => applyQuickPeriod("MONTH")} type="button">
               Este mes
             </button>
           </div>
@@ -919,24 +771,14 @@ export function ReportesPage({ token }) {
         <div className="reports-date-range">
           <label>
             <span>Desde</span>
-
-            <input
-              onChange={(event) => setFrom(event.target.value)}
-              type="date"
-              value={from}
-            />
+            <input onChange={(event) => setFrom(event.target.value)} type="date" value={from} />
           </label>
 
           <span className="reports-date-separator">a</span>
 
           <label>
             <span>Hasta</span>
-
-            <input
-              onChange={(event) => setTo(event.target.value)}
-              type="date"
-              value={to}
-            />
+            <input onChange={(event) => setTo(event.target.value)} type="date" value={to} />
           </label>
 
           <button disabled={loading} onClick={() => loadReport()} type="button">
@@ -962,20 +804,14 @@ export function ReportesPage({ token }) {
           <div className="reports-period-heading">
             <div>
               <span>Periodo consultado</span>
-
-              <strong>
-                {periodLabel(report.periodo.desde, report.periodo.hasta)}
-              </strong>
+              <strong>{periodLabel(report.periodo.desde, report.periodo.hasta)}</strong>
             </div>
 
             <small>{report.resumen.operaciones} ventas encontradas</small>
           </div>
 
           {activeView === "EXECUTIVE" ? (
-            <ExecutiveView
-              maximumHourlyTotal={maximumHourlyTotal}
-              report={report}
-            />
+            <ExecutiveView maximumHourlyTotal={maximumHourlyTotal} report={report} />
           ) : (
             <OperationalView
               cancelingSaleId={cancelingSaleId}

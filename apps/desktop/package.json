@@ -1,6 +1,8 @@
 {
   "name": "@minisuper/desktop",
   "version": "0.1.0",
+  "description": "Sistema de punto de venta e inventario para Minimarket 24/7.",
+  "author": "Minimarket 24/7",
   "private": true,
   "type": "module",
   "main": "electron/main.js",
@@ -11,8 +13,7 @@
     "dev": "concurrently -k -s first -n VITE,ELECTRON -c magenta,cyan \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "start": "electron .",
     "build": "vite build",
-    "test": "node --test",
-    "test:coverage": "node --experimental-test-coverage --test"
+    "dist": "npm run build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --x64"
   },
   "dependencies": {
     "@minisuper/shared": "*",
@@ -22,8 +23,66 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.4",
     "concurrently": "^10.0.4",
-    "electron": "^43.2.0",
+    "cross-env": "^7.0.3",
+    "electron": "43.2.0",
+    "electron-builder": "^25.1.8",
     "vite": "^8.1.5",
     "wait-on": "^9.1.0"
+  },
+  "build": {
+    "appId": "com.minimarket247.pos",
+    "productName": "Minimarket 24/7",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend",
+        "to": "backend",
+        "filter": [
+          "**/*",
+          "!node_modules",
+          "!**/*.map"
+        ]
+      },
+      {
+        "from": "../../node_modules",
+        "to": "node_modules",
+        "filter": [
+          "**/*",
+          "!electron",
+          "!electron-builder",
+          "!vite",
+          "!@vitejs",
+          "!@minisuper",
+          "!.bin"
+        ]
+      },
+      {
+        "from": "../../packages/shared",
+        "to": "node_modules/@minisuper/shared"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Minimarket 24/7"
+    }
   }
 }

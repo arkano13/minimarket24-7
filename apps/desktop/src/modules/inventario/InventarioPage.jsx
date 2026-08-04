@@ -1,8 +1,5 @@
-import {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useEffect, useMemo, useState } from "react";
+import "./InventarioPage.css";
 
 import {
   createInventoryMovement,
@@ -19,60 +16,36 @@ const EMPTY_FORM = {
 };
 
 const MOVEMENT_LABELS = {
-  INVENTARIO_INICIAL:
-    "Inventario inicial",
-
+  INVENTARIO_INICIAL: "Inventario inicial",
   COMPRA: "Entrada",
   VENTA: "Venta",
-
-  DEVOLUCION_CLIENTE:
-    "Devolución de cliente",
-
-  DEVOLUCION_PROVEEDOR:
-    "Devolución a proveedor",
-
-  AJUSTE_POSITIVO:
-    "Ajuste positivo",
-
-  AJUSTE_NEGATIVO:
-    "Salida",
-
-  CANCELACION_VENTA:
-    "Cancelación de venta",
+  DEVOLUCION_CLIENTE: "Devolución de cliente",
+  DEVOLUCION_PROVEEDOR: "Devolución a proveedor",
+  AJUSTE_POSITIVO: "Ajuste positivo",
+  AJUSTE_NEGATIVO: "Salida",
+  CANCELACION_VENTA: "Cancelación de venta",
 };
 
-const NEGATIVE_MOVEMENTS = new Set([
-  "VENTA",
-  "DEVOLUCION_PROVEEDOR",
-  "AJUSTE_NEGATIVO",
-]);
+const NEGATIVE_MOVEMENTS = new Set(["VENTA", "DEVOLUCION_PROVEEDOR", "AJUSTE_NEGATIVO"]);
 
 function formatNumber(value) {
-  return new Intl.NumberFormat(
-    "es-HN",
-    {
-      maximumFractionDigits: 3,
-    },
-  ).format(value);
+  return new Intl.NumberFormat("es-HN", {
+    maximumFractionDigits: 3,
+  }).format(value);
 }
 
 function formatDate(value) {
-  return new Intl.DateTimeFormat(
-    "es-HN",
-    {
-      dateStyle: "short",
-      timeStyle: "short",
-    },
-  ).format(new Date(value));
+  return new Intl.DateTimeFormat("es-HN", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(value));
 }
 
 function getUnitLabel(product) {
-  const type =
-    product?.presentacionPrincipal
-      ?.tipo;
+  const type = product?.presentacionPrincipal?.tipo;
 
   if (type === "PESO") {
-    return "kilogramos";
+    return "libras";
   }
 
   if (type === "VOLUMEN") {
@@ -83,12 +56,10 @@ function getUnitLabel(product) {
 }
 
 function getSingularUnitLabel(product) {
-  const type =
-    product?.presentacionPrincipal
-      ?.tipo;
+  const type = product?.presentacionPrincipal?.tipo;
 
   if (type === "PESO") {
-    return "kilogramo";
+    return "libra";
   }
 
   if (type === "VOLUMEN") {
@@ -98,75 +69,34 @@ function getSingularUnitLabel(product) {
   return "unidad";
 }
 
-export function InventarioPage({
-  token,
-}) {
-  const [products, setProducts] =
-    useState([]);
-
-  const [movements, setMovements] =
-    useState([]);
-
-  const [form, setForm] =
-    useState(EMPTY_FORM);
-
-  const [
-    productSearch,
-    setProductSearch,
-  ] = useState("");
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [saving, setSaving] =
-    useState(false);
-
-  const [error, setError] =
-    useState("");
-
-  const [success, setSuccess] =
-    useState("");
+export function InventarioPage({ token }) {
+  const [products, setProducts] = useState([]);
+  const [movements, setMovements] = useState([]);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [productSearch, setProductSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const selectedProduct = useMemo(
-    () =>
-      products.find(
-        (product) =>
-          product.id ===
-          Number(form.productoId),
-      ) ?? null,
-
+    () => products.find((product) => product.id === Number(form.productoId)) ?? null,
     [form.productoId, products],
   );
 
-  const unitLabel =
-    getUnitLabel(selectedProduct);
-
-  const singularUnitLabel =
-    getSingularUnitLabel(
-      selectedProduct,
-    );
+  const unitLabel = getUnitLabel(selectedProduct);
+  const singularUnitLabel = getSingularUnitLabel(selectedProduct);
 
   useEffect(() => {
     async function loadInitialData() {
       try {
-        const [
-          productResult,
-          movementResult,
-        ] = await Promise.all([
+        const [productResult, movementResult] = await Promise.all([
           listProducts(token),
-
-          listInventoryMovements(
-            token,
-          ),
+          listInventoryMovements(token),
         ]);
 
-        setProducts(
-          productResult.productos,
-        );
-
-        setMovements(
-          movementResult.movimientos,
-        );
+        setProducts(productResult.productos);
+        setMovements(movementResult.movimientos);
       } catch (requestError) {
         setError(requestError.message);
       } finally {
@@ -180,18 +110,9 @@ export function InventarioPage({
   function selectMovementType(type) {
     setForm((current) => ({
       ...current,
-
       tipoMovimiento: type,
-
       costo:
-        type === "ENTRADA" &&
-        selectedProduct
-          ? String(
-              selectedProduct.costo ??
-                "",
-            )
-          : "",
-
+        type === "ENTRADA" && selectedProduct ? String(selectedProduct.costo ?? "") : "",
       motivo: "",
     }));
 
@@ -200,51 +121,28 @@ export function InventarioPage({
   }
 
   function selectProduct(event) {
-    const productId =
-      event.target.value;
+    const productId = event.target.value;
 
-    const product =
-      products.find(
-        (item) =>
-          item.id ===
-          Number(productId),
-      ) ?? null;
+    const product = products.find((item) => item.id === Number(productId)) ?? null;
 
     setForm((current) => ({
       ...current,
-
       productoId: productId,
-
       costo:
-        current.tipoMovimiento ===
-          "ENTRADA" && product
-          ? String(
-              product.costo ?? "",
-            )
-          : "",
+        current.tipoMovimiento === "ENTRADA" && product ? String(product.costo ?? "") : "",
     }));
   }
 
-  async function handleProductSearch(
-    event,
-  ) {
+  async function handleProductSearch(event) {
     event.preventDefault();
     setError("");
 
     try {
-      const result =
-        await listProducts(
-          token,
-          productSearch,
-        );
+      const result = await listProducts(token, productSearch);
 
       setProducts(result.productos);
 
-      setForm((current) => ({
-        ...current,
-        productoId: "",
-        costo: "",
-      }));
+      setForm((current) => ({ ...current, productoId: "", costo: "" }));
     } catch (requestError) {
       setError(requestError.message);
     }
@@ -258,36 +156,19 @@ export function InventarioPage({
     setSaving(true);
 
     try {
-      await createInventoryMovement(
-        token,
-        form,
-      );
+      await createInventoryMovement(token, form);
 
-      const [
-        productResult,
-        movementResult,
-      ] = await Promise.all([
-        listProducts(
-          token,
-          productSearch,
-        ),
-
+      const [productResult, movementResult] = await Promise.all([
+        listProducts(token, productSearch),
         listInventoryMovements(token),
       ]);
 
-      setProducts(
-        productResult.productos,
-      );
-
-      setMovements(
-        movementResult.movimientos,
-      );
-
+      setProducts(productResult.productos);
+      setMovements(movementResult.movimientos);
       setForm(EMPTY_FORM);
 
       setSuccess(
-        form.tipoMovimiento ===
-        "ENTRADA"
+        form.tipoMovimiento === "ENTRADA"
           ? "Entrada registrada correctamente."
           : "Salida registrada correctamente.",
       );
@@ -302,33 +183,22 @@ export function InventarioPage({
     <main className="workspace-page">
       <header className="workspace-header">
         <div>
-          <p className="eyebrow">
-            Existencias
-          </p>
+          <p className="eyebrow">Existencias</p>
 
           <h1>Inventario</h1>
 
-          <p>
-            Registra entradas y salidas
-            sin modificar las ventas.
-          </p>
+          <p>Registra entradas y salidas sin modificar las ventas.</p>
         </div>
       </header>
 
       {error ? (
-        <p
-          className="form-error page-message"
-          role="alert"
-        >
+        <p className="form-error page-message" role="alert">
           {error}
         </p>
       ) : null}
 
       {success ? (
-        <p
-          className="form-success page-message"
-          role="status"
-        >
+        <p className="form-success page-message" role="status">
           {success}
         </p>
       ) : null}
@@ -336,81 +206,52 @@ export function InventarioPage({
       <section className="inventory-form-card">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">
-              Nuevo movimiento
-            </p>
+            <p className="eyebrow">Nuevo movimiento</p>
 
-            <h2>
-              Actualizar existencia
-            </h2>
+            <h2>Actualizar existencia</h2>
           </div>
 
-          <p>
-            Elige qué ocurrió y completa
-            la cantidad.
-          </p>
+          <p>Elige qué ocurrió y completa la cantidad.</p>
         </div>
 
-        <form
-          className="inventory-form"
-          onSubmit={handleSubmit}
-        >
+        <form className="inventory-form" onSubmit={handleSubmit}>
           <fieldset className="movement-type">
-            <legend>
-              ¿Qué deseas registrar?
-            </legend>
+            <legend>¿Qué deseas registrar?</legend>
 
             <div className="movement-type__options">
               <label className="movement-option movement-option--entry">
                 <input
-                  checked={
-                    form.tipoMovimiento ===
-                    "ENTRADA"
-                  }
+                  checked={form.tipoMovimiento === "ENTRADA"}
                   name="tipoMovimiento"
-                  onChange={() =>
-                    selectMovementType(
-                      "ENTRADA",
-                    )
-                  }
+                  onChange={() => selectMovementType("ENTRADA")}
                   type="radio"
                 />
 
                 <span>
                   <strong>
-                    ＋ Entrada
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+                    Entrada
                   </strong>
 
-                  <small>
-                    Recibí más producto.
-                  </small>
+                  <small>Recibí más producto.</small>
                 </span>
               </label>
 
               <label className="movement-option movement-option--exit">
                 <input
-                  checked={
-                    form.tipoMovimiento ===
-                    "SALIDA"
-                  }
+                  checked={form.tipoMovimiento === "SALIDA"}
                   name="tipoMovimiento"
-                  onChange={() =>
-                    selectMovementType(
-                      "SALIDA",
-                    )
-                  }
+                  onChange={() => selectMovementType("SALIDA")}
                   type="radio"
                 />
 
                 <span>
                   <strong>
-                    − Salida
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /></svg>
+                    Salida
                   </strong>
 
-                  <small>
-                    Producto perdido, dañado
-                    o retirado.
-                  </small>
+                  <small>Producto perdido, dañado o retirado.</small>
                 </span>
               </label>
             </div>
@@ -418,31 +259,17 @@ export function InventarioPage({
 
           <div className="inventory-product-search">
             <input
-              onChange={(event) =>
-                setProductSearch(
-                  event.target.value,
-                )
-              }
+              onChange={(event) => setProductSearch(event.target.value)}
               onKeyDown={(event) => {
-                if (
-                  event.key === "Enter"
-                ) {
-                  handleProductSearch(
-                    event,
-                  );
+                if (event.key === "Enter") {
+                  handleProductSearch(event);
                 }
               }}
               placeholder="Buscar producto por nombre, código o SKU"
               value={productSearch}
             />
 
-            <button
-              className="secondary-button"
-              onClick={
-                handleProductSearch
-              }
-              type="button"
-            >
+            <button className="secondary-button" onClick={handleProductSearch} type="button">
               Buscar
             </button>
           </div>
@@ -450,66 +277,36 @@ export function InventarioPage({
           <label className="field inventory-form__product">
             <span>Producto *</span>
 
-            <select
-              name="productoId"
-              onChange={selectProduct}
-              required
-              value={form.productoId}
-            >
-              <option value="">
-                Selecciona un producto
-              </option>
+            <select name="productoId" onChange={selectProduct} required value={form.productoId}>
+              <option value="">Selecciona un producto</option>
 
-              {products.map(
-                (product) => (
-                  <option
-                    key={product.id}
-                    value={product.id}
-                  >
-                    {product.nombre} ·{" "}
-                    {formatNumber(
-                      product.stock,
-                    )}{" "}
-                    disponibles
-                  </option>
-                ),
-              )}
+              {products.map((product) => (
+                <option key={product.id} value={product.id}>
+                  {product.nombre} · {formatNumber(product.stock)} disponibles
+                </option>
+              ))}
             </select>
           </label>
 
           {selectedProduct ? (
             <div className="stock-summary">
-              <span>
-                Existencia actual
-              </span>
+              <span>Existencia actual</span>
 
               <strong>
-                {formatNumber(
-                  selectedProduct.stock,
-                )}{" "}
-                {unitLabel}
+                {formatNumber(selectedProduct.stock)} {unitLabel}
               </strong>
             </div>
           ) : null}
 
           <div className="form-row">
             <label className="field">
-              <span>
-                Cantidad en {unitLabel} *
-              </span>
+              <span>Cantidad en {unitLabel} *</span>
 
               <input
                 min="0.001"
                 name="cantidad"
                 onChange={(event) =>
-                  setForm(
-                    (current) => ({
-                      ...current,
-
-                      cantidad:
-                        event.target.value,
-                    }),
-                  )
+                  setForm((current) => ({ ...current, cantidad: event.target.value }))
                 }
                 placeholder="0"
                 required
@@ -519,27 +316,15 @@ export function InventarioPage({
               />
             </label>
 
-            {form.tipoMovimiento ===
-            "ENTRADA" ? (
+            {form.tipoMovimiento === "ENTRADA" ? (
               <label className="field">
-                <span>
-                  Costo por{" "}
-                  {singularUnitLabel}
-                </span>
+                <span>Costo por {singularUnitLabel}</span>
 
                 <input
                   min="0.01"
                   name="costo"
                   onChange={(event) =>
-                    setForm(
-                      (current) => ({
-                        ...current,
-
-                        costo:
-                          event.target
-                            .value,
-                      }),
-                    )
+                    setForm((current) => ({ ...current, costo: event.target.value }))
                   }
                   placeholder="0.00"
                   step="0.01"
@@ -547,30 +332,17 @@ export function InventarioPage({
                   value={form.costo}
                 />
 
-                <small>
-                  Déjalo vacío si el costo
-                  no cambió.
-                </small>
+                <small>Déjalo vacío si el costo no cambió.</small>
               </label>
             ) : (
               <label className="field">
-                <span>
-                  Motivo de la salida *
-                </span>
+                <span>Motivo de la salida *</span>
 
                 <input
                   maxLength="250"
                   name="motivo"
                   onChange={(event) =>
-                    setForm(
-                      (current) => ({
-                        ...current,
-
-                        motivo:
-                          event.target
-                            .value,
-                      }),
-                    )
+                    setForm((current) => ({ ...current, motivo: event.target.value }))
                   }
                   placeholder="Ejemplo: Producto dañado"
                   required
@@ -580,8 +352,7 @@ export function InventarioPage({
             )}
           </div>
 
-          {form.tipoMovimiento ===
-          "ENTRADA" ? (
+          {form.tipoMovimiento === "ENTRADA" ? (
             <label className="field inventory-form__reason">
               <span>Nota opcional</span>
 
@@ -589,14 +360,7 @@ export function InventarioPage({
                 maxLength="250"
                 name="motivo"
                 onChange={(event) =>
-                  setForm(
-                    (current) => ({
-                      ...current,
-
-                      motivo:
-                        event.target.value,
-                    }),
-                  )
+                  setForm((current) => ({ ...current, motivo: event.target.value }))
                 }
                 placeholder="Ejemplo: Compra semanal"
                 value={form.motivo}
@@ -606,22 +370,13 @@ export function InventarioPage({
 
           <div className="form-actions">
             <button
-              className={
-                form.tipoMovimiento ===
-                "ENTRADA"
-                  ? "primary-button"
-                  : "danger-button"
-              }
-              disabled={
-                saving ||
-                products.length === 0
-              }
+              className={form.tipoMovimiento === "ENTRADA" ? "primary-button" : "danger-button"}
+              disabled={saving || products.length === 0}
               type="submit"
             >
               {saving
                 ? "Guardando..."
-                : form.tipoMovimiento ===
-                    "ENTRADA"
+                : form.tipoMovimiento === "ENTRADA"
                   ? "Guardar entrada"
                   : "Guardar salida"}
             </button>
@@ -632,30 +387,18 @@ export function InventarioPage({
       <section className="inventory-history-card">
         <div className="section-heading inventory-history__heading">
           <div>
-            <p className="eyebrow">
-              Historial
-            </p>
+            <p className="eyebrow">Historial</p>
 
-            <h2>
-              Últimos movimientos
-            </h2>
+            <h2>Últimos movimientos</h2>
           </div>
 
-          <p>
-            Se muestran los 100
-            movimientos más recientes.
-          </p>
+          <p>Se muestran los 100 movimientos más recientes.</p>
         </div>
 
         {loading ? (
-          <p className="empty-state">
-            Cargando inventario...
-          </p>
+          <p className="empty-state">Cargando inventario...</p>
         ) : movements.length === 0 ? (
-          <p className="empty-state">
-            Todavía no hay movimientos
-            de inventario.
-          </p>
+          <p className="empty-state">Todavía no hay movimientos de inventario.</p>
         ) : (
           <div className="product-table-wrapper">
             <table className="product-table inventory-table">
@@ -665,102 +408,49 @@ export function InventarioPage({
                   <th>Producto</th>
                   <th>Movimiento</th>
                   <th>Cantidad</th>
-                  <th>
-                    Existencia final
-                  </th>
+                  <th>Existencia final</th>
                   <th>Usuario</th>
                   <th>Motivo</th>
                 </tr>
               </thead>
 
               <tbody>
-                {movements.map(
-                  (movement) => {
-                    const negative =
-                      NEGATIVE_MOVEMENTS.has(
-                        movement.tipo,
-                      );
+                {movements.map((movement) => {
+                  const negative = NEGATIVE_MOVEMENTS.has(movement.tipo);
 
-                    return (
-                      <tr
-                        key={movement.id}
-                      >
-                        <td>
-                          {formatDate(
-                            movement.creadoEn,
-                          )}
-                        </td>
+                  return (
+                    <tr key={movement.id}>
+                      <td>{formatDate(movement.creadoEn)}</td>
 
-                        <td>
-                          <strong>
-                            {
-                              movement
-                                .producto
-                                .nombre
-                            }
-                          </strong>
+                      <td>
+                        <strong>{movement.producto.nombre}</strong>
 
-                          <small>
-                            {
-                              movement
-                                .producto
-                                .presentacion
-                            }
-                          </small>
-                        </td>
+                        <small>{movement.producto.presentacion}</small>
+                      </td>
 
-                        <td>
-                          <span
-                            className={`movement-badge ${
-                              negative
-                                ? "movement-badge--negative"
-                                : "movement-badge--positive"
-                            }`}
-                          >
-                            {MOVEMENT_LABELS[
-                              movement
-                                .tipo
-                            ] ??
-                              movement.tipo}
-                          </span>
-                        </td>
-
-                        <td
-                          className={
-                            negative
-                              ? "quantity-negative"
-                              : "quantity-positive"
-                          }
+                      <td>
+                        <span
+                          className={`movement-badge ${
+                            negative ? "movement-badge--negative" : "movement-badge--positive"
+                          }`}
                         >
-                          {negative
-                            ? "−"
-                            : "+"}
+                          {MOVEMENT_LABELS[movement.tipo] ?? movement.tipo}
+                        </span>
+                      </td>
 
-                          {formatNumber(
-                            movement.cantidad,
-                          )}
-                        </td>
+                      <td className={negative ? "quantity-negative" : "quantity-positive"}>
+                        {negative ? "−" : "+"}
+                        {formatNumber(movement.cantidad)}
+                      </td>
 
-                        <td>
-                          {formatNumber(
-                            movement.saldoPosterior,
-                          )}
-                        </td>
+                      <td>{formatNumber(movement.saldoPosterior)}</td>
 
-                        <td>
-                          {movement.usuario
-                            ?.nombre ??
-                            "Sistema"}
-                        </td>
+                      <td>{movement.usuario?.nombre ?? "Sistema"}</td>
 
-                        <td>
-                          {movement.motivo ??
-                            "—"}
-                        </td>
-                      </tr>
-                    );
-                  },
-                )}
+                      <td>{movement.motivo ?? "—"}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

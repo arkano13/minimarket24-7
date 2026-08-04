@@ -1,4 +1,4 @@
-export const NOMBRE_SISTEMA = "Minisúper POS";
+export const NOMBRE_SISTEMA = "Minimarket 24/7";
 
 export const UNIDADES_VENTA = Object.freeze([
   "UNIDAD",

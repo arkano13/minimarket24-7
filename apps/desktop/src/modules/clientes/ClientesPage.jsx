@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import "./ClientesPage.css";
 import {
   createSpecialClient,
   listSpecialClients,
@@ -47,20 +48,13 @@ export function ClientesPage({ token }) {
 
     const timer = window.setTimeout(async () => {
       try {
-        const result = await listSpecialClients(
-          token,
-          clientSearch.trim(),
-        );
+        const result = await listSpecialClients(token, clientSearch.trim());
 
         if (active) {
           setClients(result.clientes);
 
           setSelectedClient((current) =>
-            current
-              ? result.clientes.find(
-                  (client) => client.id === current.id,
-                ) ?? null
-              : null,
+            current ? result.clientes.find((client) => client.id === current.id) ?? null : null,
           );
         }
       } catch (requestError) {
@@ -116,14 +110,8 @@ export function ClientesPage({ token }) {
   function updateClientEverywhere(updatedClient) {
     setClients((current) =>
       current
-        .map((client) =>
-          client.id === updatedClient.id
-            ? updatedClient
-            : client,
-        )
-        .sort((first, second) =>
-          first.nombre.localeCompare(second.nombre),
-        ),
+        .map((client) => (client.id === updatedClient.id ? updatedClient : client))
+        .sort((first, second) => first.nombre.localeCompare(second.nombre)),
     );
 
     setSelectedClient(updatedClient);
@@ -173,14 +161,11 @@ export function ClientesPage({ token }) {
 
   function selectProduct(product) {
     const currentPrice = selectedClient.precios.find(
-      (price) =>
-        price.presentacionId === product.presentacionId,
+      (price) => price.presentacionId === product.presentacionId,
     );
 
     setSelectedProduct(product);
-    setSpecialPrice(
-      currentPrice ? String(currentPrice.precio) : "",
-    );
+    setSpecialPrice(currentPrice ? String(currentPrice.precio) : "");
     setProductSearch("");
     setProductResults([]);
   }
@@ -198,14 +183,10 @@ export function ClientesPage({ token }) {
     setLoading(true);
 
     try {
-      const result = await setClientSpecialPrice(
-        token,
-        selectedClient.id,
-        {
-          presentacionId: selectedProduct.presentacionId,
-          precio: specialPrice,
-        },
-      );
+      const result = await setClientSpecialPrice(token, selectedClient.id, {
+        presentacionId: selectedProduct.presentacionId,
+        precio: specialPrice,
+      });
 
       updateClientEverywhere(result.cliente);
       setSelectedProduct(null);
@@ -224,11 +205,7 @@ export function ClientesPage({ token }) {
     setLoading(true);
 
     try {
-      const result = await removeClientSpecialPrice(
-        token,
-        selectedClient.id,
-        presentationId,
-      );
+      const result = await removeClientSpecialPrice(token, selectedClient.id, presentationId);
 
       updateClientEverywhere(result.cliente);
       setSuccess("Precio especial eliminado.");
@@ -245,10 +222,7 @@ export function ClientesPage({ token }) {
         <div>
           <p className="eyebrow">Precios personalizados</p>
           <h1>Clientes especiales</h1>
-          <p>
-            Asigna precios fijos a productos específicos de cada
-            cliente.
-          </p>
+          <p>Asigna precios fijos a productos específicos de cada cliente.</p>
         </div>
 
         <button
@@ -281,10 +255,7 @@ export function ClientesPage({ token }) {
             </div>
           </div>
 
-          <form
-            className="client-create-form"
-            onSubmit={handleCreateClient}
-          >
+          <form className="client-create-form" onSubmit={handleCreateClient}>
             <label className="field">
               <span>Nombre</span>
               <input
@@ -317,11 +288,7 @@ export function ClientesPage({ token }) {
               />
             </label>
 
-            <button
-              className="primary-button"
-              disabled={loading}
-              type="submit"
-            >
+            <button className="primary-button" disabled={loading} type="submit">
               {loading ? "Guardando..." : "Guardar cliente"}
             </button>
           </form>
@@ -332,9 +299,7 @@ export function ClientesPage({ token }) {
         <aside className="client-list-card">
           <div className="client-search">
             <input
-              onChange={(event) =>
-                setClientSearch(event.target.value)
-              }
+              onChange={(event) => setClientSearch(event.target.value)}
               placeholder="Buscar cliente"
               value={clientSearch}
             />
@@ -342,16 +307,12 @@ export function ClientesPage({ token }) {
 
           <div className="client-list">
             {clients.length === 0 ? (
-              <p className="empty-state">
-                No hay clientes para mostrar.
-              </p>
+              <p className="empty-state">No hay clientes para mostrar.</p>
             ) : (
               clients.map((client) => (
                 <button
                   className={`client-list-item ${
-                    selectedClient?.id === client.id
-                      ? "client-list-item--selected"
-                      : ""
+                    selectedClient?.id === client.id ? "client-list-item--selected" : ""
                   }`}
                   key={client.id}
                   onClick={() => selectClient(client)}
@@ -359,9 +320,7 @@ export function ClientesPage({ token }) {
                 >
                   <span>
                     <strong>{client.nombre}</strong>
-                    <small>
-                      {client.telefono || "Sin teléfono"}
-                    </small>
+                    <small>{client.telefono || "Sin teléfono"}</small>
                   </span>
 
                   <b>{client.precios.length}</b>
@@ -374,12 +333,16 @@ export function ClientesPage({ token }) {
         <section className="client-detail-card">
           {!selectedClient ? (
             <div className="client-detail-empty">
-              <span aria-hidden="true">👥</span>
+              <span aria-hidden="true">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="9" cy="8" r="3.2" />
+                  <path d="M2.5 19.5c0-3.3 2.9-5.8 6.5-5.8s6.5 2.5 6.5 5.8" />
+                  <path d="M16.5 5.2a3.2 3.2 0 0 1 0 6.2" />
+                  <path d="M18.5 14.3c2.3.6 4 2.6 4 5.2" />
+                </svg>
+              </span>
               <h2>Selecciona un cliente</h2>
-              <p>
-                Después podrás agregar los productos con precio
-                especial.
-              </p>
+              <p>Después podrás agregar los productos con precio especial.</p>
             </div>
           ) : (
             <>
@@ -389,16 +352,11 @@ export function ClientesPage({ token }) {
                   <h2>{selectedClient.nombre}</h2>
                   <p>
                     {selectedClient.telefono || "Sin teléfono"}
-
-                    {selectedClient.notas
-                      ? ` · ${selectedClient.notas}`
-                      : ""}
+                    {selectedClient.notas ? ` · ${selectedClient.notas}` : ""}
                   </p>
                 </div>
 
-                <span>
-                  {selectedClient.precios.length} precios
-                </span>
+                <span>{selectedClient.precios.length} precios</span>
               </header>
 
               <section className="special-price-form-card">
@@ -406,9 +364,7 @@ export function ClientesPage({ token }) {
 
                 <div className="special-product-search">
                   <input
-                    onChange={(event) =>
-                      setProductSearch(event.target.value)
-                    }
+                    onChange={(event) => setProductSearch(event.target.value)}
                     placeholder="Busca por nombre, SKU o código"
                     value={productSearch}
                   />
@@ -423,24 +379,15 @@ export function ClientesPage({ token }) {
                         productResults.map((product) => (
                           <button
                             key={product.presentacionId}
-                            onClick={() =>
-                              selectProduct(product)
-                            }
+                            onClick={() => selectProduct(product)}
                             type="button"
                           >
                             <span>
                               <strong>{product.nombre}</strong>
-                              <small>
-                                {product.presentacion}
-                              </small>
+                              <small>{product.presentacion}</small>
                             </span>
 
-                            <b>
-                              L{" "}
-                              {formatMoney(
-                                product.precioNormal,
-                              )}
-                            </b>
+                            <b>L {formatMoney(product.precioNormal)}</b>
                           </button>
                         ))
                       )}
@@ -449,18 +396,13 @@ export function ClientesPage({ token }) {
                 </div>
 
                 {selectedProduct ? (
-                  <form
-                    className="selected-special-product"
-                    onSubmit={handleSetPrice}
-                  >
+                  <form className="selected-special-product" onSubmit={handleSetPrice}>
                     <div>
                       <span>Producto seleccionado</span>
                       <strong>{selectedProduct.nombre}</strong>
                       <small>
                         {selectedProduct.presentacion} · Normal L{" "}
-                        {formatMoney(
-                          selectedProduct.precioNormal,
-                        )}
+                        {formatMoney(selectedProduct.precioNormal)}
                       </small>
                     </div>
 
@@ -468,12 +410,7 @@ export function ClientesPage({ token }) {
                       <span>Precio especial</span>
                       <input
                         autoComplete="off"
-                        onChange={(event) =>
-                          updateMoneyValue(
-                            setSpecialPrice,
-                            event.target.value,
-                          )
-                        }
+                        onChange={(event) => updateMoneyValue(setSpecialPrice, event.target.value)}
                         placeholder="Escribe el precio"
                         required
                         type="text"
@@ -481,11 +418,7 @@ export function ClientesPage({ token }) {
                       />
                     </label>
 
-                    <button
-                      className="primary-button"
-                      disabled={loading}
-                      type="submit"
-                    >
+                    <button className="primary-button" disabled={loading} type="submit">
                       Guardar precio
                     </button>
                   </form>
@@ -498,10 +431,7 @@ export function ClientesPage({ token }) {
                 </div>
 
                 {selectedClient.precios.length === 0 ? (
-                  <p className="empty-state">
-                    Este cliente todavía no tiene precios
-                    especiales.
-                  </p>
+                  <p className="empty-state">Este cliente todavía no tiene precios especiales.</p>
                 ) : (
                   <div className="special-price-table-wrapper">
                     <table className="special-price-table">
@@ -518,34 +448,19 @@ export function ClientesPage({ token }) {
                         {selectedClient.precios.map((price) => (
                           <tr key={price.id}>
                             <td>
-                              <strong>
-                                {price.producto.nombre}
-                              </strong>
-                              <small>
-                                {price.presentacion}
-                              </small>
+                              <strong>{price.producto.nombre}</strong>
+                              <small>{price.presentacion}</small>
                             </td>
 
-                            <td>
-                              L{" "}
-                              {formatMoney(
-                                price.precioNormal,
-                              )}
-                            </td>
+                            <td>L {formatMoney(price.precioNormal)}</td>
 
-                            <td className="special-price-value">
-                              L {formatMoney(price.precio)}
-                            </td>
+                            <td className="special-price-value">L {formatMoney(price.precio)}</td>
 
                             <td>
                               <button
                                 className="client-remove-price"
                                 disabled={loading}
-                                onClick={() =>
-                                  handleRemovePrice(
-                                    price.presentacionId,
-                                  )
-                                }
+                                onClick={() => handleRemovePrice(price.presentacionId)}
                                 type="button"
                               >
                                 Quitar

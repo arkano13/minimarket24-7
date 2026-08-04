@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import "./CancelacionesPage.css";
 
 import { cancelSale, listSales } from "../../services/api.js";
 
@@ -81,9 +82,7 @@ export function CancelacionesPage({ token }) {
     }
 
     const confirmado = window.confirm(
-      `¿Cancelar la venta #${selectedSale.id} por L ${money(
-        selectedSale.total,
-      )}? Esto devuelve el stock vendido al inventario.`,
+      `¿Cancelar la venta #${selectedSale.id} por L ${money(selectedSale.total)}? Esto devuelve el stock vendido al inventario.`,
     );
 
     if (!confirmado) {
@@ -146,8 +145,7 @@ export function CancelacionesPage({ token }) {
                     <strong>Venta #{sale.id}</strong>
 
                     <small>
-                      {sale.cliente?.nombre ?? "Cliente general"} ·{" "}
-                      {sale.usuario?.nombre}
+                      {sale.cliente?.nombre ?? "Cliente general"} · {sale.usuario?.nombre}
                     </small>
                   </span>
 
@@ -156,9 +154,7 @@ export function CancelacionesPage({ token }) {
                     <small>{dateTime(sale.creadoEn)}</small>
 
                     {sale.estado === "CANCELADA" ? (
-                      <small className="returns-status-cancelada">
-                        Cancelada
-                      </small>
+                      <small className="returns-status-cancelada">Cancelada</small>
                     ) : null}
                   </span>
                 </button>
@@ -182,7 +178,12 @@ export function CancelacionesPage({ token }) {
 
           {!selectedSale ? (
             <div className="returns-detail-empty">
-              <span aria-hidden="true">↩️</span>
+              <span aria-hidden="true">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 10h10a5 5 0 0 1 5 5v0a5 5 0 0 1-5 5H9" />
+                  <path d="M8 5 3 10l5 5" />
+                </svg>
+              </span>
 
               <h2>Selecciona una venta</h2>
 
@@ -192,8 +193,7 @@ export function CancelacionesPage({ token }) {
             <div className="return-detail">
               <div className="return-detail__summary">
                 <span>
-                  Venta #{selectedSale.id} ·{" "}
-                  {dateTime(selectedSale.creadoEn)}
+                  Venta #{selectedSale.id} · {dateTime(selectedSale.creadoEn)}
                 </span>
 
                 <span>Registró: {selectedSale.usuario?.nombre}</span>
@@ -221,9 +221,7 @@ export function CancelacionesPage({ token }) {
               </div>
 
               {selectedSale.estado === "CANCELADA" ? (
-                <p className="returns-status-cancelada">
-                  Esta venta ya está cancelada.
-                </p>
+                <p className="returns-status-cancelada">Esta venta ya está cancelada.</p>
               ) : (
                 <button
                   className="primary-button"

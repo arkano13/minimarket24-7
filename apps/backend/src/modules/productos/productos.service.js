@@ -21,8 +21,8 @@ const TIPOS_VENTA = {
   },
   PESO: {
     unidadInventario: "GRAMO",
-    nombrePresentacion: "Kilogramo",
-    factorInventario: 1000,
+    nombrePresentacion: "Libra",
+    factorInventario: 454,
   },
   VOLUMEN: {
     unidadInventario: "MILILITRO",

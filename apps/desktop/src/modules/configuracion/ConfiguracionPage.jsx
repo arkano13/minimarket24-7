@@ -1,21 +1,64 @@
 import { useEffect, useState } from "react";
+import "./ConfiguracionPage.css";
 
-import {
-  getConfiguration,
-  updateConfiguration,
-} from "../../services/api.js";
+import { getConfiguration, updateConfiguration } from "../../services/api.js";
+
+function SettingsIcon({ name }) {
+  const common = {
+    width: 20,
+    height: 20,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    "aria-hidden": "true",
+  };
+
+  if (name === "NEGOCIO") {
+    return (
+      <svg {...common}>
+        <path d="M3 9.5 12 4l9 5.5" />
+        <path d="M5 10v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9" />
+        <path d="M9 20v-6h6v6" />
+      </svg>
+    );
+  }
+
+  if (name === "CAJA") {
+    return (
+      <svg {...common}>
+        <rect x="2" y="6" width="20" height="12" rx="2" />
+        <circle cx="12" cy="12" r="2.5" />
+      </svg>
+    );
+  }
+
+  if (name === "TURNOS") {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3.5 2" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg {...common}>
+      <path d="M4 4h12l4 4v12H4Z" />
+      <path d="M8 4v5h8V4" />
+    </svg>
+  );
+}
 
 function cleanMoneyInput(value) {
-  const cleaned = String(value)
-    .replace(",", ".")
-    .replace(/[^\d.]/g, "");
+  const cleaned = String(value).replace(",", ".").replace(/[^\d.]/g, "");
 
   const parts = cleaned.split(".");
 
   if (parts.length > 2) {
-    return `${parts[0]}.${parts
-      .slice(1)
-      .join("")}`;
+    return `${parts[0]}.${parts.slice(1).join("")}`;
   }
 
   if (parts[1]?.length > 2) {
@@ -54,19 +97,11 @@ export function ConfiguracionPage({ token }) {
 
       setForm({
         ...response.configuracion,
-        fondoInicial: String(
-          response.configuracion.fondoInicial,
-        ),
-        turnos: response.configuracion.turnos.map(
-          (shift) => ({
-            ...shift,
-          }),
-        ),
+        fondoInicial: String(response.configuracion.fondoInicial),
+        turnos: response.configuracion.turnos.map((shift) => ({ ...shift })),
       });
 
-      setLastUpdate(
-        response.configuracion.actualizadoEn,
-      );
+      setLastUpdate(response.configuracion.actualizadoEn);
     } catch (loadError) {
       setError(loadError.message);
     } finally {
@@ -79,47 +114,28 @@ export function ConfiguracionPage({ token }) {
   }, [token]);
 
   function updateField(field, value) {
-    setForm((current) => ({
-      ...current,
-      [field]: value,
-    }));
+    setForm((current) => ({ ...current, [field]: value }));
   }
 
   function updateShift(index, field, value) {
     setForm((current) => {
-      const shifts = current.turnos.map((shift) => ({
-        ...shift,
-      }));
+      const shifts = current.turnos.map((shift) => ({ ...shift }));
 
       shifts[index][field] = value;
 
-      /*
-       * Si cambia el inicio de un turno, también cambia
-       * el final del turno anterior.
-       */
       if (field === "horaInicio") {
-        const previousIndex =
-          (index - 1 + shifts.length) %
-          shifts.length;
+        const previousIndex = (index - 1 + shifts.length) % shifts.length;
 
         shifts[previousIndex].horaFin = value;
       }
 
-      /*
-       * Si cambia el final de un turno, también cambia
-       * el inicio del siguiente.
-       */
       if (field === "horaFin") {
-        const nextIndex =
-          (index + 1) % shifts.length;
+        const nextIndex = (index + 1) % shifts.length;
 
         shifts[nextIndex].horaInicio = value;
       }
 
-      return {
-        ...current,
-        turnos: shifts,
-      };
+      return { ...current, turnos: shifts };
     });
   }
 
@@ -131,39 +147,27 @@ export function ConfiguracionPage({ token }) {
     setSaving(true);
 
     try {
-      const response = await updateConfiguration(
-        token,
-        {
-          nombreNegocio: form.nombreNegocio,
-          direccion: form.direccion,
-          telefono: form.telefono,
-          simboloMoneda: form.simboloMoneda,
-          fondoInicial: form.fondoInicial,
-          mensajeReportes: form.mensajeReportes,
-          turnos: form.turnos.map((shift) => ({
-            id: shift.id,
-            horaInicio: shift.horaInicio,
-            horaFin: shift.horaFin,
-          })),
-        },
-      );
+      const response = await updateConfiguration(token, {
+        nombreNegocio: form.nombreNegocio,
+        direccion: form.direccion,
+        telefono: form.telefono,
+        simboloMoneda: form.simboloMoneda,
+        fondoInicial: form.fondoInicial,
+        mensajeReportes: form.mensajeReportes,
+        turnos: form.turnos.map((shift) => ({
+          id: shift.id,
+          horaInicio: shift.horaInicio,
+          horaFin: shift.horaFin,
+        })),
+      });
 
       setForm({
         ...response.configuracion,
-        fondoInicial: String(
-          response.configuracion.fondoInicial,
-        ),
-        turnos: response.configuracion.turnos.map(
-          (shift) => ({
-            ...shift,
-          }),
-        ),
+        fondoInicial: String(response.configuracion.fondoInicial),
+        turnos: response.configuracion.turnos.map((shift) => ({ ...shift })),
       });
 
-      setLastUpdate(
-        response.configuracion.actualizadoEn,
-      );
-
+      setLastUpdate(response.configuracion.actualizadoEn);
       setMessage(response.mensaje);
     } catch (saveError) {
       setError(saveError.message);
@@ -175,9 +179,7 @@ export function ConfiguracionPage({ token }) {
   if (loading) {
     return (
       <section className="settings-page">
-        <div className="settings-loading">
-          Cargando configuración…
-        </div>
+        <div className="settings-loading">Cargando configuración…</div>
       </section>
     );
   }
@@ -186,15 +188,10 @@ export function ConfiguracionPage({ token }) {
     return (
       <section className="settings-page">
         <div className="settings-alert settings-alert-error">
-          {error ||
-            "No fue posible cargar la configuración."}
+          {error || "No fue posible cargar la configuración."}
         </div>
 
-        <button
-          className="settings-primary-button"
-          onClick={loadConfiguration}
-          type="button"
-        >
+        <button className="settings-primary-button" onClick={loadConfiguration} type="button">
           Intentar nuevamente
         </button>
       </section>
@@ -205,16 +202,11 @@ export function ConfiguracionPage({ token }) {
     <section className="settings-page">
       <header className="settings-header">
         <div>
-          <span className="settings-eyebrow">
-            AJUSTES GENERALES
-          </span>
+          <span className="settings-eyebrow">Ajustes generales</span>
 
           <h1>Configuración</h1>
 
-          <p>
-            Personaliza los datos y el funcionamiento del
-            minisúper.
-          </p>
+          <p>Personaliza los datos y el funcionamiento del minisúper.</p>
         </div>
 
         <div className="settings-update">
@@ -223,35 +215,20 @@ export function ConfiguracionPage({ token }) {
         </div>
       </header>
 
-      {error && (
-        <div className="settings-alert settings-alert-error">
-          {error}
-        </div>
-      )}
+      {error && <div className="settings-alert settings-alert-error">{error}</div>}
+      {message && <div className="settings-alert settings-alert-success">{message}</div>}
 
-      {message && (
-        <div className="settings-alert settings-alert-success">
-          {message}
-        </div>
-      )}
-
-      <form
-        className="settings-form"
-        onSubmit={saveConfiguration}
-      >
+      <form className="settings-form" onSubmit={saveConfiguration}>
         <section className="settings-card">
           <div className="settings-card-heading">
             <span className="settings-card-icon">
-              🏪
+              <SettingsIcon name="NEGOCIO" />
             </span>
 
             <div>
               <h2>Datos del negocio</h2>
 
-              <p>
-                Esta información aparecerá en reportes y
-                documentos internos.
-              </p>
+              <p>Esta información aparecerá en reportes y documentos internos.</p>
             </div>
           </div>
 
@@ -261,12 +238,7 @@ export function ConfiguracionPage({ token }) {
 
               <input
                 maxLength={120}
-                onChange={(event) =>
-                  updateField(
-                    "nombreNegocio",
-                    event.target.value,
-                  )
-                }
+                onChange={(event) => updateField("nombreNegocio", event.target.value)}
                 placeholder="Nombre del minisúper"
                 required
                 type="text"
@@ -279,12 +251,7 @@ export function ConfiguracionPage({ token }) {
 
               <input
                 maxLength={30}
-                onChange={(event) =>
-                  updateField(
-                    "telefono",
-                    event.target.value,
-                  )
-                }
+                onChange={(event) => updateField("telefono", event.target.value)}
                 placeholder="Ejemplo: 9999-9999"
                 type="text"
                 value={form.telefono}
@@ -296,12 +263,7 @@ export function ConfiguracionPage({ token }) {
 
               <input
                 maxLength={250}
-                onChange={(event) =>
-                  updateField(
-                    "direccion",
-                    event.target.value,
-                  )
-                }
+                onChange={(event) => updateField("direccion", event.target.value)}
                 placeholder="Dirección del negocio"
                 type="text"
                 value={form.direccion}
@@ -309,18 +271,11 @@ export function ConfiguracionPage({ token }) {
             </label>
 
             <label className="settings-field settings-field-wide">
-              <span>
-                Mensaje para el final de los reportes
-              </span>
+              <span>Mensaje para el final de los reportes</span>
 
               <textarea
                 maxLength={300}
-                onChange={(event) =>
-                  updateField(
-                    "mensajeReportes",
-                    event.target.value,
-                  )
-                }
+                onChange={(event) => updateField("mensajeReportes", event.target.value)}
                 placeholder="Ejemplo: Reporte administrativo de uso interno."
                 rows={3}
                 value={form.mensajeReportes}
@@ -332,16 +287,13 @@ export function ConfiguracionPage({ token }) {
         <section className="settings-card">
           <div className="settings-card-heading">
             <span className="settings-card-icon">
-              💵
+              <SettingsIcon name="CAJA" />
             </span>
 
             <div>
               <h2>Caja y moneda</h2>
 
-              <p>
-                Valores que utilizará el sistema de forma
-                predeterminada.
-              </p>
+              <p>Valores que utilizará el sistema de forma predeterminada.</p>
             </div>
           </div>
 
@@ -355,14 +307,7 @@ export function ConfiguracionPage({ token }) {
                 <input
                   autoComplete="off"
                   inputMode="decimal"
-                  onChange={(event) =>
-                    updateField(
-                      "fondoInicial",
-                      cleanMoneyInput(
-                        event.target.value,
-                      ),
-                    )
-                  }
+                  onChange={(event) => updateField("fondoInicial", cleanMoneyInput(event.target.value))}
                   placeholder="500.00"
                   required
                   type="text"
@@ -370,9 +315,7 @@ export function ConfiguracionPage({ token }) {
                 />
               </div>
 
-              <small>
-                Será el monto sugerido al abrir la caja.
-              </small>
+              <small>Será el monto sugerido al abrir la caja.</small>
             </label>
 
             <label className="settings-field">
@@ -380,21 +323,14 @@ export function ConfiguracionPage({ token }) {
 
               <input
                 maxLength={10}
-                onChange={(event) =>
-                  updateField(
-                    "simboloMoneda",
-                    event.target.value,
-                  )
-                }
+                onChange={(event) => updateField("simboloMoneda", event.target.value)}
                 placeholder="L"
                 required
                 type="text"
                 value={form.simboloMoneda}
               />
 
-              <small>
-                Para Honduras normalmente se utiliza L.
-              </small>
+              <small>Para Honduras normalmente se utiliza L.</small>
             </label>
           </div>
         </section>
@@ -402,66 +338,44 @@ export function ConfiguracionPage({ token }) {
         <section className="settings-card">
           <div className="settings-card-heading">
             <span className="settings-card-icon">
-              🕐
+              <SettingsIcon name="TURNOS" />
             </span>
 
             <div>
               <h2>Horarios de precios</h2>
 
-              <p>
-                Define cuándo comienza y termina cada turno
-                de precios.
-              </p>
+              <p>Define cuándo comienza y termina cada turno de precios.</p>
             </div>
           </div>
 
           <div className="settings-shift-notice">
-            Los cambios se aplicarán a los productos que
-            utilizan precios por horario. Los precios
+            Los cambios se aplicarán a los productos que utilizan precios por horario. Los precios
             asignados no se borrarán.
           </div>
 
           <div className="settings-shifts">
             {form.turnos.map((shift, index) => (
-              <article
-                className="settings-shift-card"
-                key={shift.id}
-              >
-                <div className="settings-shift-number">
-                  {index + 1}
-                </div>
+              <article className="settings-shift-card" key={shift.id}>
+                <div className="settings-shift-number">{index + 1}</div>
 
                 <div className="settings-shift-title">
                   <strong>{shift.nombre}</strong>
 
-                  <small>
-                    {index === 0
-                      ? "Horario del precio normal"
-                      : "Horario de precio especial"}
-                  </small>
+                  <small>{index === 0 ? "Horario del precio normal" : "Horario de precio especial"}</small>
                 </div>
 
                 <label className="settings-time-field">
                   <span>Comienza</span>
 
                   <input
-                    onChange={(event) =>
-                      updateShift(
-                        index,
-                        "horaInicio",
-                        event.target.value,
-                      )
-                    }
+                    onChange={(event) => updateShift(index, "horaInicio", event.target.value)}
                     required
                     type="time"
                     value={shift.horaInicio}
                   />
                 </label>
 
-                <span
-                  className="settings-time-arrow"
-                  aria-hidden="true"
-                >
+                <span className="settings-time-arrow" aria-hidden="true">
                   →
                 </span>
 
@@ -469,13 +383,7 @@ export function ConfiguracionPage({ token }) {
                   <span>Termina</span>
 
                   <input
-                    onChange={(event) =>
-                      updateShift(
-                        index,
-                        "horaFin",
-                        event.target.value,
-                      )
-                    }
+                    onChange={(event) => updateShift(index, "horaFin", event.target.value)}
                     required
                     type="time"
                     value={shift.horaFin}
@@ -489,16 +397,13 @@ export function ConfiguracionPage({ token }) {
         <section className="settings-card settings-system-card">
           <div className="settings-card-heading">
             <span className="settings-card-icon">
-              💾
+              <SettingsIcon name="SISTEMA" />
             </span>
 
             <div>
               <h2>Información del sistema</h2>
 
-              <p>
-                El programa trabaja con la base de datos
-                instalada en esta computadora.
-              </p>
+              <p>El programa trabaja con la base de datos instalada en esta computadora.</p>
             </div>
           </div>
 
@@ -507,10 +412,7 @@ export function ConfiguracionPage({ token }) {
 
             <div>
               <strong>PostgreSQL local</strong>
-              <small>
-                Los datos están disponibles sin depender de
-                Internet.
-              </small>
+              <small>Los datos están disponibles sin depender de Internet.</small>
             </div>
           </div>
         </section>
@@ -518,19 +420,11 @@ export function ConfiguracionPage({ token }) {
         <footer className="settings-actions">
           <div>
             <strong>¿Terminaste los cambios?</strong>
-            <span>
-              Revisa la información antes de guardarla.
-            </span>
+            <span>Revisa la información antes de guardarla.</span>
           </div>
 
-          <button
-            className="settings-primary-button"
-            disabled={saving}
-            type="submit"
-          >
-            {saving
-              ? "Guardando…"
-              : "Guardar configuración"}
+          <button className="settings-primary-button" disabled={saving} type="submit">
+            {saving ? "Guardando…" : "Guardar configuración"}
           </button>
         </footer>
       </form>

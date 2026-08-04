@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import "./BitacoraPage.css";
 import { listBitacora, listUsers } from "../../services/api.js";
 
 const ORIGEN_LABELS = {
@@ -87,6 +88,7 @@ export function BitacoraPage({ token }) {
     <main className="bitacora-page">
       <header className="bitacora-header">
         <div>
+          <p className="eyebrow">Historial</p>
           <h1>Bitácora</h1>
           <p>Historial de acciones realizadas en el sistema.</p>
         </div>
@@ -95,28 +97,17 @@ export function BitacoraPage({ token }) {
       <section className="bitacora-filters">
         <label className="field">
           <span>Desde</span>
-          <input
-            type="date"
-            value={desde}
-            onChange={(event) => setDesde(event.target.value)}
-          />
+          <input type="date" value={desde} onChange={(event) => setDesde(event.target.value)} />
         </label>
 
         <label className="field">
           <span>Hasta</span>
-          <input
-            type="date"
-            value={hasta}
-            onChange={(event) => setHasta(event.target.value)}
-          />
+          <input type="date" value={hasta} onChange={(event) => setHasta(event.target.value)} />
         </label>
 
         <label className="field">
           <span>Usuario</span>
-          <select
-            value={usuarioId}
-            onChange={(event) => setUsuarioId(event.target.value)}
-          >
+          <select value={usuarioId} onChange={(event) => setUsuarioId(event.target.value)}>
             <option value="">Todos</option>
             {usuarios.map((user) => (
               <option key={user.id} value={user.id}>
@@ -128,10 +119,7 @@ export function BitacoraPage({ token }) {
 
         <label className="field">
           <span>Origen</span>
-          <select
-            value={origen}
-            onChange={(event) => setOrigen(event.target.value)}
-          >
+          <select value={origen} onChange={(event) => setOrigen(event.target.value)}>
             <option value="">Todos</option>
             <option value="USUARIO">Usuarios y sistema</option>
             <option value="INVENTARIO">Inventario</option>

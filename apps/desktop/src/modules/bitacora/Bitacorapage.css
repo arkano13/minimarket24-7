@@ -1,0 +1,156 @@
+/* =========================================================
+   BITÁCORA — filtros + tabla de auditoría.
+   Misma identidad de la app.
+   ========================================================= */
+
+.bitacora-page {
+  width: min(100% - 40px, 1200px);
+  margin: 0 auto;
+  padding: 28px 0 60px;
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.bitacora-header {
+  margin-bottom: 18px;
+}
+
+.bitacora-header h1 {
+  margin: 4px 0 8px;
+  color: var(--ink);
+  font-size: clamp(1.4rem, 3vw, 1.9rem);
+  font-weight: 500;
+}
+
+.bitacora-header p:last-child {
+  margin: 0;
+  color: var(--muted);
+  max-width: 460px;
+}
+
+.bitacora-filters {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  margin-bottom: 18px;
+  background: var(--surface);
+}
+
+.bitacora-filters .field {
+  min-width: 160px;
+}
+
+.bitacora-filters select {
+  min-height: 46px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 12px;
+  font-size: 0.92rem;
+  background: var(--surface);
+}
+
+.bitacora-filters select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+  outline: none;
+}
+
+.bitacora-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.bitacora-table-wrapper .empty-state {
+  padding: 44px 20px;
+}
+
+.bitacora-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 1rem;
+}
+
+.bitacora-table thead th {
+  border-bottom: 1px solid var(--border);
+  padding: 13px 14px;
+  color: #fff;
+  background: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.bitacora-table tbody tr {
+  border-bottom: 1px solid var(--border);
+}
+
+.bitacora-table tbody tr:hover {
+  background: var(--bg);
+}
+
+.bitacora-table td {
+  padding: 12px 14px;
+  color: var(--ink);
+  vertical-align: top;
+}
+
+.bitacora-badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.74rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.bitacora-badge--usuario {
+  color: var(--accent-hover);
+  background: var(--accent-tint);
+}
+
+.bitacora-badge--inventario {
+  color: var(--warning);
+  background: var(--warning-tint);
+}
+
+.bitacora-badge--caja {
+  color: var(--success-ink);
+  background: var(--success-tint);
+}
+
+.bitacora-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.bitacora-pagination span {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+@media (max-width: 700px) {
+  .bitacora-page {
+    width: min(100% - 28px, 1200px);
+  }
+
+  .bitacora-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .bitacora-filters .field {
+    min-width: 0;
+  }
+}

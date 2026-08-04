@@ -1,0 +1,367 @@
+/* =========================================================
+   APP SHELL — pantalla de login (estilo "recibo") y
+   estructura general (sidebar + layout)
+   ========================================================= */
+
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 40px 20px;
+  background-color: var(--bg);
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.login-ticket-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+}
+
+.login-sticker {
+  position: absolute;
+  top: -16px;
+  right: -8px;
+  z-index: 1;
+  transform: rotate(8deg);
+  border-radius: 4px;
+  padding: 8px 13px;
+  color: #3a2b04;
+  background: var(--gold);
+  box-shadow: 0 6px 14px rgba(11, 31, 23, 0.2);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.login-ticket {
+  background: var(--surface);
+  box-shadow: var(--shadow-sm), var(--shadow-md);
+  clip-path: polygon(
+    0 0, 100% 0, 100% calc(100% - 9px),
+    96% 100%, 92% calc(100% - 9px), 88% 100%, 84% calc(100% - 9px),
+    80% 100%, 76% calc(100% - 9px), 72% 100%, 68% calc(100% - 9px),
+    64% 100%, 60% calc(100% - 9px), 56% 100%, 52% calc(100% - 9px),
+    48% 100%, 44% calc(100% - 9px), 40% 100%, 36% calc(100% - 9px),
+    32% 100%, 28% calc(100% - 9px), 24% 100%, 20% calc(100% - 9px),
+    16% 100%, 12% calc(100% - 9px), 8% 100%, 4% calc(100% - 9px), 0 100%
+  );
+}
+
+.login-ticket__brand {
+  padding: 30px 32px 24px;
+  color: #fff;
+  background: var(--ink);
+  text-align: center;
+}
+
+.login-barcode {
+  display: block;
+  margin: 0 auto 14px;
+  fill: var(--ink-soft);
+}
+
+.login-ticket__brand h1 {
+  color: #fff;
+  font-size: 1.5rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.login-ticket__brand p {
+  margin: 4px 0 0;
+  color: #a3b8ab;
+  font-size: 0.8rem;
+}
+
+.login-ticket__intro {
+  border-bottom: 1px dashed var(--border);
+  padding: 22px 32px 18px;
+}
+
+.login-ticket__intro-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.login-ticket__intro-row .eyebrow {
+  margin-bottom: 0;
+}
+
+.login-ticket__number {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.login-ticket__intro h2 {
+  margin-bottom: 4px;
+  font-size: 1.25rem;
+  font-weight: 500;
+}
+
+.login-card__description {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.login-ticket__form {
+  display: grid;
+  gap: 15px;
+  padding: 20px 32px 4px;
+}
+
+.login-ticket__footer {
+  padding: 4px 32px 22px;
+  text-align: center;
+}
+
+.local-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.local-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* --- Layout general de la app (sidebar + contenido) --- */
+
+.desktop-layout {
+  display: grid;
+  grid-template-columns: 256px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.sidebar {
+  display: flex;
+  position: sticky;
+  top: 0;
+  flex-direction: column;
+  height: 100vh;
+  padding: 20px 14px 14px;
+  color: #e7e2da;
+  background: var(--ink);
+}
+
+.sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0 8px 20px;
+}
+
+.sidebar__logo {
+  display: grid;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-sm);
+  place-items: center;
+  color: #fff;
+  background: var(--accent);
+  font-size: 1.15rem;
+  font-weight: 500;
+}
+
+.sidebar__brand > div:last-child,
+.sidebar__user > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.sidebar__brand strong {
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.sidebar__brand span,
+.sidebar__user small {
+  color: #a8a29e;
+  font-size: 0.76rem;
+  font-weight: 500;
+}
+
+.sidebar__nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 2px;
+}
+
+.sidebar__section-label {
+  margin: 18px 10px 8px;
+  color: #78716c;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.sidebar__nav > div:first-child .sidebar__section-label {
+  margin-top: 0;
+}
+
+.sidebar__item {
+  display: flex;
+  position: relative;
+  align-items: center;
+  width: 100%;
+  min-height: 52px;
+  gap: 12px;
+  margin-bottom: 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  color: #a8a29e;
+  background: transparent;
+  text-align: left;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.sidebar__item:hover:not(:disabled) {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.sidebar__item--active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sidebar__item--active::before {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: -14px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+  content: "";
+}
+
+.sidebar__item:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.sidebar__item-icon {
+  display: grid;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  font-size: 1.1rem;
+}
+
+.sidebar__item-text {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.sidebar__item-text strong {
+  overflow: hidden;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar__item-text small {
+  color: #a8a29e;
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.sidebar__footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 16px 6px 0;
+}
+
+.sidebar__user {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 12px;
+}
+
+.sidebar__avatar {
+  display: grid;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  place-items: center;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  font-weight: 500;
+}
+
+.sidebar__user strong {
+  overflow: hidden;
+  color: #fff;
+  font-size: 0.86rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar__logout {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  color: #fca5a5;
+  background: transparent;
+  font-weight: 500;
+}
+
+.sidebar__logout:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.desktop-content {
+  min-width: 0;
+  height: 100vh;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+.module-placeholder {
+  display: grid;
+  min-height: 100vh;
+  padding: 60px;
+  place-content: center;
+  text-align: center;
+}
+
+.module-placeholder h1 {
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+
+.module-placeholder p:last-child {
+  color: var(--muted);
+}

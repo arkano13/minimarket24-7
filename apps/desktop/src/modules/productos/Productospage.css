@@ -1,0 +1,354 @@
+/* =========================================================
+   PRODUCTOS — catálogo y formulario de alta/edición.
+   Misma identidad: verde bosque + dorado, papel punteado.
+   ========================================================= */
+
+.workspace-page {
+  width: min(100% - 40px, 1200px);
+  margin: 0 auto;
+  padding: 28px 0 60px;
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.workspace-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  background: transparent;
+  font-size: 0.86rem;
+  font-weight: 500;
+}
+
+.workspace-header h1 {
+  margin: 4px 0 8px;
+  color: var(--ink);
+  font-size: clamp(1.4rem, 3vw, 1.9rem);
+  font-weight: 500;
+}
+
+.workspace-header > div > p:last-child {
+  margin: 0;
+  color: var(--muted);
+  max-width: 460px;
+}
+
+.workspace-header__action {
+  flex: 0 0 auto;
+}
+
+.page-message {
+  margin: 0 0 16px;
+}
+
+.form-success {
+  border: 1px solid #b7dba1;
+  border-radius: var(--radius-sm);
+  padding: 11px 13px;
+  color: var(--success-ink);
+  background: var(--success-tint);
+  font-size: 0.88rem;
+}
+
+/* --- Tarjeta de formulario --- */
+
+.product-form-card,
+.product-list-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  margin-bottom: 18px;
+}
+
+.product-form-card {
+  padding: 24px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  border-bottom: 1px dashed var(--border);
+  padding-bottom: 16px;
+}
+
+.section-heading h2 {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+.section-heading > p:last-child {
+  margin: 0;
+  max-width: 260px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  text-align: right;
+}
+
+.product-form {
+  display: grid;
+  gap: 16px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.category-field {
+  display: grid;
+  gap: 8px;
+}
+
+.text-button {
+  justify-self: start;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  background: transparent;
+  font-size: 0.84rem;
+  font-weight: 500;
+}
+
+.text-button:hover {
+  color: var(--accent-hover);
+}
+
+.inline-form {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  background: var(--bg);
+}
+
+.inline-form .field {
+  flex: 1;
+}
+
+/* --- Selector de modo de precio (tarjetas tipo radio) --- */
+
+.price-mode {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.price-mode legend {
+  padding: 0;
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+.price-mode__options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.radio-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.radio-option:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.radio-option input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+
+.radio-option span {
+  display: grid;
+  gap: 3px;
+}
+
+.radio-option strong {
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.radio-option small {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.price-mode__shift-fields {
+  padding-top: 2px;
+}
+
+/* --- Detalles opcionales (details/summary) --- */
+
+.optional-fields {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+
+.optional-fields summary {
+  color: var(--accent);
+  font-size: 0.86rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.optional-fields .form-row {
+  margin-top: 14px;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px dashed var(--border);
+  padding-top: 16px;
+}
+
+/* --- Lista / tabla de productos --- */
+
+.product-list-card {
+  padding: 20px 20px 8px;
+}
+
+.search-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.search-bar input {
+  flex: 1;
+  min-height: 46px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 14px;
+  font-size: 0.95rem;
+}
+
+.search-bar input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+  outline: none;
+}
+
+.product-table-wrapper {
+  overflow-x: auto;
+  border-top: 1px solid var(--border);
+}
+
+.product-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.product-table thead th {
+  position: sticky;
+  top: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 12px 14px;
+  color: #fff;
+  background: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.product-table tbody tr {
+  border-bottom: 1px solid var(--border);
+}
+
+.product-table tbody tr:hover {
+  background: var(--bg);
+}
+
+.product-table td {
+  padding: 12px 14px;
+  color: var(--ink);
+  vertical-align: middle;
+}
+
+.product-table td strong {
+  display: block;
+  font-weight: 500;
+}
+
+.product-table td small {
+  color: var(--muted);
+}
+
+.price-cell {
+  display: grid;
+  gap: 2px;
+}
+
+.price-cell strong {
+  font-family: var(--font-mono);
+  color: var(--accent);
+}
+
+.price-cell small {
+  color: var(--muted);
+}
+
+.product-edit-button {
+  padding: 7px 12px;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 900px) {
+  .workspace-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .form-row,
+  .price-mode__options {
+    grid-template-columns: 1fr;
+  }
+
+  .section-heading {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .section-heading > p:last-child {
+    max-width: none;
+    text-align: left;
+  }
+}

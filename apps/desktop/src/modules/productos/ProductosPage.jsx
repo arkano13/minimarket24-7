@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import "./ProductosPage.css";
 
 import {
   createCategory,
@@ -28,7 +29,7 @@ const TYPE_LABELS = {
   UNIDAD: "Unidad",
   PAQUETE: "Paquete",
   CAJA: "Caja",
-  PESO: "Peso (kilogramos)",
+  PESO: "Peso (libras)",
   VOLUMEN: "Volumen (litros)",
 };
 
@@ -38,52 +39,31 @@ function formatNumber(value) {
   }).format(value);
 }
 
-export function ProductosPage({
-  token,
-  onBack,
-}) {
+export function ProductosPage({ token, onBack }) {
   const [products, setProducts] = useState([]);
-  const [categories, setCategories] =
-    useState([]);
+  const [categories, setCategories] = useState([]);
   const [search, setSearch] = useState("");
   const [form, setForm] = useState(EMPTY_FORM);
-  const [showForm, setShowForm] =
-    useState(false);
-  const [
-    showCategoryForm,
-    setShowCategoryForm,
-  ] = useState(false);
-  const [categoryName, setCategoryName] =
-    useState("");
-  const [loading, setLoading] =
-    useState(true);
-  const [saving, setSaving] =
-    useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [categoryName, setCategoryName] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [
-    editingProductId,
-    setEditingProductId,
-  ] = useState(null);
+  const [editingProductId, setEditingProductId] = useState(null);
+  const [formSnapshot, setFormSnapshot] = useState(EMPTY_FORM);
 
   useEffect(() => {
     async function loadInitialData() {
       try {
-        const [
-          categoryResult,
-          productResult,
-        ] = await Promise.all([
+        const [categoryResult, productResult] = await Promise.all([
           listCategories(token),
           listProducts(token),
         ]);
 
-        setCategories(
-          categoryResult.categorias,
-        );
-
-        setProducts(
-          productResult.productos,
-        );
+        setCategories(categoryResult.categorias);
+        setProducts(productResult.productos);
       } catch (requestError) {
         setError(requestError.message);
       } finally {
@@ -97,10 +77,7 @@ export function ProductosPage({
   function updateField(event) {
     const { name, value } = event.target;
 
-    setForm((current) => ({
-      ...current,
-      [name]: value,
-    }));
+    setForm((current) => ({ ...current, [name]: value }));
   }
 
   async function handleSearch(event) {
@@ -108,10 +85,7 @@ export function ProductosPage({
     setError("");
 
     try {
-      const result = await listProducts(
-        token,
-        search,
-      );
+      const result = await listProducts(token, search);
 
       setProducts(result.productos);
     } catch (requestError) {
@@ -119,35 +93,23 @@ export function ProductosPage({
     }
   }
 
-  async function handleCreateCategory(
-    event,
-  ) {
+  async function handleCreateCategory(event) {
     event.preventDefault();
     setError("");
 
     try {
-      const result = await createCategory(
-        token,
-        categoryName,
-      );
+      const result = await createCategory(token, categoryName);
 
       setCategories((current) =>
         [
-          ...current.filter(
-            (item) =>
-              item.id !== result.categoria.id,
-          ),
+          ...current.filter((item) => item.id !== result.categoria.id),
           result.categoria,
-        ].sort((a, b) =>
-          a.nombre.localeCompare(b.nombre),
-        ),
+        ].sort((a, b) => a.nombre.localeCompare(b.nombre)),
       );
 
       setForm((current) => ({
         ...current,
-        categoriaId: String(
-          result.categoria.id,
-        ),
+        categoriaId: String(result.categoria.id),
       }));
 
       setCategoryName("");
@@ -157,9 +119,7 @@ export function ProductosPage({
     }
   }
 
-  async function handleCreateProduct(
-    event,
-  ) {
+  async function handleCreateProduct(event) {
     event.preventDefault();
     setError("");
     setSuccess("");
@@ -167,17 +127,12 @@ export function ProductosPage({
 
     try {
       if (editingProductId) {
-        await updateProduct(
-          token,
-          editingProductId,
-          form,
-        );
+        await updateProduct(token, editingProductId, form);
       } else {
         await createProduct(token, form);
       }
 
-      const result =
-        await listProducts(token);
+      const result = await listProducts(token);
 
       setProducts(result.productos);
       setForm(EMPTY_FORM);
@@ -197,6 +152,12 @@ export function ProductosPage({
   }
 
   function closeForm() {
+    const hasUnsavedChanges = JSON.stringify(form) !== JSON.stringify(formSnapshot);
+
+    if (hasUnsavedChanges && !window.confirm("Tienes cambios sin guardar. ¿Salir de todas formas?")) {
+      return;
+    }
+
     setForm(EMPTY_FORM);
     setShowForm(false);
     setShowCategoryForm(false);
@@ -206,64 +167,46 @@ export function ProductosPage({
   }
 
   function startEditing(product) {
-    const presentation =
-      product.presentacionPrincipal;
+    const presentation = product.presentacionPrincipal;
 
-    const shiftTwoPrice =
-      presentation?.preciosTurno?.find(
-        (shiftPrice) =>
-          shiftPrice.turno === 2,
-      );
+    const shiftTwoPrice = presentation?.preciosTurno?.find(
+      (shiftPrice) => shiftPrice.turno === 2,
+    );
 
-    const shiftThreePrice =
-      presentation?.preciosTurno?.find(
-        (shiftPrice) =>
-          shiftPrice.turno === 3,
-      );
+    const shiftThreePrice = presentation?.preciosTurno?.find(
+      (shiftPrice) => shiftPrice.turno === 3,
+    );
 
     setForm({
       nombre: product.nombre ?? "",
-
-      codigoBarra:
-        presentation?.codigoBarra ?? "",
-
-      categoriaId: product.categoria?.id
-        ? String(product.categoria.id)
-        : "",
-
-      tipoVenta:
-        presentation?.tipo ?? "UNIDAD",
-
+      codigoBarra: presentation?.codigoBarra ?? "",
+      categoriaId: product.categoria?.id ? String(product.categoria.id) : "",
+      tipoVenta: presentation?.tipo ?? "UNIDAD",
       costo: String(product.costo ?? ""),
-
-      precio: String(
-        presentation?.precio ?? "",
-      ),
-
-      cambiaPrecioTurno:
-        product.modoPrecio ===
-        "POR_HORARIO",
-
-      precioTurno2: shiftTwoPrice
-        ? String(shiftTwoPrice.precio)
-        : "",
-
-      precioTurno3: shiftThreePrice
-        ? String(shiftThreePrice.precio)
-        : "",
-
-      stockInicial: String(
-        product.stock ?? "",
-      ),
-
-      stockMinimo: String(
-        product.stockMinimo ?? "",
-      ),
-
+      precio: String(presentation?.precio ?? ""),
+      cambiaPrecioTurno: product.modoPrecio === "POR_HORARIO",
+      precioTurno2: shiftTwoPrice ? String(shiftTwoPrice.precio) : "",
+      precioTurno3: shiftThreePrice ? String(shiftThreePrice.precio) : "",
+      stockInicial: String(product.stock ?? ""),
+      stockMinimo: String(product.stockMinimo ?? ""),
       sku: product.sku ?? "",
+      descripcion: product.descripcion ?? "",
+    });
 
-      descripcion:
-        product.descripcion ?? "",
+    setFormSnapshot({
+      nombre: product.nombre ?? "",
+      codigoBarra: presentation?.codigoBarra ?? "",
+      categoriaId: product.categoria?.id ? String(product.categoria.id) : "",
+      tipoVenta: presentation?.tipo ?? "UNIDAD",
+      costo: String(product.costo ?? ""),
+      precio: String(presentation?.precio ?? ""),
+      cambiaPrecioTurno: product.modoPrecio === "POR_HORARIO",
+      precioTurno2: shiftTwoPrice ? String(shiftTwoPrice.precio) : "",
+      precioTurno3: shiftThreePrice ? String(shiftThreePrice.precio) : "",
+      stockInicial: String(product.stock ?? ""),
+      stockMinimo: String(product.stockMinimo ?? ""),
+      sku: product.sku ?? "",
+      descripcion: product.descripcion ?? "",
     });
 
     setEditingProductId(product.id);
@@ -272,15 +215,12 @@ export function ProductosPage({
     setError("");
     setSuccess("");
 
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   const stockLabel =
     form.tipoVenta === "PESO"
-      ? "Kilogramos"
+      ? "Libras"
       : form.tipoVenta === "VOLUMEN"
         ? "Litros"
         : "Cantidad";
@@ -290,25 +230,19 @@ export function ProductosPage({
       <header className="workspace-header">
         <div>
           {onBack ? (
-            <button
-              className="back-button"
-              onClick={onBack}
-              type="button"
-            >
-              ← Volver
+            <button className="back-button" onClick={onBack} type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 18 9 12l6-6" />
+              </svg>
+              Volver
             </button>
           ) : null}
 
-          <p className="eyebrow">
-            Catálogo
-          </p>
+          <p className="eyebrow">Catálogo</p>
 
           <h1>Productos</h1>
 
-          <p>
-            Registra y encuentra productos
-            sin navegar por varias pantallas.
-          </p>
+          <p>Registra y encuentra productos sin navegar por varias pantallas.</p>
         </div>
 
         <button
@@ -318,6 +252,7 @@ export function ProductosPage({
               closeForm();
             } else {
               setForm(EMPTY_FORM);
+              setFormSnapshot(EMPTY_FORM);
               setEditingProductId(null);
               setShowForm(true);
               setError("");
@@ -326,26 +261,18 @@ export function ProductosPage({
           }}
           type="button"
         >
-          {showForm
-            ? "Cerrar formulario"
-            : "+ Nuevo producto"}
+          {showForm ? "Cerrar formulario" : "+ Nuevo producto"}
         </button>
       </header>
 
       {error ? (
-        <p
-          className="form-error page-message"
-          role="alert"
-        >
+        <p className="form-error page-message" role="alert">
           {error}
         </p>
       ) : null}
 
       {success ? (
-        <p
-          className="form-success page-message"
-          role="status"
-        >
+        <p className="form-success page-message" role="status">
           {success}
         </p>
       ) : null}
@@ -355,16 +282,10 @@ export function ProductosPage({
           <div className="section-heading">
             <div>
               <p className="eyebrow">
-                {editingProductId
-                  ? "Editar registro"
-                  : "Nuevo registro"}
+                {editingProductId ? "Editar registro" : "Nuevo registro"}
               </p>
 
-              <h2>
-                {editingProductId
-                  ? "Editar producto"
-                  : "Agregar producto"}
-              </h2>
+              <h2>{editingProductId ? "Editar producto" : "Agregar producto"}</h2>
             </div>
 
             <p>
@@ -374,16 +295,9 @@ export function ProductosPage({
             </p>
           </div>
 
-          <form
-            className="product-form"
-            onSubmit={
-              handleCreateProduct
-            }
-          >
+          <form className="product-form" onSubmit={handleCreateProduct}>
             <label className="field">
-              <span>
-                Nombre del producto *
-              </span>
+              <span>Nombre del producto *</span>
 
               <input
                 autoFocus
@@ -396,9 +310,7 @@ export function ProductosPage({
             </label>
 
             <label className="field">
-              <span>
-                Código de barras
-              </span>
+              <span>Código de barras</span>
 
               <input
                 name="codigoBarra"
@@ -412,36 +324,20 @@ export function ProductosPage({
               <label className="field">
                 <span>Categoría</span>
 
-                <select
-                  name="categoriaId"
-                  onChange={updateField}
-                  value={form.categoriaId}
-                >
-                  <option value="">
-                    Sin categoría
-                  </option>
+                <select name="categoriaId" onChange={updateField} value={form.categoriaId}>
+                  <option value="">Sin categoría</option>
 
-                  {categories.map(
-                    (category) => (
-                      <option
-                        key={category.id}
-                        value={category.id}
-                      >
-                        {category.nombre}
-                      </option>
-                    ),
-                  )}
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.nombre}
+                    </option>
+                  ))}
                 </select>
               </label>
 
               <button
                 className="text-button"
-                onClick={() =>
-                  setShowCategoryForm(
-                    (current) =>
-                      !current,
-                  )
-                }
+                onClick={() => setShowCategoryForm((current) => !current)}
                 type="button"
               >
                 + Nueva categoría
@@ -451,16 +347,10 @@ export function ProductosPage({
             {showCategoryForm ? (
               <div className="inline-form">
                 <label className="field">
-                  <span>
-                    Nombre de la categoría
-                  </span>
+                  <span>Nombre de la categoría</span>
 
                   <input
-                    onChange={(event) =>
-                      setCategoryName(
-                        event.target.value,
-                      )
-                    }
+                    onChange={(event) => setCategoryName(event.target.value)}
                     placeholder="Ejemplo: Bebidas"
                     value={categoryName}
                   />
@@ -468,12 +358,8 @@ export function ProductosPage({
 
                 <button
                   className="secondary-button"
-                  disabled={
-                    !categoryName.trim()
-                  }
-                  onClick={
-                    handleCreateCategory
-                  }
+                  disabled={!categoryName.trim()}
+                  onClick={handleCreateCategory}
                   type="button"
                 >
                   Guardar categoría
@@ -482,38 +368,23 @@ export function ProductosPage({
             ) : null}
 
             <label className="field">
-              <span>
-                ¿Cómo se vende? *
-              </span>
+              <span>¿Cómo se vende? *</span>
 
               <select
-                disabled={Boolean(
-                  editingProductId,
-                )}
+                disabled={Boolean(editingProductId)}
                 name="tipoVenta"
                 onChange={updateField}
                 value={form.tipoVenta}
               >
-                {Object.entries(
-                  TYPE_LABELS,
-                ).map(
-                  ([value, label]) => (
-                    <option
-                      key={value}
-                      value={value}
-                    >
-                      {label}
-                    </option>
-                  ),
-                )}
+                {Object.entries(TYPE_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
               </select>
 
               {editingProductId ? (
-                <small>
-                  La forma de venta no se
-                  cambia después de registrar
-                  el producto.
-                </small>
+                <small>La forma de venta no se cambia después de registrar el producto.</small>
               ) : null}
             </label>
 
@@ -533,9 +404,7 @@ export function ProductosPage({
               </label>
 
               <label className="field">
-                <span>
-                  Precio de venta *
-                </span>
+                <span>Precio de venta *</span>
 
                 <input
                   min="0.01"
@@ -551,75 +420,45 @@ export function ProductosPage({
             </div>
 
             <fieldset className="price-mode">
-              <legend>
-                ¿El precio cambia según el
-                turno?
-              </legend>
+              <legend>¿El precio cambia según el turno?</legend>
 
               <div className="price-mode__options">
                 <label className="radio-option">
                   <input
-                    checked={
-                      !form.cambiaPrecioTurno
-                    }
+                    checked={!form.cambiaPrecioTurno}
                     name="modoPrecio"
                     onChange={() =>
-                      setForm(
-                        (current) => ({
-                          ...current,
-
-                          cambiaPrecioTurno:
-                            false,
-
-                          precioTurno2: "",
-
-                          precioTurno3: "",
-                        }),
-                      )
+                      setForm((current) => ({
+                        ...current,
+                        cambiaPrecioTurno: false,
+                        precioTurno2: "",
+                        precioTurno3: "",
+                      }))
                     }
                     type="radio"
                   />
 
                   <span>
-                    <strong>
-                      Mismo precio todo el día
-                    </strong>
+                    <strong>Mismo precio todo el día</strong>
 
-                    <small>
-                      Usará siempre el precio
-                      normal.
-                    </small>
+                    <small>Usará siempre el precio normal.</small>
                   </span>
                 </label>
 
                 <label className="radio-option">
                   <input
-                    checked={
-                      form.cambiaPrecioTurno
-                    }
+                    checked={form.cambiaPrecioTurno}
                     name="modoPrecio"
                     onChange={() =>
-                      setForm(
-                        (current) => ({
-                          ...current,
-
-                          cambiaPrecioTurno:
-                            true,
-                        }),
-                      )
+                      setForm((current) => ({ ...current, cambiaPrecioTurno: true }))
                     }
                     type="radio"
                   />
 
                   <span>
-                    <strong>
-                      Cambia según el turno
-                    </strong>
+                    <strong>Cambia según el turno</strong>
 
-                    <small>
-                      El precio normal se usa
-                      de 8 a. m. a 10 p. m.
-                    </small>
+                    <small>El precio normal se usa de 8 a. m. a 10 p. m.</small>
                   </span>
                 </label>
               </div>
@@ -627,10 +466,7 @@ export function ProductosPage({
               {form.cambiaPrecioTurno ? (
                 <div className="form-row price-mode__shift-fields">
                   <label className="field">
-                    <span>
-                      Precio turno 2 · 10
-                      p. m. a 2 a. m. *
-                    </span>
+                    <span>Precio turno 2 · 10 p. m. a 2 a. m. *</span>
 
                     <input
                       min="0.01"
@@ -640,17 +476,12 @@ export function ProductosPage({
                       required
                       step="0.01"
                       type="number"
-                      value={
-                        form.precioTurno2
-                      }
+                      value={form.precioTurno2}
                     />
                   </label>
 
                   <label className="field">
-                    <span>
-                      Precio turno 3 · 2
-                      a. m. a 8 a. m. *
-                    </span>
+                    <span>Precio turno 3 · 2 a. m. a 8 a. m. *</span>
 
                     <input
                       min="0.01"
@@ -660,9 +491,7 @@ export function ProductosPage({
                       required
                       step="0.01"
                       type="number"
-                      value={
-                        form.precioTurno3
-                      }
+                      value={form.precioTurno3}
                     />
                   </label>
                 </div>
@@ -672,9 +501,7 @@ export function ProductosPage({
             <div className="form-row">
               <label className="field">
                 <span>
-                  {editingProductId
-                    ? `${stockLabel} actuales`
-                    : `${stockLabel} disponibles`}
+                  {editingProductId ? `${stockLabel} actuales` : `${stockLabel} disponibles`}
                 </span>
 
                 <input
@@ -684,16 +511,12 @@ export function ProductosPage({
                   placeholder="0"
                   step="0.001"
                   type="number"
-                  value={
-                    form.stockInicial
-                  }
+                  value={form.stockInicial}
                 />
               </label>
 
               <label className="field">
-                <span>
-                  Avisar cuando queden
-                </span>
+                <span>Avisar cuando queden</span>
 
                 <input
                   min="0"
@@ -702,23 +525,17 @@ export function ProductosPage({
                   placeholder="0"
                   step="0.001"
                   type="number"
-                  value={
-                    form.stockMinimo
-                  }
+                  value={form.stockMinimo}
                 />
               </label>
             </div>
 
             <details className="optional-fields">
-              <summary>
-                Datos opcionales
-              </summary>
+              <summary>Datos opcionales</summary>
 
               <div className="form-row">
                 <label className="field">
-                  <span>
-                    Código interno
-                  </span>
+                  <span>Código interno</span>
 
                   <input
                     name="sku"
@@ -729,36 +546,24 @@ export function ProductosPage({
                 </label>
 
                 <label className="field">
-                  <span>
-                    Descripción
-                  </span>
+                  <span>Descripción</span>
 
                   <input
                     name="descripcion"
                     onChange={updateField}
                     placeholder="Información adicional"
-                    value={
-                      form.descripcion
-                    }
+                    value={form.descripcion}
                   />
                 </label>
               </div>
             </details>
 
             <div className="form-actions">
-              <button
-                className="secondary-button"
-                onClick={closeForm}
-                type="button"
-              >
+              <button className="secondary-button" onClick={closeForm} type="button">
                 Cancelar
               </button>
 
-              <button
-                className="primary-button"
-                disabled={saving}
-                type="submit"
-              >
+              <button className="primary-button" disabled={saving} type="submit">
                 {saving
                   ? "Guardando..."
                   : editingProductId
@@ -771,37 +576,23 @@ export function ProductosPage({
       ) : null}
 
       <section className="product-list-card">
-        <form
-          className="search-bar"
-          onSubmit={handleSearch}
-        >
+        <form className="search-bar" onSubmit={handleSearch}>
           <input
-            onChange={(event) =>
-              setSearch(
-                event.target.value,
-              )
-            }
+            onChange={(event) => setSearch(event.target.value)}
             placeholder="Buscar por nombre, código o SKU"
             value={search}
           />
 
-          <button
-            className="secondary-button"
-            type="submit"
-          >
+          <button className="secondary-button" type="submit">
             Buscar
           </button>
         </form>
 
         {loading ? (
-          <p className="empty-state">
-            Cargando productos...
-          </p>
+          <p className="empty-state">Cargando productos...</p>
         ) : products.length === 0 ? (
           <p className="empty-state">
-            No hay productos registrados.
-            Pulsa “Nuevo producto” para
-            comenzar.
+            No hay productos registrados. Pulsa "Nuevo producto" para comenzar.
           </p>
         ) : (
           <div className="product-table-wrapper">
@@ -818,80 +609,51 @@ export function ProductosPage({
               </thead>
 
               <tbody>
-                {products.map(
-                  (product) => (
-                    <tr key={product.id}>
-                      <td>
-                        <strong>
-                          {product.nombre}
-                        </strong>
+                {products.map((product) => (
+                  <tr key={product.id}>
+                    <td>
+                      <strong>{product.nombre}</strong>
 
-                        <small>
-                          {product.categoria
-                            ?.nombre ??
-                            "Sin categoría"}
-                        </small>
-                      </td>
+                      <small>{product.categoria?.nombre ?? "Sin categoría"}</small>
+                    </td>
 
-                      <td>
-                        {product
-                          .presentacionPrincipal
-                          ?.codigoBarra ??
-                          product.sku ??
-                          "—"}
-                      </td>
+                    <td>
+                      {product.presentacionPrincipal?.codigoBarra ?? product.sku ?? "—"}
+                    </td>
 
-                      <td>
-                        {product
-                          .presentacionPrincipal
-                          ?.nombre ?? "—"}
-                      </td>
+                    <td>{product.presentacionPrincipal?.nombre ?? "—"}</td>
 
-                      <td>
-                        {formatNumber(
-                          product.stock,
-                        )}
-                      </td>
+                    <td>{formatNumber(product.stock)}</td>
 
-                      <td>
-                        {product.presentacionPrincipal ? (
-                          <span className="price-cell">
-                            <strong>
-                              {Number(
-                                product
-                                  .presentacionPrincipal
-                                  .precio,
-                              ).toFixed(2)}
-                            </strong>
+                    <td>
+                      {product.presentacionPrincipal ? (
+                        <span className="price-cell">
+                          <strong>
+                            {Number(product.presentacionPrincipal.precio).toFixed(2)}
+                          </strong>
 
-                            <small>
-                              {product.modoPrecio ===
-                              "POR_HORARIO"
-                                ? "Por turno"
-                                : "Todo el día"}
-                            </small>
-                          </span>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
+                          <small>
+                            {product.modoPrecio === "POR_HORARIO"
+                              ? "Por turno"
+                              : "Todo el día"}
+                          </small>
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
 
-                      <td>
-                        <button
-                          className="secondary-button product-edit-button"
-                          onClick={() =>
-                            startEditing(
-                              product,
-                            )
-                          }
-                          type="button"
-                        >
-                          Editar
-                        </button>
-                      </td>
-                    </tr>
-                  ),
-                )}
+                    <td>
+                      <button
+                        className="secondary-button product-edit-button"
+                        onClick={() => startEditing(product)}
+                        type="button"
+                      >
+                        Editar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

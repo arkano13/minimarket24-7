@@ -811,6 +811,19 @@
   color: var(--danger);
 }
 
+.reports-sales-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px 0 4px;
+}
+
+.reports-sales-pagination span {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
 @media (max-width: 1100px) {
   .reports-kpi-grid,
   .reports-executive-highlights,

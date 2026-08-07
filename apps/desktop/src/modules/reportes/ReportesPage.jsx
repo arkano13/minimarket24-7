@@ -275,6 +275,20 @@ function OperationalView({
   setSaleSearch,
   setSelectedSaleId,
 }) {
+  const SALES_PER_PAGE = 15;
+  const [salesPage, setSalesPage] = useState(1);
+
+  useEffect(() => {
+    setSalesPage(1);
+  }, [filteredSales]);
+
+  const totalSalesPages = Math.max(1, Math.ceil(filteredSales.length / SALES_PER_PAGE));
+
+  const pagedSales = filteredSales.slice(
+    (salesPage - 1) * SALES_PER_PAGE,
+    salesPage * SALES_PER_PAGE,
+  );
+
   const totalUnits = report.productos.reduce((sum, product) => sum + Number(product.cantidad), 0);
 
   const largestSale =
@@ -471,7 +485,7 @@ function OperationalView({
           <p className="reports-empty">No hay ventas que coincidan con la búsqueda.</p>
         ) : (
           <div className="reports-sales-list">
-            {filteredSales.map((sale) => (
+            {pagedSales.map((sale) => (
               <article className="reports-sale-item" key={sale.id}>
                 <button
                   className="reports-sale-summary"
@@ -520,6 +534,32 @@ function OperationalView({
             ))}
           </div>
         )}
+
+        {totalSalesPages > 1 ? (
+          <div className="reports-sales-pagination">
+            <button
+              className="secondary-button"
+              disabled={salesPage <= 1}
+              onClick={() => setSalesPage((current) => current - 1)}
+              type="button"
+            >
+              Anterior
+            </button>
+
+            <span>
+              Página {salesPage} de {totalSalesPages} · {filteredSales.length} ventas
+            </span>
+
+            <button
+              className="secondary-button"
+              disabled={salesPage >= totalSalesPages}
+              onClick={() => setSalesPage((current) => current + 1)}
+              type="button"
+            >
+              Siguiente
+            </button>
+          </div>
+        ) : null}
       </section>
     </div>
   );

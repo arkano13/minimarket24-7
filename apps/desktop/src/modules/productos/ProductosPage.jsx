@@ -43,6 +43,9 @@ export function ProductosPage({ token, onBack }) {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [perPage, setPerPage] = useState(25);
   const [form, setForm] = useState(EMPTY_FORM);
   const [showForm, setShowForm] = useState(false);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
@@ -54,16 +57,26 @@ export function ProductosPage({ token, onBack }) {
   const [editingProductId, setEditingProductId] = useState(null);
   const [formSnapshot, setFormSnapshot] = useState(EMPTY_FORM);
 
+  const totalPages = Math.max(1, Math.ceil(totalProducts / perPage));
+
+  async function loadProducts(targetPage = 1) {
+    const result = await listProducts(token, search, targetPage);
+
+    setProducts(result.productos);
+    setTotalProducts(result.total);
+    setPerPage(result.perPage);
+    setPage(result.page);
+  }
+
   useEffect(() => {
     async function loadInitialData() {
       try {
-        const [categoryResult, productResult] = await Promise.all([
+        const [categoryResult] = await Promise.all([
           listCategories(token),
-          listProducts(token),
+          loadProducts(1),
         ]);
 
         setCategories(categoryResult.categorias);
-        setProducts(productResult.productos);
       } catch (requestError) {
         setError(requestError.message);
       } finally {
@@ -85,9 +98,7 @@ export function ProductosPage({ token, onBack }) {
     setError("");
 
     try {
-      const result = await listProducts(token, search);
-
-      setProducts(result.productos);
+      await loadProducts(1);
     } catch (requestError) {
       setError(requestError.message);
     }
@@ -132,9 +143,7 @@ export function ProductosPage({ token, onBack }) {
         await createProduct(token, form);
       }
 
-      const result = await listProducts(token);
-
-      setProducts(result.productos);
+      await loadProducts(1);
       setForm(EMPTY_FORM);
       setShowForm(false);
       setEditingProductId(null);
@@ -658,6 +667,32 @@ export function ProductosPage({ token, onBack }) {
             </table>
           </div>
         )}
+
+        {totalPages > 1 ? (
+          <footer className="product-pagination">
+            <button
+              className="secondary-button"
+              disabled={page <= 1 || loading}
+              onClick={() => loadProducts(page - 1)}
+              type="button"
+            >
+              Anterior
+            </button>
+
+            <span>
+              Página {page} de {totalPages} · {totalProducts} productos
+            </span>
+
+            <button
+              className="secondary-button"
+              disabled={page >= totalPages || loading}
+              onClick={() => loadProducts(page + 1)}
+              type="button"
+            >
+              Siguiente
+            </button>
+          </footer>
+        ) : null}
       </section>
     </main>
   );

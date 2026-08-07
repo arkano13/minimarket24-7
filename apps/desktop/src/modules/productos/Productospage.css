@@ -1,68 +1,8 @@
 /* =========================================================
-   PRODUCTOS — catálogo y formulario de alta/edición.
-   Misma identidad: verde bosque + dorado, papel punteado.
+   PRODUCTOS — específico de esta pantalla.
+   El shell general (workspace-page, tabla, etc.) vive en
+   tokens.css porque lo comparten varias pantallas.
    ========================================================= */
-
-.workspace-page {
-  width: min(100% - 40px, 1200px);
-  margin: 0 auto;
-  padding: 28px 0 60px;
-  background-image: radial-gradient(var(--border) 1px, transparent 1px);
-  background-size: 16px 16px;
-}
-
-.workspace-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 20px;
-}
-
-.back-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 14px;
-  border: 0;
-  padding: 0;
-  color: var(--accent);
-  background: transparent;
-  font-size: 0.86rem;
-  font-weight: 500;
-}
-
-.workspace-header h1 {
-  margin: 4px 0 8px;
-  color: var(--ink);
-  font-size: clamp(1.4rem, 3vw, 1.9rem);
-  font-weight: 500;
-}
-
-.workspace-header > div > p:last-child {
-  margin: 0;
-  color: var(--muted);
-  max-width: 460px;
-}
-
-.workspace-header__action {
-  flex: 0 0 auto;
-}
-
-.page-message {
-  margin: 0 0 16px;
-}
-
-.form-success {
-  border: 1px solid #b7dba1;
-  border-radius: var(--radius-sm);
-  padding: 11px 13px;
-  color: var(--success-ink);
-  background: var(--success-tint);
-  font-size: 0.88rem;
-}
-
-/* --- Tarjeta de formulario --- */
 
 .product-form-card,
 .product-list-card {
@@ -76,39 +16,8 @@
   padding: 24px;
 }
 
-.section-heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
-  border-bottom: 1px dashed var(--border);
-  padding-bottom: 16px;
-}
-
-.section-heading h2 {
-  margin: 4px 0 0;
-  color: var(--ink);
-  font-size: 1.1rem;
-  font-weight: 500;
-}
-
-.section-heading > p:last-child {
-  margin: 0;
-  max-width: 260px;
-  color: var(--muted);
-  font-size: 0.84rem;
-  text-align: right;
-}
-
 .product-form {
   display: grid;
-  gap: 16px;
-}
-
-.form-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -228,15 +137,7 @@
   margin-top: 14px;
 }
 
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  border-top: 1px dashed var(--border);
-  padding-top: 16px;
-}
-
-/* --- Lista / tabla de productos --- */
+/* --- Lista / búsqueda de productos --- */
 
 .product-list-card {
   padding: 20px 20px 8px;
@@ -263,55 +164,6 @@
   outline: none;
 }
 
-.product-table-wrapper {
-  overflow-x: auto;
-  border-top: 1px solid var(--border);
-}
-
-.product-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.9rem;
-}
-
-.product-table thead th {
-  position: sticky;
-  top: 0;
-  border-bottom: 1px solid var(--border);
-  padding: 12px 14px;
-  color: #fff;
-  background: var(--ink);
-  font-size: 0.72rem;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-align: left;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.product-table tbody tr {
-  border-bottom: 1px solid var(--border);
-}
-
-.product-table tbody tr:hover {
-  background: var(--bg);
-}
-
-.product-table td {
-  padding: 12px 14px;
-  color: var(--ink);
-  vertical-align: middle;
-}
-
-.product-table td strong {
-  display: block;
-  font-weight: 500;
-}
-
-.product-table td small {
-  color: var(--muted);
-}
-
 .price-cell {
   display: grid;
   gap: 2px;
@@ -331,24 +183,21 @@
   font-size: 0.82rem;
 }
 
-@media (max-width: 900px) {
-  .workspace-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
+.product-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px 0 6px;
+}
 
-  .form-row,
+.product-pagination span {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+@media (max-width: 900px) {
   .price-mode__options {
     grid-template-columns: 1fr;
-  }
-
-  .section-heading {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .section-heading > p:last-child {
-    max-width: none;
-    text-align: left;
   }
 }

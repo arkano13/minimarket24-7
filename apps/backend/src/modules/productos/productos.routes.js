@@ -59,13 +59,13 @@ productsRouter.get(
   "/",
   async (req, res, next) => {
     try {
-      const products = await listProducts(
+      const result = await listProducts(
         req.query.buscar,
+        req.query.page,
+        req.query.perPage,
       );
 
-      res.json({
-        productos: products,
-      });
+      res.json(result);
     } catch (error) {
       next(error);
     }

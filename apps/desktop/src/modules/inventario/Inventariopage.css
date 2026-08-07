@@ -187,6 +187,19 @@
   color: var(--danger);
 }
 
+.inventory-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px 0 6px;
+}
+
+.inventory-pagination span {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
 @media (max-width: 900px) {
   .movement-type__options {
     grid-template-columns: 1fr;

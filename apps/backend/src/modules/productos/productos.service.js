@@ -276,51 +276,61 @@ function serializeProduct(product) {
 
 export async function listProducts(
   search = "",
+  pageInput,
+  perPageInput,
 ) {
   const term =
     typeof search === "string"
       ? search.trim()
       : "";
 
-  const products =
-    await prisma.producto.findMany({
-      where: {
-        activo: true,
+  const page = Math.max(1, Number(pageInput) || 1);
+  const perPage = Math.min(
+    100,
+    Math.max(1, Number(perPageInput) || 25),
+  );
 
-        ...(term
-          ? {
-              OR: [
-                {
-                  nombre: {
-                    contains: term,
-                    mode: "insensitive",
-                  },
-                },
+  const where = {
+    activo: true,
 
-                {
-                  sku: {
-                    contains: term,
-                    mode: "insensitive",
-                  },
-                },
+    ...(term
+      ? {
+          OR: [
+            {
+              nombre: {
+                contains: term,
+                mode: "insensitive",
+              },
+            },
 
-                {
-                  presentaciones: {
+            {
+              sku: {
+                contains: term,
+                mode: "insensitive",
+              },
+            },
+
+            {
+              presentaciones: {
+                some: {
+                  codigosBarra: {
                     some: {
-                      codigosBarra: {
-                        some: {
-                          codigo: {
-                            contains: term,
-                          },
-                        },
+                      codigo: {
+                        contains: term,
                       },
                     },
                   },
                 },
-              ],
-            }
-          : {}),
-      },
+              },
+            },
+          ],
+        }
+      : {}),
+  };
+
+  const [products, total] = await Promise.all([
+    prisma.producto.findMany({
+      where,
 
       include: {
         categoria: {
@@ -365,10 +375,19 @@ export async function listProducts(
         nombre: "asc",
       },
 
-      take: 100,
-    });
+      skip: (page - 1) * perPage,
+      take: perPage,
+    }),
 
-  return products.map(serializeProduct);
+    prisma.producto.count({ where }),
+  ]);
+
+  return {
+    total,
+    page,
+    perPage,
+    productos: products.map(serializeProduct),
+  };
 }
 
 export async function createProduct(

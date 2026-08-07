@@ -180,6 +180,8 @@ const MOVEMENT_INCLUDE = {
 
 export async function listInventoryMovements(
   productIdInput,
+  pageInput,
+  perPageInput,
 ) {
   const productId =
     productIdInput === undefined ||
@@ -191,26 +193,34 @@ export async function listInventoryMovements(
           "El producto",
         );
 
-  const movements =
-    await prisma.movimientoInventario.findMany({
-      where: productId
-        ? {
-            productoId: productId,
-          }
-        : undefined,
-
-      include: MOVEMENT_INCLUDE,
-
-      orderBy: {
-        creadoEn: "desc",
-      },
-
-      take: 100,
-    });
-
-  return movements.map(
-    serializeMovement,
+  const page = Math.max(1, Number(pageInput) || 1);
+  const perPage = Math.min(
+    100,
+    Math.max(1, Number(perPageInput) || 25),
   );
+
+  const where = productId
+    ? { productoId: productId }
+    : undefined;
+
+  const [movements, total] = await Promise.all([
+    prisma.movimientoInventario.findMany({
+      where,
+      include: MOVEMENT_INCLUDE,
+      orderBy: { creadoEn: "desc" },
+      skip: (page - 1) * perPage,
+      take: perPage,
+    }),
+
+    prisma.movimientoInventario.count({ where }),
+  ]);
+
+  return {
+    total,
+    page,
+    perPage,
+    movimientos: movements.map(serializeMovement),
+  };
 }
 
 export async function createInventoryMovement(

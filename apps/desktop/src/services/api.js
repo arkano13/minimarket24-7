@@ -63,12 +63,20 @@ export function createCategory(token, nombre) {
   });
 }
 
-export function listProducts(token, search = "") {
-  const query = search
-    ? `?buscar=${encodeURIComponent(search)}`
-    : "";
+export function listProducts(token, search = "", page = 1, perPage) {
+  const params = new URLSearchParams();
 
-  return request(`/productos${query}`, {
+  if (search) {
+    params.set("buscar", search);
+  }
+
+  params.set("page", page);
+
+  if (perPage) {
+    params.set("perPage", perPage);
+  }
+
+  return request(`/productos?${params.toString()}`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -95,12 +103,16 @@ export function updateProduct(token, productId, product) {
   });
 }
 
-export function listInventoryMovements(token, productId = "") {
-  const query = productId
-    ? `?productoId=${encodeURIComponent(productId)}`
-    : "";
+export function listInventoryMovements(token, productId = "", page = 1) {
+  const params = new URLSearchParams();
 
-  return request(`/inventario/movimientos${query}`, {
+  if (productId) {
+    params.set("productoId", productId);
+  }
+
+  params.set("page", page);
+
+  return request(`/inventario/movimientos?${params.toString()}`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },

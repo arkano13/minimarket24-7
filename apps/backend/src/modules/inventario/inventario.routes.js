@@ -21,14 +21,14 @@ inventoryRouter.get(
   "/movimientos",
   async (req, res, next) => {
     try {
-      const movements =
+      const result =
         await listInventoryMovements(
           req.query.productoId,
+          req.query.page,
+          req.query.perPage,
         );
 
-      res.json({
-        movimientos: movements,
-      });
+      res.json(result);
     } catch (error) {
       next(error);
     }

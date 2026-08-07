@@ -72,6 +72,9 @@ function getSingularUnitLabel(product) {
 export function InventarioPage({ token }) {
   const [products, setProducts] = useState([]);
   const [movements, setMovements] = useState([]);
+  const [movementsPage, setMovementsPage] = useState(1);
+  const [totalMovements, setTotalMovements] = useState(0);
+  const [movementsPerPage, setMovementsPerPage] = useState(25);
   const [form, setForm] = useState(EMPTY_FORM);
   const [productSearch, setProductSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -86,17 +89,26 @@ export function InventarioPage({ token }) {
 
   const unitLabel = getUnitLabel(selectedProduct);
   const singularUnitLabel = getSingularUnitLabel(selectedProduct);
+  const totalMovementsPages = Math.max(1, Math.ceil(totalMovements / movementsPerPage));
+
+  async function loadMovements(targetPage = 1) {
+    const result = await listInventoryMovements(token, "", targetPage);
+
+    setMovements(result.movimientos);
+    setTotalMovements(result.total);
+    setMovementsPerPage(result.perPage);
+    setMovementsPage(result.page);
+  }
 
   useEffect(() => {
     async function loadInitialData() {
       try {
-        const [productResult, movementResult] = await Promise.all([
-          listProducts(token),
-          listInventoryMovements(token),
+        const [productResult] = await Promise.all([
+          listProducts(token, "", 1, 100),
+          loadMovements(1),
         ]);
 
         setProducts(productResult.productos);
-        setMovements(movementResult.movimientos);
       } catch (requestError) {
         setError(requestError.message);
       } finally {
@@ -138,7 +150,7 @@ export function InventarioPage({ token }) {
     setError("");
 
     try {
-      const result = await listProducts(token, productSearch);
+      const result = await listProducts(token, productSearch, 1, 100);
 
       setProducts(result.productos);
 
@@ -158,13 +170,12 @@ export function InventarioPage({ token }) {
     try {
       await createInventoryMovement(token, form);
 
-      const [productResult, movementResult] = await Promise.all([
-        listProducts(token, productSearch),
-        listInventoryMovements(token),
+      const [productResult] = await Promise.all([
+        listProducts(token, productSearch, 1, 100),
+        loadMovements(1),
       ]);
 
       setProducts(productResult.productos);
-      setMovements(movementResult.movimientos);
       setForm(EMPTY_FORM);
 
       setSuccess(
@@ -455,6 +466,32 @@ export function InventarioPage({ token }) {
             </table>
           </div>
         )}
+
+        {totalMovementsPages > 1 ? (
+          <footer className="inventory-pagination">
+            <button
+              className="secondary-button"
+              disabled={movementsPage <= 1 || loading}
+              onClick={() => loadMovements(movementsPage - 1)}
+              type="button"
+            >
+              Anterior
+            </button>
+
+            <span>
+              Página {movementsPage} de {totalMovementsPages} · {totalMovements} movimientos
+            </span>
+
+            <button
+              className="secondary-button"
+              disabled={movementsPage >= totalMovementsPages || loading}
+              onClick={() => loadMovements(movementsPage + 1)}
+              type="button"
+            >
+              Siguiente
+            </button>
+          </footer>
+        ) : null}
       </section>
     </main>
   );

@@ -5,8 +5,6 @@ import { createWriteStream, existsSync } from "node:fs";
 import { unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildSalesReportHtml, safePdfName } from "./sales-report-pdf.js";
-import { buildAdministrativeReportHtml } from "./administrative-report-pdf.js";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 

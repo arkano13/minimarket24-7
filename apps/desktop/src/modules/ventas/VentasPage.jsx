@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./VentasPage.css";
+import { redondearAlEntero } from "@minisuper/shared";
 import {
   createSale,
   getCurrentCashShift,
@@ -122,7 +123,10 @@ export function VentasPage({ token }) {
   const [repricing, setRepricing] = useState(false);
 
   const total = useMemo(
-    () => cart.reduce((sum, item) => sum + item.precio * Number(item.cantidad || 0), 0),
+    () =>
+      redondearAlEntero(
+        cart.reduce((sum, item) => sum + item.precio * Number(item.cantidad || 0), 0),
+      ),
     [cart],
   );
 

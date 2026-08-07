@@ -242,6 +242,7 @@ model Venta {
   clienteEspecialId Int?                   @map("cliente_especial_id")
   clienteNombre     String?                @map("cliente_nombre") @db.VarChar(120)
   subtotal          Decimal                @db.Decimal(14, 2)
+  redondeo          Decimal                @default(0) @db.Decimal(14, 2)
   total             Decimal                @db.Decimal(14, 2)
   estado            EstadoVenta            @default(COMPLETADA)
   creadoEn          DateTime               @default(now()) @map("creado_en")

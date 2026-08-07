@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { redondearAlEntero } from "@minisuper/shared";
 
 import { prisma } from "../../lib/prisma.js";
 
@@ -134,6 +135,7 @@ function serializeSale(sale) {
     id: sale.id,
     estado: sale.estado,
     subtotal: Number(sale.subtotal),
+    redondeo: Number(sale.redondeo),
     total: Number(sale.total),
     creadoEn: sale.creadoEn,
 
@@ -724,6 +726,14 @@ export async function createSale(data, userId) {
       }
     }
 
+    const subtotalExacto = total;
+
+    const totalRedondeado = new Prisma.Decimal(redondearAlEntero(total));
+
+    const redondeo = totalRedondeado.sub(subtotalExacto);
+
+    total = totalRedondeado;
+
     let received = null;
 
     let change = new Prisma.Decimal(0);
@@ -748,7 +758,9 @@ export async function createSale(data, userId) {
 
         clienteNombre: specialClient?.nombre ?? null,
 
-        subtotal: total,
+        subtotal: subtotalExacto,
+
+        redondeo,
 
         total,
 

@@ -1,5 +1,4 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
-import { fork } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -10,41 +9,6 @@ import { buildAdministrativeReportHtml } from "./administrative-report-pdf.js";
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 const isDevelopment = !app.isPackaged;
-
-let backendProcess = null;
-
-function startBackend() {
-  if (isDevelopment) {
-    // En desarrollo, el backend se corre aparte con "npm run dev".
-    return;
-  }
-
-  const backendDirectory = path.join(process.resourcesPath, "backend");
-  const backendEntry = path.join(backendDirectory, "src", "server.js");
-
-  backendProcess = fork(backendEntry, [], {
-    cwd: backendDirectory,
-    env: process.env,
-    silent: false,
-  });
-
-  backendProcess.on("error", (error) => {
-    console.error("No se pudo iniciar el backend:", error);
-  });
-
-  backendProcess.on("exit", (code) => {
-    if (code !== 0) {
-      console.error(`El backend se cerró de forma inesperada (código ${code}).`);
-    }
-  });
-}
-
-function stopBackend() {
-  if (backendProcess && !backendProcess.killed) {
-    backendProcess.kill();
-    backendProcess = null;
-  }
-}
 
 ipcMain.handle("reports:save-pdf", async (event, payload) => {
   if (!payload?.report || typeof payload.report !== "object") {
@@ -199,7 +163,6 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  startBackend();
   createWindow();
 
   app.on("activate", () => {
@@ -210,13 +173,7 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
-  stopBackend();
-
   if (process.platform !== "darwin") {
     app.quit();
   }
-});
-
-app.on("before-quit", () => {
-  stopBackend();
 });

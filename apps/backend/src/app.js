@@ -28,7 +28,6 @@ import { configuracionRouter } from "./modules/configuracion/configuracion.route
 import { usuariosRouter } from "./modules/usuarios/usuarios.routes.js";
 
 import { bitacoraRouter } from "./modules/bitacora/bitacora.routes.js";
-import { AppError } from "./utils/AppError.js";
   
 
 const allowedOrigins = new Set([
@@ -43,12 +42,14 @@ app.disable("x-powered-by");
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || allowedOrigins.has(origin)) {
+      // La app empaquetada de Electron carga los archivos con file://,
+      // así que el navegador manda Origin vacío o la cadena "null".
+      if (!origin || origin === "null" || allowedOrigins.has(origin)) {
         callback(null, true);
         return;
       }
 
-      callback(new AppError("Origen no permitido.", 403));
+      callback(new Error("Origen no permitido."));
     },
   }),
 );

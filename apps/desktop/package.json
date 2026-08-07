@@ -41,34 +41,6 @@
       "electron/**/*",
       "package.json"
     ],
-    "extraResources": [
-      {
-        "from": "../backend",
-        "to": "backend",
-        "filter": [
-          "**/*",
-          "!node_modules",
-          "!**/*.map"
-        ]
-      },
-      {
-        "from": "../../node_modules",
-        "to": "node_modules",
-        "filter": [
-          "**/*",
-          "!electron",
-          "!electron-builder",
-          "!vite",
-          "!@vitejs",
-          "!@minisuper",
-          "!.bin"
-        ]
-      },
-      {
-        "from": "../../packages/shared",
-        "to": "node_modules/@minisuper/shared"
-      }
-    ],
     "win": {
       "target": [
         {

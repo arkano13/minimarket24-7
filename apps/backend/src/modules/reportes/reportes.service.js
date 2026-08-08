@@ -1,6 +1,24 @@
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/AppError.js";
 
+// Honduras no tiene horario de verano y siempre está en UTC-6, así que
+// esto funciona sin importar la zona horaria del servidor donde corra
+// el backend (local, Railway, o donde sea).
+const HONDURAS_TIME_ZONE = "America/Tegucigalpa";
+
+const hondurasHourFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: HONDURAS_TIME_ZONE,
+  hour12: false,
+  hour: "2-digit",
+});
+
+function hondurasHour(date) {
+  const hour = Number(hondurasHourFormatter.format(date));
+
+  // Intl puede devolver "24" en vez de "00" para la medianoche.
+  return hour % 24;
+}
+
 function localDate(
   value,
   field,
@@ -24,16 +42,7 @@ function localDate(
     `${value}T${time}`,
   );
 
-  const [year, month, day] = value
-    .split("-")
-    .map(Number);
-
-  if (
-    Number.isNaN(date.getTime()) ||
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day
-  ) {
+  if (Number.isNaN(date.getTime())) {
     throw new AppError(
       `${field} no es válida.`,
       400,
@@ -197,7 +206,7 @@ export async function getSalesReport(
   for (const sale of sales) {
     total += Number(sale.total);
 
-    const hour = sale.creadoEn.getHours();
+    const hour = hondurasHour(sale.creadoEn);
 
     const hourEntry =
       hours.get(hour) ?? {

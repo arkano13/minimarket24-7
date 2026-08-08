@@ -1,5 +1,4 @@
 import { Prisma } from "@prisma/client";
-import { redondearAlEntero } from "@minisuper/shared";
 
 import { prisma } from "../../lib/prisma.js";
 
@@ -53,8 +52,26 @@ function optionalText(value, maxLength) {
   return text || null;
 }
 
+// Honduras no tiene horario de verano y siempre está en UTC-6, así que
+// esto funciona sin importar la zona horaria del servidor donde corra
+// el backend (local, Railway, o donde sea).
+const HONDURAS_TIME_ZONE = "America/Tegucigalpa";
+
+const hondurasTimeFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: HONDURAS_TIME_ZONE,
+  hour12: false,
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 function currentMinute(date = new Date()) {
-  return date.getHours() * 60 + date.getMinutes();
+  const parts = hondurasTimeFormatter.formatToParts(date);
+
+  const hours = Number(parts.find((part) => part.type === "hour").value);
+  const minutes = Number(parts.find((part) => part.type === "minute").value);
+
+  // Intl puede devolver "24" en vez de "00" para la medianoche.
+  return (hours % 24) * 60 + minutes;
 }
 
 function shiftContainsMinute(shift, minute) {
@@ -135,7 +152,6 @@ function serializeSale(sale) {
     id: sale.id,
     estado: sale.estado,
     subtotal: Number(sale.subtotal),
-    redondeo: Number(sale.redondeo),
     total: Number(sale.total),
     creadoEn: sale.creadoEn,
 
@@ -726,14 +742,6 @@ export async function createSale(data, userId) {
       }
     }
 
-    const subtotalExacto = total;
-
-    const totalRedondeado = new Prisma.Decimal(redondearAlEntero(total));
-
-    const redondeo = totalRedondeado.sub(subtotalExacto);
-
-    total = totalRedondeado;
-
     let received = null;
 
     let change = new Prisma.Decimal(0);
@@ -758,9 +766,7 @@ export async function createSale(data, userId) {
 
         clienteNombre: specialClient?.nombre ?? null,
 
-        subtotal: subtotalExacto,
-
-        redondeo,
+        subtotal: total,
 
         total,
 

@@ -1,13 +1,17 @@
 /* =========================================================
    CAJA Y TURNOS — misma identidad del login/ventas:
    verde bosque + dorado, fondo papel punteado, cifras en
-   tipografía monoespaciada.
+   tipografía monoespaciada. Espaciado compacto para que
+   toda la pantalla quepa sin necesidad de scroll.
    ========================================================= */
 
 .cash-page {
+  box-sizing: border-box;
   width: min(100% - 40px, 1100px);
+  height: 100%;
   margin: 0 auto;
-  padding: 28px 0 60px;
+  padding: 18px 0 18px;
+  overflow-y: auto;
   background-image: radial-gradient(var(--border) 1px, transparent 1px);
   background-size: 16px 16px;
 }
@@ -17,27 +21,28 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .cash-header h1 {
-  margin: 4px 0 8px;
+  margin: 2px 0 4px;
   color: var(--ink);
-  font-size: clamp(1.4rem, 3vw, 1.9rem);
+  font-size: clamp(1.2rem, 2.4vw, 1.55rem);
   font-weight: 500;
 }
 
 .cash-header > div > p:last-child {
   margin: 0;
   color: var(--muted);
+  font-size: 0.86rem;
   max-width: 460px;
 }
 
 .cash-status {
   flex: 0 0 auto;
   border-radius: 999px;
-  padding: 8px 16px;
-  font-size: 0.82rem;
+  padding: 6px 14px;
+  font-size: 0.8rem;
   font-weight: 500;
   white-space: nowrap;
 }
@@ -53,16 +58,17 @@
 }
 
 .page-message {
-  margin: 0 0 16px;
+  margin: 0 0 10px;
+  font-size: 0.86rem;
 }
 
 .form-success {
   border: 1px solid #b7dba1;
   border-radius: var(--radius-sm);
-  padding: 11px 13px;
+  padding: 9px 12px;
   color: var(--success-ink);
   background: var(--success-tint);
-  font-size: 0.88rem;
+  font-size: 0.86rem;
 }
 
 /* --- Tarjeta para abrir caja --- */
@@ -73,26 +79,26 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 
 .cash-open-card {
   max-width: 440px;
-  padding: 24px;
+  padding: 18px;
 }
 
 .cash-card-heading {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 18px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 .cash-card-heading span[aria-hidden] {
   display: grid;
-  flex: 0 0 42px;
-  width: 42px;
-  height: 42px;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
   border-radius: var(--radius-sm);
   place-items: center;
   color: var(--accent);
@@ -100,26 +106,26 @@
 }
 
 .cash-card-heading h2 {
-  margin: 0 0 3px;
+  margin: 0 0 2px;
   color: var(--ink);
-  font-size: 1.05rem;
+  font-size: 0.98rem;
   font-weight: 500;
 }
 
 .cash-card-heading p {
   margin: 0;
   color: var(--muted);
-  font-size: 0.86rem;
+  font-size: 0.8rem;
 }
 
 .cash-open-card form {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .cash-open-card .field small {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.76rem;
 }
 
 /* --- Resultado del último cierre --- */
@@ -127,29 +133,29 @@
 .cash-close-result {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 18px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .cash-close-result > div {
   display: grid;
-  gap: 5px;
+  gap: 4px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 14px 16px;
+  padding: 11px 14px;
   background: var(--surface);
 }
 
 .cash-close-result span {
   color: var(--muted);
-  font-size: 0.76rem;
+  font-size: 0.74rem;
   font-weight: 500;
   text-transform: uppercase;
 }
 
 .cash-close-result strong {
   font-family: var(--font-mono);
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   font-weight: 600;
 }
 
@@ -166,29 +172,29 @@
 .cash-summary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 18px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .cash-summary-grid article {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 16px 18px;
+  padding: 12px 16px;
   background: var(--surface);
 }
 
 .cash-summary-grid span {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 500;
 }
 
 .cash-summary-grid strong {
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 1.3rem;
+  font-size: 1.15rem;
   font-weight: 600;
 }
 
@@ -204,31 +210,31 @@
 /* --- Tarjeta de detalle del turno --- */
 
 .cash-details-card {
-  padding: 22px 24px;
+  padding: 16px 18px;
 }
 
 .cash-payment-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px 20px;
+  gap: 10px 18px;
   border-top: 1px dashed var(--border);
-  padding-top: 16px;
+  padding-top: 12px;
 }
 
 .cash-payment-summary > div {
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
 .cash-payment-summary span {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.76rem;
 }
 
 .cash-payment-summary strong {
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 1.05rem;
+  font-size: 0.98rem;
   font-weight: 600;
 }
 
@@ -237,17 +243,17 @@
 .cash-actions-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  gap: 14px;
 }
 
 .cash-action-card {
-  padding: 22px 24px;
+  padding: 16px 18px;
   margin-bottom: 0;
 }
 
 .cash-action-form {
   display: grid;
-  gap: 16px;
+  gap: 10px;
 }
 
 .cash-movement-types {
@@ -263,7 +269,7 @@
   gap: 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 10px;
+  padding: 8px;
   color: var(--ink-soft);
   cursor: pointer;
   transition: border-color 140ms ease, background 140ms ease;
@@ -286,36 +292,36 @@
   justify-content: space-between;
   gap: 12px;
   border-radius: var(--radius-sm);
-  padding: 12px 14px;
+  padding: 9px 12px;
   background: var(--bg);
 }
 
 .cash-difference-preview span {
   color: var(--ink-soft);
-  font-size: 0.86rem;
+  font-size: 0.84rem;
   font-weight: 500;
 }
 
 .cash-difference-preview strong {
   font-family: var(--font-mono);
-  font-size: 1.05rem;
+  font-size: 0.98rem;
 }
 
 .cash-close-confirmation {
   margin: 0;
   border: 1px solid #ecd18d;
   border-radius: var(--radius-sm);
-  padding: 11px 13px;
+  padding: 9px 12px;
   color: var(--warning);
   background: var(--warning-tint);
-  font-size: 0.86rem;
-  line-height: 1.4;
+  font-size: 0.84rem;
+  line-height: 1.35;
 }
 
 .cash-close-buttons {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
 }
 
 @media (max-width: 900px) {

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./VentasPage.css";
-import { redondearAlEntero } from "@minisuper/shared";
 import {
   createSale,
   getCurrentCashShift,
@@ -75,6 +74,20 @@ function updateMoneyValue(setter, value) {
   }
 }
 
+function isAlcoholCategory(categoryName) {
+  if (!categoryName) {
+    return false;
+  }
+
+  const normalized = categoryName.toLowerCase();
+
+  return ["cerveza", "alcoh", "licor"].some((keyword) => normalized.includes(keyword));
+}
+
+function round2(value) {
+  return Math.round(value * 100) / 100;
+}
+
 function unitLabel(type) {
   if (type === "PESO") {
     return "lb";
@@ -107,6 +120,7 @@ export function VentasPage({ token }) {
   const [cart, setCart] = useState([]);
 
   const [paymentMethod, setPaymentMethod] = useState("EFECTIVO");
+  const [alcoholSurchargeEnabled, setAlcoholSurchargeEnabled] = useState(false);
   const [receivedAmount, setReceivedAmount] = useState("");
 
   const [loading, setLoading] = useState(false);
@@ -122,18 +136,41 @@ export function VentasPage({ token }) {
   const [searchingClients, setSearchingClients] = useState(false);
   const [repricing, setRepricing] = useState(false);
 
-  const total = useMemo(
+  const merchandiseTotal = useMemo(
+    () => cart.reduce((sum, item) => sum + item.precio * Number(item.cantidad || 0), 0),
+    [cart],
+  );
+
+  const alcoholUnits = useMemo(
     () =>
-      redondearAlEntero(
-        cart.reduce((sum, item) => sum + item.precio * Number(item.cantidad || 0), 0),
+      cart.reduce(
+        (sum, item) =>
+          isAlcoholCategory(item.categoria?.nombre) ? sum + Number(item.cantidad || 0) : sum,
+        0,
       ),
     [cart],
   );
+
+  const alcoholSurcharge =
+    alcoholSurchargeEnabled && alcoholUnits > 0 ? round2(alcoholUnits * 5) : 0;
+
+  const totalWithAlcoholSurcharge = round2(merchandiseTotal + alcoholSurcharge);
+
+  const cardSurcharge =
+    paymentMethod === "TARJETA" ? round2(totalWithAlcoholSurcharge * 0.05) : 0;
+
+  const total = Math.round(totalWithAlcoholSurcharge + cardSurcharge);
 
   const change =
     paymentMethod === "EFECTIVO" && Number(receivedAmount) >= total
       ? Number(receivedAmount) - total
       : 0;
+
+  useEffect(() => {
+    if (alcoholUnits === 0 && alcoholSurchargeEnabled) {
+      setAlcoholSurchargeEnabled(false);
+    }
+  }, [alcoholUnits, alcoholSurchargeEnabled]);
 
   useEffect(() => {
     let active = true;
@@ -450,12 +487,14 @@ export function VentasPage({ token }) {
         metodoPago: paymentMethod,
         clienteId: selectedClient?.id,
         montoRecibido: paymentMethod === "EFECTIVO" ? receivedAmount : undefined,
+        recargoBebidasAlcoholicas: alcoholSurchargeEnabled,
       });
 
       setLastSale(result.venta);
       setCart([]);
       setReceivedAmount("");
       setPaymentMethod("EFECTIVO");
+      setAlcoholSurchargeEnabled(false);
       setSearch("");
       setProducts([]);
       setSelectedClient(null);
@@ -470,18 +509,6 @@ export function VentasPage({ token }) {
 
   return (
     <main className="sales-page">
-      <header className="sales-header">
-        <div>
-          <p className="eyebrow">Punto de venta</p>
-          <h1>Nueva venta</h1>
-        </div>
-
-        <div className="sales-header__total">
-          <span>Total actual</span>
-          <strong>L {formatMoney(total)}</strong>
-        </div>
-      </header>
-
       {error ? (
         <p className="form-error page-message" role="alert">
           {error}
@@ -646,12 +673,10 @@ export function VentasPage({ token }) {
             <div className="sales-cart__items">
               {cart.map((item) => (
                 <article className="cart-item" key={item.presentacionId}>
-                  <div className="cart-item__top">
-                    <div>
-                      <strong>{item.nombre}</strong>
-
-                      <small>L {formatMoney(item.precio)} cada uno</small>
-                    </div>
+                  <div className="cart-item__row-top">
+                    <strong className="cart-item__name" title={item.nombre}>
+                      {item.nombre}
+                    </strong>
 
                     <button
                       aria-label={`Quitar ${item.nombre}`}
@@ -663,29 +688,33 @@ export function VentasPage({ token }) {
                     </button>
                   </div>
 
-                  <div className="cart-item__bottom">
-                    <label>
-                      <span>Cantidad</span>
+                  <div className="cart-item__row-bottom">
+                    <small className="cart-item__unit-price">
+                      L {formatMoney(item.precio)} c/u
+                    </small>
 
-                      <input
-                        max={item.stock}
-                        min={
-                          item.tipoVenta === "PESO" || item.tipoVenta === "VOLUMEN"
-                            ? "0.001"
-                            : "1"
-                        }
-                        onChange={(event) => updateQuantity(item.presentacionId, event.target.value)}
-                        step={
-                          item.tipoVenta === "PESO" || item.tipoVenta === "VOLUMEN"
-                            ? "0.001"
-                            : "1"
-                        }
-                        type="number"
-                        value={item.cantidad}
-                      />
-                    </label>
+                    <input
+                      aria-label={`Cantidad de ${item.nombre}`}
+                      className="cart-item__qty"
+                      max={item.stock}
+                      min={
+                        item.tipoVenta === "PESO" || item.tipoVenta === "VOLUMEN"
+                          ? "0.001"
+                          : "1"
+                      }
+                      onChange={(event) => updateQuantity(item.presentacionId, event.target.value)}
+                      step={
+                        item.tipoVenta === "PESO" || item.tipoVenta === "VOLUMEN"
+                          ? "0.001"
+                          : "1"
+                      }
+                      type="number"
+                      value={item.cantidad}
+                    />
 
-                    <strong>L {formatMoney(item.precio * Number(item.cantidad || 0))}</strong>
+                    <strong className="cart-item__subtotal">
+                      L {formatMoney(item.precio * Number(item.cantidad || 0))}
+                    </strong>
                   </div>
                 </article>
               ))}
@@ -693,6 +722,24 @@ export function VentasPage({ token }) {
           )}
 
           <div className="checkout">
+            {alcoholUnits > 0 ? (
+              <button
+                className={`alcohol-surcharge-toggle ${
+                  alcoholSurchargeEnabled ? "alcohol-surcharge-toggle--active" : ""
+                }`}
+                onClick={() => setAlcoholSurchargeEnabled((current) => !current)}
+                type="button"
+              >
+                <span>
+                  {alcoholSurchargeEnabled ? "✓ " : "+ "}
+                  Recargo por tomar acá ({alcoholUnits}{" "}
+                  {alcoholUnits === 1 ? "unidad" : "unidades"})
+                </span>
+
+                <strong>L {formatMoney(alcoholUnits * 5)}</strong>
+              </button>
+            ) : null}
+
             <div className="checkout__total">
               <span>Total a cobrar</span>
               <strong>L {formatMoney(total)}</strong>

@@ -7,6 +7,24 @@ import { registrarBitacora } from "../bitacora/bitacora.service.js";
 
 const PAYMENT_METHODS = new Set(["EFECTIVO", "TARJETA", "TRANSFERENCIA"]);
 
+// Recargo por pagar con tarjeta: 0.5% del total.
+const CARD_SURCHARGE_RATE = new Prisma.Decimal(0.005);
+
+// Recargo por bebida alcohólica: L5 por cada unidad en el carrito.
+const ALCOHOL_SURCHARGE_PER_UNIT = new Prisma.Decimal(5);
+
+const ALCOHOL_CATEGORY_KEYWORDS = ["cerveza", "alcoh", "licor"];
+
+function isAlcoholCategory(categoryName) {
+  if (!categoryName) {
+    return false;
+  }
+
+  const normalized = categoryName.toLowerCase();
+
+  return ALCOHOL_CATEGORY_KEYWORDS.some((keyword) => normalized.includes(keyword));
+}
+
 function positiveInteger(value, field) {
   const number = Number(value);
 
@@ -641,7 +659,11 @@ export async function createSale(data, userId) {
       },
 
       include: {
-        producto: true,
+        producto: {
+          include: {
+            categoria: true,
+          },
+        },
 
         preciosHorario: {
           include: {
@@ -670,6 +692,7 @@ export async function createSale(data, userId) {
     const details = [];
 
     let total = new Prisma.Decimal(0);
+    let alcoholUnits = new Prisma.Decimal(0);
 
     for (const presentation of presentations) {
       const quantity = combinedItems.get(presentation.id);
@@ -731,6 +754,10 @@ export async function createSale(data, userId) {
       });
 
       total = total.add(subtotal);
+
+      if (isAlcoholCategory(presentation.producto.categoria?.nombre)) {
+        alcoholUnits = alcoholUnits.add(quantity);
+      }
     }
 
     for (const deduction of deductionsByProduct.values()) {
@@ -746,14 +773,30 @@ export async function createSale(data, userId) {
 
     let change = new Prisma.Decimal(0);
 
+    const applyAlcoholSurcharge =
+      Boolean(data.recargoBebidasAlcoholicas) && alcoholUnits.greaterThan(0);
+
+    const alcoholSurcharge = applyAlcoholSurcharge
+      ? alcoholUnits.mul(ALCOHOL_SURCHARGE_PER_UNIT).toDecimalPlaces(2)
+      : new Prisma.Decimal(0);
+
+    const totalWithAlcoholSurcharge = total.add(alcoholSurcharge);
+
+    const cardSurcharge =
+      paymentMethod === "TARJETA"
+        ? totalWithAlcoholSurcharge.mul(CARD_SURCHARGE_RATE).toDecimalPlaces(2)
+        : new Prisma.Decimal(0);
+
+    const grandTotal = totalWithAlcoholSurcharge.add(cardSurcharge);
+
     if (paymentMethod === "EFECTIVO") {
       received = positiveDecimal(data.montoRecibido, "El monto recibido");
 
-      if (received.lessThan(total)) {
+      if (received.lessThan(grandTotal)) {
         throw new AppError("El efectivo recibido es menor que el total.", 400);
       }
 
-      change = received.sub(total).toDecimalPlaces(2);
+      change = received.sub(grandTotal).toDecimalPlaces(2);
     }
 
     const sale = await transaction.venta.create({
@@ -768,7 +811,7 @@ export async function createSale(data, userId) {
 
         subtotal: total,
 
-        total,
+        total: grandTotal,
 
         detalles: {
           create: details,
@@ -778,7 +821,7 @@ export async function createSale(data, userId) {
           create: {
             metodo: paymentMethod,
 
-            monto: total,
+            monto: grandTotal,
 
             recibido: received,
 

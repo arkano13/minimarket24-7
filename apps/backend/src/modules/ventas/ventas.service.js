@@ -7,13 +7,48 @@ import { registrarBitacora } from "../bitacora/bitacora.service.js";
 
 const PAYMENT_METHODS = new Set(["EFECTIVO", "TARJETA", "TRANSFERENCIA"]);
 
-// Recargo por pagar con tarjeta: 0.5% del total.
-const CARD_SURCHARGE_RATE = new Prisma.Decimal(0.005);
+// Recargo por pagar con tarjeta: 1.05% del total.
+const CARD_SURCHARGE_RATE = new Prisma.Decimal(0.0105);
 
 // Recargo por bebida alcohólica: L5 por cada unidad en el carrito.
 const ALCOHOL_SURCHARGE_PER_UNIT = new Prisma.Decimal(5);
 
+// Descuento por cerveza caliente: L5 por cada unidad en el carrito.
+const ALCOHOL_DISCOUNT_PER_UNIT = new Prisma.Decimal(5);
+
 const ALCOHOL_CATEGORY_KEYWORDS = ["cerveza", "alcoh", "licor"];
+
+// Recargo por preparación de sopa instantánea: L5 por cada unidad en el carrito.
+const SOUP_SURCHARGE_PER_UNIT = new Prisma.Decimal(5);
+
+const SOUP_CATEGORY_KEYWORDS = ["sopa instantanea", "sopa instantánea", "sopas instantaneas"];
+
+// Recargo de envase: L5 por cada click del botón "Envase" (máx. una vez
+// por cada unidad de Barena/Salvavida Botella/Kaguama en el carrito).
+const CONTAINER_SURCHARGE_PER_UNIT = new Prisma.Decimal(5);
+
+const CONTAINER_SURCHARGE_PRODUCT_NAMES = [
+  "barena botella",
+  "barena kaguama",
+  "salvavida botella",
+  "salvavida kaguama",
+];
+
+function hasContainerSurcharge(productName) {
+  const normalized = (productName ?? "").trim().toLowerCase();
+
+  return CONTAINER_SURCHARGE_PRODUCT_NAMES.some((name) => normalized.includes(name));
+}
+
+function isSoupCategory(categoryName) {
+  if (!categoryName) {
+    return false;
+  }
+
+  const normalized = categoryName.toLowerCase();
+
+  return SOUP_CATEGORY_KEYWORDS.some((keyword) => normalized.includes(keyword));
+}
 
 function isAlcoholCategory(categoryName) {
   if (!categoryName) {
@@ -693,6 +728,8 @@ export async function createSale(data, userId) {
 
     let total = new Prisma.Decimal(0);
     let alcoholUnits = new Prisma.Decimal(0);
+    let soupUnits = new Prisma.Decimal(0);
+    let containerUnits = new Prisma.Decimal(0);
 
     for (const presentation of presentations) {
       const quantity = combinedItems.get(presentation.id);
@@ -758,6 +795,14 @@ export async function createSale(data, userId) {
       if (isAlcoholCategory(presentation.producto.categoria?.nombre)) {
         alcoholUnits = alcoholUnits.add(quantity);
       }
+
+      if (isSoupCategory(presentation.producto.categoria?.nombre)) {
+        soupUnits = soupUnits.add(quantity);
+      }
+
+      if (hasContainerSurcharge(presentation.producto.nombre)) {
+        containerUnits = containerUnits.add(quantity);
+      }
     }
 
     for (const deduction of deductionsByProduct.values()) {
@@ -780,14 +825,55 @@ export async function createSale(data, userId) {
       ? alcoholUnits.mul(ALCOHOL_SURCHARGE_PER_UNIT).toDecimalPlaces(2)
       : new Prisma.Decimal(0);
 
-    const totalWithAlcoholSurcharge = total.add(alcoholSurcharge);
+    const applyAlcoholDiscount =
+      Boolean(data.descuentoCervezaCaliente) && alcoholUnits.greaterThan(0);
+
+    const alcoholDiscount = applyAlcoholDiscount
+      ? alcoholUnits.mul(ALCOHOL_DISCOUNT_PER_UNIT).toDecimalPlaces(2)
+      : new Prisma.Decimal(0);
+
+    const applySoupSurcharge =
+      Boolean(data.recargoSopaInstantanea) && soupUnits.greaterThan(0);
+
+    const soupSurcharge = applySoupSurcharge
+      ? soupUnits.mul(SOUP_SURCHARGE_PER_UNIT).toDecimalPlaces(2)
+      : new Prisma.Decimal(0);
+
+    // El botón "Envase" se puede pulsar varias veces (cada click = +5),
+    // pero nunca más veces que unidades de Barena/Salvavida haya en el
+    // carrito. Se recalcula el límite aquí para no confiar ciegamente en
+    // lo que mande el cliente.
+    const requestedContainerClicks = Math.max(
+      0,
+      Math.trunc(Number(data.recargoEnvaseCantidad) || 0),
+    );
+
+    const containerClicks = Math.min(
+      requestedContainerClicks,
+      containerUnits.toNumber(),
+    );
+
+    const containerSurcharge =
+      containerClicks > 0
+        ? CONTAINER_SURCHARGE_PER_UNIT.mul(containerClicks).toDecimalPlaces(2)
+        : new Prisma.Decimal(0);
+
+    const totalWithAlcoholSurcharge = total
+      .add(alcoholSurcharge)
+      .sub(alcoholDiscount)
+      .add(soupSurcharge)
+      .add(containerSurcharge);
 
     const cardSurcharge =
       paymentMethod === "TARJETA"
         ? totalWithAlcoholSurcharge.mul(CARD_SURCHARGE_RATE).toDecimalPlaces(2)
         : new Prisma.Decimal(0);
 
-    const grandTotal = totalWithAlcoholSurcharge.add(cardSurcharge);
+    // El total que se cobra se redondea al lempira entero más cercano,
+    // igual que se muestra en la pantalla de ventas.
+    const grandTotal = totalWithAlcoholSurcharge
+      .add(cardSurcharge)
+      .toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP);
 
     if (paymentMethod === "EFECTIVO") {
       received = positiveDecimal(data.montoRecibido, "El monto recibido");

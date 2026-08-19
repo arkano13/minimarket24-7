@@ -81,7 +81,42 @@ function isAlcoholCategory(categoryName) {
 
   const normalized = categoryName.toLowerCase();
 
-  return ["cerveza", "alcoh", "licor"].some((keyword) => normalized.includes(keyword));
+  return ["cerveza", "alcoh", "licor"].some((keyword) =>
+    normalized.includes(keyword),
+  );
+}
+
+function isInstantSoupCategory(categoryName) {
+  if (!categoryName) {
+    return false;
+  }
+
+  const normalized = categoryName.toLowerCase();
+
+  return ["sopa instantanea", "sopa instantánea", "sopas instantaneas"].some(
+    (keyword) => normalized.includes(keyword),
+  );
+}
+
+/*
+ * SOLO estas 4 presentaciones tienen botón de Envase:
+ *
+ * Barena Botella
+ * Barena Kaguama
+ * Salvavida Botella
+ * Salvavida Kaguama
+ */
+function hasContainerSurcharge(item) {
+  const nombre = (item?.nombre ?? "").trim().toLowerCase();
+
+  const combos = [
+    "barena botella",
+    "barena kaguama",
+    "salvavida botella",
+    "salvavida kaguama",
+  ];
+
+  return combos.some((combo) => nombre.includes(combo));
 }
 
 function round2(value) {
@@ -120,7 +155,18 @@ export function VentasPage({ token }) {
   const [cart, setCart] = useState([]);
 
   const [paymentMethod, setPaymentMethod] = useState("EFECTIVO");
-  const [alcoholSurchargeEnabled, setAlcoholSurchargeEnabled] = useState(false);
+
+  const [alcoholSurchargeEnabled, setAlcoholSurchargeEnabled] =
+    useState(false);
+
+  const [alcoholDiscountEnabled, setAlcoholDiscountEnabled] =
+    useState(false);
+
+  const [soupSurchargeEnabled, setSoupSurchargeEnabled] = useState(false);
+
+  // Contador de Envase: cada click suma +5 más (hasta el máximo de unidades)
+  const [containerSurchargeCount, setContainerSurchargeCount] = useState(0);
+
   const [receivedAmount, setReceivedAmount] = useState("");
 
   const [loading, setLoading] = useState(false);
@@ -137,7 +183,12 @@ export function VentasPage({ token }) {
   const [repricing, setRepricing] = useState(false);
 
   const merchandiseTotal = useMemo(
-    () => cart.reduce((sum, item) => sum + item.precio * Number(item.cantidad || 0), 0),
+    () =>
+      cart.reduce(
+        (sum, item) =>
+          sum + item.precio * Number(item.cantidad || 0),
+        0,
+      ),
     [cart],
   );
 
@@ -145,19 +196,68 @@ export function VentasPage({ token }) {
     () =>
       cart.reduce(
         (sum, item) =>
-          isAlcoholCategory(item.categoria?.nombre) ? sum + Number(item.cantidad || 0) : sum,
+          isAlcoholCategory(item.categoria?.nombre)
+            ? sum + Number(item.cantidad || 0)
+            : sum,
+        0,
+      ),
+    [cart],
+  );
+
+  const soupUnits = useMemo(
+    () =>
+      cart.reduce(
+        (sum, item) =>
+          isInstantSoupCategory(item.categoria?.nombre)
+            ? sum + Number(item.cantidad || 0)
+            : sum,
+        0,
+      ),
+    [cart],
+  );
+
+  // Cantidad de las 4 cervezas específicas presentes en el carrito
+  const containerUnits = useMemo(
+    () =>
+      cart.reduce(
+        (sum, item) =>
+          hasContainerSurcharge(item)
+            ? sum + Number(item.cantidad || 0)
+            : sum,
         0,
       ),
     [cart],
   );
 
   const alcoholSurcharge =
-    alcoholSurchargeEnabled && alcoholUnits > 0 ? round2(alcoholUnits * 5) : 0;
+    alcoholSurchargeEnabled && alcoholUnits > 0
+      ? round2(alcoholUnits * 5)
+      : 0;
 
-  const totalWithAlcoholSurcharge = round2(merchandiseTotal + alcoholSurcharge);
+  const alcoholDiscount =
+    alcoholDiscountEnabled && alcoholUnits > 0
+      ? round2(alcoholUnits * 5)
+      : 0;
+
+  const soupSurcharge =
+    soupSurchargeEnabled && soupUnits > 0 ? round2(soupUnits * 5) : 0;
+
+  // Recargo de envase: cuenta acumulable, +5 por cada click
+  const containerSurcharge =
+    containerUnits > 0 ? round2(containerSurchargeCount * 5) : 0;
+
+  const totalWithAlcoholSurcharge = round2(
+    merchandiseTotal +
+      alcoholSurcharge -
+      alcoholDiscount +
+      soupSurcharge +
+      containerSurcharge,
+  );
 
   const cardSurcharge =
-    paymentMethod === "TARJETA" ? round2(totalWithAlcoholSurcharge * 0.05) : 0;
+    paymentMethod === "TARJETA"
+      ? round2(totalWithAlcoholSurcharge * 0.0105)
+      : 0;
 
   const total = Math.round(totalWithAlcoholSurcharge + cardSurcharge);
 
@@ -170,7 +270,33 @@ export function VentasPage({ token }) {
     if (alcoholUnits === 0 && alcoholSurchargeEnabled) {
       setAlcoholSurchargeEnabled(false);
     }
-  }, [alcoholUnits, alcoholSurchargeEnabled]);
+
+    if (alcoholUnits === 0 && alcoholDiscountEnabled) {
+      setAlcoholDiscountEnabled(false);
+    }
+
+    if (soupUnits === 0 && soupSurchargeEnabled) {
+      setSoupSurchargeEnabled(false);
+    }
+
+    // Si ya no hay ninguna de las 4, resetear el contador de envase
+    if (containerUnits === 0 && containerSurchargeCount !== 0) {
+      setContainerSurchargeCount(0);
+    }
+
+    // Si quitaron cantidad y el contador quedó por encima del máximo, recortar
+    if (containerUnits > 0 && containerSurchargeCount > containerUnits) {
+      setContainerSurchargeCount(containerUnits);
+    }
+  }, [
+    alcoholUnits,
+    alcoholSurchargeEnabled,
+    alcoholDiscountEnabled,
+    soupUnits,
+    soupSurchargeEnabled,
+    containerUnits,
+    containerSurchargeCount,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -243,7 +369,11 @@ export function VentasPage({ token }) {
       setLoading(true);
 
       try {
-        const result = await searchSaleProducts(token, term, selectedClient?.id);
+        const result = await searchSaleProducts(
+          token,
+          term,
+          selectedClient?.id,
+        );
 
         if (active) {
           setProducts(result.productos);
@@ -277,7 +407,8 @@ export function VentasPage({ token }) {
       }
 
       const tag = event.target.tagName;
-      const isTyping = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+      const isTyping =
+        tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 
       if (isTyping || !cashShift) {
         return;
@@ -339,9 +470,15 @@ export function VentasPage({ token }) {
     }
 
     try {
-      const result = await searchSaleProducts(token, term, selectedClient?.id);
+      const result = await searchSaleProducts(
+        token,
+        term,
+        selectedClient?.id,
+      );
 
-      const exactProduct = result.productos.find((product) => product.coincidenciaExacta);
+      const exactProduct = result.productos.find(
+        (product) => product.coincidenciaExacta,
+      );
 
       if (exactProduct) {
         addProduct(exactProduct);
@@ -367,7 +504,6 @@ export function VentasPage({ token }) {
 
         if (value === "") {
           setError("");
-
           return { ...item, cantidad: "" };
         }
 
@@ -390,7 +526,11 @@ export function VentasPage({ token }) {
   }
 
   function removeProduct(presentationId) {
-    setCart((current) => current.filter((item) => item.presentacionId !== presentationId));
+    setCart((current) =>
+      current.filter(
+        (item) => item.presentacionId !== presentationId,
+      ),
+    );
 
     focusSearch();
   }
@@ -422,14 +562,21 @@ export function VentasPage({ token }) {
     setRepricing(true);
 
     try {
-      const presentationIds = cart.map((item) => item.presentacionId);
+      const presentationIds = cart.map(
+        (item) => item.presentacionId,
+      );
 
-      const result = await repriceCart(token, presentationIds, client?.id);
+      const result = await repriceCart(
+        token,
+        presentationIds,
+        client?.id,
+      );
 
       setCart((current) =>
         current.map((item) => {
           const updated = result.productos.find(
-            (product) => product.presentacionId === item.presentacionId,
+            (product) =>
+              product.presentacionId === item.presentacionId,
           );
 
           if (!updated) {
@@ -437,7 +584,9 @@ export function VentasPage({ token }) {
           }
 
           const cantidad =
-            Number(item.cantidad) > updated.stock ? String(updated.stock) : item.cantidad;
+            Number(item.cantidad) > updated.stock
+              ? String(updated.stock)
+              : item.cantidad;
 
           return { ...item, ...updated, cantidad };
         }),
@@ -465,13 +614,20 @@ export function VentasPage({ token }) {
     }
 
     if (
-      cart.some((item) => !Number.isFinite(Number(item.cantidad)) || Number(item.cantidad) <= 0)
+      cart.some(
+        (item) =>
+          !Number.isFinite(Number(item.cantidad)) ||
+          Number(item.cantidad) <= 0,
+      )
     ) {
       setError("Revisa la cantidad de los productos.");
       return;
     }
 
-    if (paymentMethod === "EFECTIVO" && (!receivedAmount || Number(receivedAmount) < total)) {
+    if (
+      paymentMethod === "EFECTIVO" &&
+      (!receivedAmount || Number(receivedAmount) < total)
+    ) {
       setError("El efectivo recibido es menor que el total.");
       return;
     }
@@ -486,8 +642,14 @@ export function VentasPage({ token }) {
         })),
         metodoPago: paymentMethod,
         clienteId: selectedClient?.id,
-        montoRecibido: paymentMethod === "EFECTIVO" ? receivedAmount : undefined,
+        montoRecibido:
+          paymentMethod === "EFECTIVO"
+            ? receivedAmount
+            : undefined,
         recargoBebidasAlcoholicas: alcoholSurchargeEnabled,
+        descuentoCervezaCaliente: alcoholDiscountEnabled,
+        recargoSopaInstantanea: soupSurchargeEnabled,
+        recargoEnvaseCantidad: containerSurchargeCount,
       });
 
       setLastSale(result.venta);
@@ -495,6 +657,9 @@ export function VentasPage({ token }) {
       setReceivedAmount("");
       setPaymentMethod("EFECTIVO");
       setAlcoholSurchargeEnabled(false);
+      setAlcoholDiscountEnabled(false);
+      setSoupSurchargeEnabled(false);
+      setContainerSurchargeCount(0);
       setSearch("");
       setProducts([]);
       setSelectedClient(null);
@@ -517,7 +682,8 @@ export function VentasPage({ token }) {
 
       {cashShift === null ? (
         <p className="cash-closed-warning">
-          La caja está cerrada. Abre <strong>Caja y turnos</strong> antes de vender.
+          La caja está cerrada. Abre <strong>Caja y turnos</strong> antes
+          de vender.
         </p>
       ) : null}
 
@@ -569,7 +735,11 @@ export function VentasPage({ token }) {
               <p>No se encontraron clientes.</p>
             ) : (
               clientResults.map((client) => (
-                <button key={client.id} onClick={() => selectSaleClient(client)} type="button">
+                <button
+                  key={client.id}
+                  onClick={() => selectSaleClient(client)}
+                  type="button"
+                >
                   <strong>{client.nombre}</strong>
                   <small>{client.telefono || "Sin teléfono"}</small>
                 </button>
@@ -583,7 +753,16 @@ export function VentasPage({ token }) {
         <section className="sales-catalog">
           <form className="sales-search" onSubmit={handleSearch}>
             <span aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <circle cx="11" cy="11" r="7" />
                 <path d="m21 21-4.3-4.3" />
               </svg>
@@ -606,7 +785,9 @@ export function VentasPage({ token }) {
           <div className="sales-catalog__heading">
             <h2>Productos</h2>
 
-            <small>El precio mostrado ya corresponde al turno actual.</small>
+            <small>
+              El precio mostrado ya corresponde al turno actual.
+            </small>
           </div>
 
           {loading ? (
@@ -632,13 +813,16 @@ export function VentasPage({ token }) {
                     <small>{product.presentacion}</small>
                   </span>
 
-                  <span className="sales-product-card__price">L {formatMoney(product.precio)}</span>
+                  <span className="sales-product-card__price">
+                    L {formatMoney(product.precio)}
+                  </span>
 
                   <span className="sales-product-card__details">
                     <small>{priceLabel(product, selectedClient)}</small>
 
                     <small>
-                      {formatQuantity(product.stock)} {unitLabel(product.tipoVenta)}
+                      {formatQuantity(product.stock)}{" "}
+                      {unitLabel(product.tipoVenta)}
                     </small>
                   </span>
                 </button>
@@ -660,28 +844,46 @@ export function VentasPage({ token }) {
           {cart.length === 0 ? (
             <div className="sales-cart__empty">
               <span aria-hidden="true">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="28"
+                  height="28"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <circle cx="9" cy="21" r="1" />
                   <circle cx="19" cy="21" r="1" />
                   <path d="M2.5 3h2l2.8 12.5a2 2 0 0 0 2 1.6h8.4a2 2 0 0 0 2-1.6L21.5 8H6" />
                 </svg>
               </span>
+
               <strong>Carrito vacío</strong>
               <small>Escanea un producto para comenzar.</small>
             </div>
           ) : (
             <div className="sales-cart__items">
               {cart.map((item) => (
-                <article className="cart-item" key={item.presentacionId}>
+                <article
+                  className="cart-item"
+                  key={item.presentacionId}
+                >
                   <div className="cart-item__row-top">
-                    <strong className="cart-item__name" title={item.nombre}>
+                    <strong
+                      className="cart-item__name"
+                      title={item.nombre}
+                    >
                       {item.nombre}
                     </strong>
 
                     <button
                       aria-label={`Quitar ${item.nombre}`}
                       className="cart-item__remove"
-                      onClick={() => removeProduct(item.presentacionId)}
+                      onClick={() =>
+                        removeProduct(item.presentacionId)
+                      }
                       type="button"
                     >
                       ×
@@ -698,13 +900,20 @@ export function VentasPage({ token }) {
                       className="cart-item__qty"
                       max={item.stock}
                       min={
-                        item.tipoVenta === "PESO" || item.tipoVenta === "VOLUMEN"
+                        item.tipoVenta === "PESO" ||
+                        item.tipoVenta === "VOLUMEN"
                           ? "0.001"
                           : "1"
                       }
-                      onChange={(event) => updateQuantity(item.presentacionId, event.target.value)}
+                      onChange={(event) =>
+                        updateQuantity(
+                          item.presentacionId,
+                          event.target.value,
+                        )
+                      }
                       step={
-                        item.tipoVenta === "PESO" || item.tipoVenta === "VOLUMEN"
+                        item.tipoVenta === "PESO" ||
+                        item.tipoVenta === "VOLUMEN"
                           ? "0.001"
                           : "1"
                       }
@@ -713,7 +922,10 @@ export function VentasPage({ token }) {
                     />
 
                     <strong className="cart-item__subtotal">
-                      L {formatMoney(item.precio * Number(item.cantidad || 0))}
+                      L{" "}
+                      {formatMoney(
+                        item.precio * Number(item.cantidad || 0),
+                      )}
                     </strong>
                   </div>
                 </article>
@@ -723,20 +935,104 @@ export function VentasPage({ token }) {
 
           <div className="checkout">
             {alcoholUnits > 0 ? (
+              <>
+                <button
+                  className={`alcohol-surcharge-toggle ${
+                    alcoholSurchargeEnabled
+                      ? "alcohol-surcharge-toggle--active"
+                      : ""
+                  }`}
+                  onClick={() =>
+                    setAlcoholSurchargeEnabled(
+                      (current) => !current,
+                    )
+                  }
+                  type="button"
+                >
+                  <span>
+                    {alcoholSurchargeEnabled ? "✓ " : "+ "}
+                    Tomar acá (+5)
+                  </span>
+
+                  <strong>
+                    L {formatMoney(alcoholUnits * 5)}
+                  </strong>
+                </button>
+
+                <button
+                  className={`alcohol-surcharge-toggle ${
+                    alcoholDiscountEnabled
+                      ? "alcohol-surcharge-toggle--active"
+                      : ""
+                  }`}
+                  onClick={() =>
+                    setAlcoholDiscountEnabled(
+                      (current) => !current,
+                    )
+                  }
+                  type="button"
+                >
+                  <span>
+                    {alcoholDiscountEnabled ? "✓ " : "- "}
+                    Cerveza caliente (-5)
+                  </span>
+
+                  <strong>
+                    -L {formatMoney(alcoholUnits * 5)}
+                  </strong>
+                </button>
+
+                {/* SOLO aparece si hay Barena/Salvavida Botella/Kaguama */}
+                {containerUnits > 0 ? (
+                  <button
+                    className={`alcohol-surcharge-toggle ${
+                      containerSurchargeCount > 0
+                        ? "alcohol-surcharge-toggle--active"
+                        : ""
+                    }`}
+                    onClick={() =>
+                      setContainerSurchargeCount((current) =>
+                        current >= containerUnits ? 0 : current + 1,
+                      )
+                    }
+                    type="button"
+                  >
+                    <span>
+                      {containerSurchargeCount > 0 ? "✓ " : "+ "}
+                      Envase{" "}
+                      {containerSurchargeCount > 0
+                        ? `x${containerSurchargeCount} `
+                        : ""}
+                      (+5)
+                    </span>
+
+                    <strong>
+                      L {formatMoney(containerSurchargeCount * 5)}
+                    </strong>
+                  </button>
+                ) : null}
+              </>
+            ) : null}
+
+            {soupUnits > 0 ? (
               <button
                 className={`alcohol-surcharge-toggle ${
-                  alcoholSurchargeEnabled ? "alcohol-surcharge-toggle--active" : ""
+                  soupSurchargeEnabled
+                    ? "alcohol-surcharge-toggle--active"
+                    : ""
                 }`}
-                onClick={() => setAlcoholSurchargeEnabled((current) => !current)}
+                onClick={() =>
+                  setSoupSurchargeEnabled((current) => !current)
+                }
                 type="button"
               >
                 <span>
-                  {alcoholSurchargeEnabled ? "✓ " : "+ "}
-                  Recargo por tomar acá ({alcoholUnits}{" "}
-                  {alcoholUnits === 1 ? "unidad" : "unidades"})
+                  {soupSurchargeEnabled ? "✓ " : "+ "}
+                  Recargo por preparar ({soupUnits}{" "}
+                  {soupUnits === 1 ? "unidad" : "unidades"})
                 </span>
 
-                <strong>L {formatMoney(alcoholUnits * 5)}</strong>
+                <strong>L {formatMoney(soupUnits * 5)}</strong>
               </button>
             ) : null}
 
@@ -754,7 +1050,9 @@ export function VentasPage({ token }) {
                     <input
                       checked={paymentMethod === method.value}
                       name="metodoPago"
-                      onChange={() => selectPaymentMethod(method.value)}
+                      onChange={() =>
+                        selectPaymentMethod(method.value)
+                      }
                       type="radio"
                     />
 
@@ -775,7 +1073,12 @@ export function VentasPage({ token }) {
 
                   <input
                     autoComplete="off"
-                    onChange={(event) => updateMoneyValue(setReceivedAmount, event.target.value)}
+                    onChange={(event) =>
+                      updateMoneyValue(
+                        setReceivedAmount,
+                        event.target.value,
+                      )
+                    }
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
                         event.preventDefault();
@@ -794,26 +1097,50 @@ export function VentasPage({ token }) {
                 </div>
               </div>
             ) : (
-              <p className="electronic-payment-note">Confirma el pago antes de pulsar Cobrar.</p>
+              <p className="electronic-payment-note">
+                Confirma el pago antes de pulsar Cobrar.
+              </p>
             )}
 
             <button
               className="charge-button"
-              disabled={charging || cart.length === 0 || !cashShift}
+              disabled={
+                charging ||
+                cart.length === 0 ||
+                !cashShift
+              }
               onClick={handleCharge}
               type="button"
             >
-              {charging ? "Cobrando..." : `Cobrar L ${formatMoney(total)}`}
+              {charging
+                ? "Cobrando..."
+                : `Cobrar L ${formatMoney(total)}`}
             </button>
           </div>
         </aside>
       </div>
 
       {lastSale ? (
-        <div className="sale-confirmation" role="dialog" aria-modal="true">
+        <div
+          className="sale-confirmation"
+          role="dialog"
+          aria-modal="true"
+        >
           <div className="sale-confirmation__card">
-            <span className="sale-confirmation__icon" aria-hidden="true">
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <span
+              className="sale-confirmation__icon"
+              aria-hidden="true"
+            >
+              <svg
+                width="26"
+                height="26"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M20 6 9 17l-5-5" />
               </svg>
             </span>
@@ -821,15 +1148,23 @@ export function VentasPage({ token }) {
             <p className="eyebrow">Venta completada</p>
             <h2>Venta #{lastSale.id}</h2>
 
-            <strong className="sale-confirmation__total">L {formatMoney(lastSale.total)}</strong>
+            <strong className="sale-confirmation__total">
+              L {formatMoney(lastSale.total)}
+            </strong>
 
             <p>
-              {PAYMENT_METHODS.find((method) => method.value === lastSale.pago?.metodo)?.label}
+              {
+                PAYMENT_METHODS.find(
+                  (method) =>
+                    method.value === lastSale.pago?.metodo,
+                )?.label
+              }
             </p>
 
             {lastSale.cliente ? (
               <p className="sale-confirmation__client">
-                Cliente: <strong>{lastSale.cliente.nombre}</strong>
+                Cliente:{" "}
+                <strong>{lastSale.cliente.nombre}</strong>
               </p>
             ) : null}
 
@@ -837,7 +1172,9 @@ export function VentasPage({ token }) {
               <div className="sale-confirmation__change">
                 <span>Entregar cambio</span>
 
-                <strong>L {formatMoney(lastSale.pago.cambio)}</strong>
+                <strong>
+                  L {formatMoney(lastSale.pago.cambio)}
+                </strong>
               </div>
             ) : null}
 

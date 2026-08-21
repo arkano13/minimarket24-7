@@ -18,11 +18,6 @@ const ALCOHOL_DISCOUNT_PER_UNIT = new Prisma.Decimal(5);
 
 const ALCOHOL_CATEGORY_KEYWORDS = ["cerveza", "alcoh", "licor"];
 
-// Recargo por preparación de sopa instantánea: L5 por cada unidad en el carrito.
-const SOUP_SURCHARGE_PER_UNIT = new Prisma.Decimal(5);
-
-const SOUP_CATEGORY_KEYWORDS = ["sopa instantanea", "sopa instantánea", "sopas instantaneas"];
-
 // Recargo de envase: L5 por cada click del botón "Envase" (máx. una vez
 // por cada unidad de Barena/Salvavida Botella/Kaguama en el carrito).
 const CONTAINER_SURCHARGE_PER_UNIT = new Prisma.Decimal(5);
@@ -39,6 +34,11 @@ function hasContainerSurcharge(productName) {
 
   return CONTAINER_SURCHARGE_PRODUCT_NAMES.some((name) => normalized.includes(name));
 }
+
+// Recargo por preparación de sopa instantánea: L5 por cada unidad en el carrito.
+const SOUP_SURCHARGE_PER_UNIT = new Prisma.Decimal(5);
+
+const SOUP_CATEGORY_KEYWORDS = ["sopa instantanea", "sopa instantánea", "sopas instantaneas"];
 
 function isSoupCategory(categoryName) {
   if (!categoryName) {
@@ -197,6 +197,50 @@ function principalBarcode(presentation) {
     null
   );
 }
+
+// Para un producto compuesto (ej. "Saco de pollo mixto"), el stock
+// disponible no es el suyo propio (no se lleva), sino lo que alcance
+// según el stock real de sus componentes y la cantidad fija que cada
+// uno descuenta. Ej. si Pierna tiene 40 lb y Pechuga 30 lb, y ambas
+// descuentan 56 lb por saco, solo alcanza para lo que dé el componente
+// más limitado (el que se acaba primero).
+function compositeAvailableStock(producto) {
+  if (!producto.esCompuesto || !producto.componentes?.length) {
+    return null;
+  }
+
+  let minStock = Infinity;
+
+  for (const component of producto.componentes) {
+    const cantidad = Number(component.cantidad);
+
+    if (cantidad <= 0) {
+      continue;
+    }
+
+    const available = Number(component.productoComponente.stockActual) / cantidad;
+
+    if (available < minStock) {
+      minStock = available;
+    }
+  }
+
+  return Number.isFinite(minStock) ? minStock : 0;
+}
+
+const COMPONENT_INCLUDE = {
+  componentes: {
+    include: {
+      productoComponente: {
+        select: {
+          id: true,
+          nombre: true,
+          stockActual: true,
+        },
+      },
+    },
+  },
+};
 
 function serializeSale(sale) {
   const payment = sale.pagos[0] ?? null;
@@ -393,6 +437,8 @@ export async function searchSaleProducts(search = "", clientIdInput = null) {
               nombre: true,
             },
           },
+
+          ...COMPONENT_INCLUDE,
         },
       },
 
@@ -446,6 +492,11 @@ export async function searchSaleProducts(search = "", clientIdInput = null) {
 
       const barcode = principalBarcode(presentation);
 
+      const compositeStock = compositeAvailableStock(presentation.producto);
+
+      const baseStock =
+        compositeStock !== null ? compositeStock : Number(presentation.producto.stockActual);
+
       return {
         presentacionId: presentation.id,
 
@@ -463,7 +514,7 @@ export async function searchSaleProducts(search = "", clientIdInput = null) {
 
         categoria: presentation.producto.categoria,
 
-        stock: Number(presentation.producto.stockActual) / factor,
+        stock: baseStock / factor,
 
         precio: Number(currentPrice.price),
 
@@ -544,6 +595,8 @@ export async function repriceCartForClient(
               nombre: true,
             },
           },
+
+          ...COMPONENT_INCLUDE,
         },
       },
 
@@ -581,6 +634,11 @@ export async function repriceCartForClient(
 
     const barcode = principalBarcode(presentation);
 
+    const compositeStock = compositeAvailableStock(presentation.producto);
+
+    const baseStock =
+      compositeStock !== null ? compositeStock : Number(presentation.producto.stockActual);
+
     return {
       presentacionId: presentation.id,
       productoId: presentation.producto.id,
@@ -590,7 +648,7 @@ export async function repriceCartForClient(
       codigoBarra: barcode,
       sku: presentation.producto.sku,
       categoria: presentation.producto.categoria,
-      stock: Number(presentation.producto.stockActual) / factor,
+      stock: baseStock / factor,
       precio: Number(currentPrice.price),
       precioOrigen: currentPrice.origin,
       turno: currentPrice.shift,
@@ -697,6 +755,7 @@ export async function createSale(data, userId) {
         producto: {
           include: {
             categoria: true,
+            ...COMPONENT_INCLUDE,
           },
         },
 
@@ -754,17 +813,40 @@ export async function createSale(data, userId) {
 
       const currentDeduction = deductionsByProduct.get(presentation.productoId);
 
-      deductionsByProduct.set(
-        presentation.productoId,
+      if (presentation.producto.esCompuesto && presentation.producto.componentes?.length) {
+        // Producto compuesto: se descuenta una cantidad FIJA de cada
+        // componente por cada unidad vendida del padre (ej. 56 lb pierna
+        // + 56 lb pechuga por cada "saco" vendido), no una proporción.
+        for (const component of presentation.producto.componentes) {
+          const cantidadFija = new Prisma.Decimal(component.cantidad);
 
-        {
-          product: presentation.producto,
+          const componentQuantity = quantity.mul(cantidadFija);
 
-          quantity: currentDeduction
-            ? currentDeduction.quantity.add(inventoryQuantity)
-            : inventoryQuantity,
-        },
-      );
+          const existingComponentDeduction = deductionsByProduct.get(
+            component.productoComponenteId,
+          );
+
+          deductionsByProduct.set(component.productoComponenteId, {
+            product: component.productoComponente,
+
+            quantity: existingComponentDeduction
+              ? existingComponentDeduction.quantity.add(componentQuantity)
+              : componentQuantity,
+          });
+        }
+      } else {
+        deductionsByProduct.set(
+          presentation.productoId,
+
+          {
+            product: presentation.producto,
+
+            quantity: currentDeduction
+              ? currentDeduction.quantity.add(inventoryQuantity)
+              : inventoryQuantity,
+          },
+        );
+      }
 
       details.push({
         productoId: presentation.productoId,

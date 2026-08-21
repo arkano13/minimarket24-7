@@ -136,6 +136,7 @@ model Producto {
   stockMinimo        Decimal                @default(0) @map("stock_minimo") @db.Decimal(16, 3)
   costoPromedio      Decimal                @default(0) @map("costo_promedio") @db.Decimal(14, 4)
   controlaInventario Boolean                @default(true) @map("controla_inventario")
+  esCompuesto        Boolean                @default(false) @map("es_compuesto")
   activo             Boolean                @default(true)
   creadoEn           DateTime               @default(now()) @map("creado_en")
   actualizadoEn      DateTime               @updatedAt @map("actualizado_en")
@@ -145,10 +146,34 @@ model Producto {
   detallesVenta      VentaDetalle[]
   detallesCompra     CompraDetalle[]
   detallesDevolucion DevolucionDetalle[]
+  componentes        ComponenteProducto[]    @relation("componentesDelPadre")
+  esComponenteDe     ComponenteProducto[]    @relation("productoEsComponenteDe")
 
   @@index([nombre])
   @@index([categoriaId])
   @@map("productos")
+}
+
+// Un producto "compuesto" (ej. Saco de pollo mixto) no tiene stock propio:
+// al venderlo, se descuenta una cantidad FIJA de cada componente real
+// (ej. Pierna 56 lb, Pechuga 56 lb) por cada unidad vendida del padre.
+model ComponenteProducto {
+  id                    Int      @id @default(autoincrement())
+  productoPadreId       Int      @map("producto_padre_id")
+  productoComponenteId  Int      @map("producto_componente_id")
+
+  // Cantidad de inventario del componente que se descuenta por cada
+  // unidad vendida del padre. Ya convertida a unidades de inventario
+  // (ej. gramos si el componente se vende por libra).
+  cantidad              Decimal  @db.Decimal(16, 3)
+
+  creadoEn              DateTime @default(now()) @map("creado_en")
+
+  productoPadre         Producto @relation("componentesDelPadre", fields: [productoPadreId], references: [id], onDelete: Cascade)
+  productoComponente    Producto @relation("productoEsComponenteDe", fields: [productoComponenteId], references: [id], onDelete: Restrict)
+
+  @@unique([productoPadreId, productoComponenteId])
+  @@map("componentes_producto")
 }
 
 model PresentacionProducto {

@@ -1,4 +1,4 @@
-  const API_URL = `${import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001"}/api`;
+const API_URL = `${import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001"}/api`;
 
   async function request(path, options = {}) {
     const response = await fetch(`${API_URL}${path}`, {
@@ -100,6 +100,24 @@
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(product),
+    });
+  }
+
+  export function getProductComponents(token, productId) {
+    return request(`/productos/${productId}/componentes`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  }
+
+  export function setProductComponents(token, productId, componentes) {
+    return request(`/productos/${productId}/componentes`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ componentes }),
     });
   }
 
@@ -591,6 +609,43 @@
     const query = params.size ? `?${params.toString()}` : "";
 
     return request(`/bitacora${query}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  }
+
+    export function listPresentations(token, productId) {
+    return request(`/productos/${productId}/presentaciones`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  }
+
+  export function addPresentation(token, productId, data) {
+    return request(`/productos/${productId}/presentaciones`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+    });
+  }
+
+  export function updatePresentation(token, productId, presentationId, data) {
+    return request(`/productos/${productId}/presentaciones/${presentationId}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+    });
+  }
+
+  export function removePresentation(token, productId, presentationId) {
+    return request(`/productos/${productId}/presentaciones/${presentationId}`, {
+      method: "DELETE",
       headers: {
         Authorization: `Bearer ${token}`,
       },

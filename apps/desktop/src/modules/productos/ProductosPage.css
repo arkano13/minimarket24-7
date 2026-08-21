@@ -118,6 +118,244 @@
   padding-top: 2px;
 }
 
+/* --- Otras presentaciones (six-pack, caja, etc.) --- */
+
+.presentations-field {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.presentations-field legend {
+  padding: 0;
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+.presentations-field__hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.presentation-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.presentation-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  background: var(--surface);
+}
+
+.presentation-list__name {
+  flex: 1;
+  display: grid;
+  gap: 2px;
+}
+
+.presentation-list__name strong {
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+.presentation-list__name small {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.presentation-list__price {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 0.88rem;
+}
+
+.presentation-list__actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 10px;
+}
+
+.presentation-list__remove {
+  color: var(--danger);
+}
+
+.presentation-count {
+  display: block;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.empty-state--compact {
+  margin: 0;
+  padding: 10px 0;
+  font-size: 0.84rem;
+}
+
+/* --- Producto compuesto (familias / componentes) --- */
+
+.composite-product {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.composite-product legend {
+  padding: 0;
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+.composite-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.composite-toggle:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.composite-toggle input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+
+.composite-toggle span {
+  display: grid;
+  gap: 3px;
+}
+
+.composite-toggle strong {
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.composite-toggle small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.composite-editor {
+  display: grid;
+  gap: 10px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  background: var(--bg);
+}
+
+.composite-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.composite-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  background: var(--surface);
+}
+
+.composite-list li > span:first-child {
+  flex: 1;
+  color: var(--ink);
+  font-size: 0.88rem;
+}
+
+.composite-list__proportion {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.composite-list__proportion input {
+  width: 72px;
+  min-height: 32px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  text-align: right;
+}
+
+.composite-list__proportion span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.composite-list .text-button {
+  flex: 0 0 auto;
+  color: var(--danger);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.composite-sum {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.composite-results {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.composite-results button {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  color: var(--ink);
+  background: var(--surface);
+  text-align: left;
+  font-size: 0.86rem;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.composite-results button:hover {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
 /* --- Detalles opcionales (details/summary) --- */
 
 .optional-fields {
@@ -200,4 +438,4 @@
   .price-mode__options {
     grid-template-columns: 1fr;
   }
-} 
+}

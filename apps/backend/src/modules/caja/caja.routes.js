@@ -9,6 +9,7 @@ import {
   createCashMovement,
   getCurrentCashShift,
   openCashShift,
+  listMyCashActivity,
 } from "./caja.service.js";
 
 export const cashRouter = Router();
@@ -18,12 +19,24 @@ cashRouter.use(
   requireModule("CAJA"),
 );
 
+cashRouter.get("/mi-actividad", async (req, res, next) => {
+  try {
+    res.json(await listMyCashActivity(req.auth.usuario.id, {
+      fecha: req.query.fecha,
+      tipo: req.query.tipo,
+      page: req.query.page,
+    }));
+  } catch (error) {
+    next(error);
+  }
+});
+
 cashRouter.get(
   "/actual",
   async (req, res, next) => {
     try {
       const shift =
-        await getCurrentCashShift();
+        await getCurrentCashShift(req.auth.usuario.id);
 
       res.json({
         turno: shift,

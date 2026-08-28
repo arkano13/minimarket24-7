@@ -4,6 +4,66 @@ import { AppError } from "../../utils/AppError.js";
 
 const MOVEMENT_TYPES = new Set(["INGRESO", "RETIRO"]);
 
+// Identity comes from the authenticated session, never from client filters.
+export async function listMyCashActivity(userId, filters = {}) {
+  if (!Number.isSafeInteger(userId) || userId <= 0) {
+    throw new AppError("Sesión no válida.", 401);
+  }
+  const fecha = filters.fecha ?? new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const calendarDate = typeof fecha === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fecha)
+    ? new Date(`${fecha}T00:00:00Z`) : new Date(NaN);
+  if (!Number.isFinite(calendarDate.getTime()) || calendarDate.toISOString().slice(0, 10) !== fecha) {
+    throw new AppError("La fecha no es válida.", 400);
+  }
+  const tipo = filters.tipo ?? "VENTA";
+  if (!["VENTA", "INGRESO", "RETIRO"].includes(tipo)) {
+    throw new AppError("Selecciona ventas, ingresos o retiros.", 400);
+  }
+  const page = Number(filters.page ?? 1);
+  if (!Number.isSafeInteger(page) || page < 1 || page > 10000) {
+    throw new AppError("La página no es válida.", 400);
+  }
+  const from = new Date(`${fecha}T00:00:00-06:00`);
+  const to = new Date(from.getTime() + 86_400_000);
+  const query = {
+    where: { usuarioId: userId, creadoEn: { gte: from, lt: to } },
+    orderBy: [{ creadoEn: "desc" }, { id: "desc" }],
+    skip: (page - 1) * 20,
+    take: 21,
+  };
+  let records;
+  if (tipo === "VENTA") {
+    const sales = await prisma.venta.findMany({
+      ...query,
+      select: {
+        id: true, turnoCajaId: true, creadoEn: true, total: true, estado: true,
+        detalles: {
+          orderBy: { id: "asc" },
+          select: { id: true, productoNombre: true, presentacionNombre: true, cantidad: true, subtotal: true },
+        },
+        pagos: { select: { metodo: true, monto: true } },
+      },
+    });
+    records = sales.map((sale) => ({
+      id: sale.id, tipo, turnoCajaId: sale.turnoCajaId, creadoEn: sale.creadoEn,
+      monto: Number(sale.total), estado: sale.estado,
+      productos: sale.detalles.map((item) => ({
+        id: item.id, nombre: item.productoNombre, presentacion: item.presentacionNombre,
+        cantidad: Number(item.cantidad), subtotal: Number(item.subtotal),
+      })),
+      pagos: sale.pagos.map((payment) => ({ metodo: payment.metodo, monto: Number(payment.monto) })),
+    }));
+  } else {
+    const movements = await prisma.movimientoCaja.findMany({
+      ...query,
+      where: { ...query.where, tipo },
+      select: { id: true, turnoCajaId: true, creadoEn: true, monto: true, motivo: true, tipo: true },
+    });
+    records = movements.map((movement) => ({ ...movement, monto: Number(movement.monto) }));
+  }
+  return { registros: records.slice(0, 20), page, hayMas: records.length > 20, fecha, tipo };
+}
+
 const SHIFT_INCLUDE = {
   usuarioApertura: {
     select: {
@@ -135,7 +195,7 @@ function calculateTotals(shift) {
   };
 }
 
-function serializeShift(shift) {
+function serializeShift(shift, userId) {
   const totals = calculateTotals(shift);
 
   return {
@@ -174,7 +234,7 @@ function serializeShift(shift) {
       retiros: Number(totals.withdrawal),
     },
 
-    movimientos: shift.movimientos.map(
+    movimientos: shift.movimientos.filter((movement) => movement.usuario.id === userId).map(
       (movement) => ({
         id: movement.id,
         tipo: movement.tipo,
@@ -201,11 +261,11 @@ async function findOpenShift(client = prisma) {
   });
 }
 
-export async function getCurrentCashShift() {
+export async function getCurrentCashShift(userId) {
   const shift = await findOpenShift();
 
   return shift
-    ? serializeShift(shift)
+    ? serializeShift(shift, userId)
     : null;
 }
 
@@ -243,7 +303,7 @@ export async function openCashShift(data, userId) {
           include: SHIFT_INCLUDE,
         });
 
-      return serializeShift(shift);
+      return serializeShift(shift, userId);
     },
   );
 }
@@ -310,7 +370,7 @@ export async function createCashMovement(
       const updatedShift =
         await findOpenShift(transaction);
 
-      return serializeShift(updatedShift);
+      return serializeShift(updatedShift, userId);
     },
   );
 }
@@ -361,7 +421,7 @@ export async function closeCashShift(
           include: SHIFT_INCLUDE,
         });
 
-      return serializeShift(closedShift);
+      return serializeShift(closedShift, userId);
     },
   );
 }

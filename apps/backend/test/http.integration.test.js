@@ -12,6 +12,18 @@ const state = {
 };
 
 const prisma = {
+  venta: {
+    async findMany(query) {
+      state.cashActivityQueries.push(query);
+      return [{ id: query.where.usuarioId, total: "20", estado: "COMPLETADA", detalles: [], pagos: [] }];
+    },
+  },
+  movimientoCaja: {
+    async findMany(query) {
+      state.cashActivityQueries.push(query);
+      return [{ id: query.where.usuarioId, monto: "20", tipo: query.where.tipo, motivo: "Propio" }];
+    },
+  },
   usuario: {
     async findUnique() {
       return state.user;
@@ -103,6 +115,28 @@ beforeEach(() => {
   state.moduleAccess = { permitido: true, modulo: { activo: true } };
   state.categories = [{ id: 1, nombre: "Bebidas" }];
   state.audit = [];
+  state.cashActivityQueries = [];
+});
+
+test("mi actividad exige CAJA y usa el usuario de sesión aunque se envíe otro ID", async () => {
+  const missing = await request("/api/caja/mi-actividad");
+  assert.equal(missing.response.status, 401);
+  const token = await login();
+  for (const role of ["CAJERO", "ADMINISTRADOR"]) {
+    state.user.rol = role;
+    for (const tipo of ["VENTA", "INGRESO", "RETIRO"]) {
+      const result = await request(`/api/caja/mi-actividad?usuarioId=999&tipo=${tipo}&fecha=2026-08-27`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      assert.equal(result.response.status, 200);
+      assert.equal(state.cashActivityQueries.at(-1).where.usuarioId, 2);
+      assert.equal(result.body.registros[0].id, 2);
+    }
+  }
+  state.moduleAccess.permitido = false;
+  const blocked = await request("/api/caja/mi-actividad", { headers: { Authorization: `Bearer ${token}` } });
+  assert.equal(blocked.response.status, 403);
+  assert.equal(state.cashActivityQueries.length, 6);
 });
 
 test("responde 404 JSON en rutas inexistentes", async () => {

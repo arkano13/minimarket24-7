@@ -46,6 +46,11 @@ const turnoCaja = {
 };
 
 const movimientoCaja = {
+  async findMany(query) {
+    state.activityQuery = query;
+    return state.activity.filter((item) => item.usuarioId === query.where.usuarioId && item.tipo === query.where.tipo)
+      .slice(query.skip, query.skip + query.take);
+  },
   async create({ data }) {
     const movement = {
       id: ++state.movementId,
@@ -60,6 +65,13 @@ const movimientoCaja = {
 
 const transaction = { turnoCaja, movimientoCaja };
 const prisma = {
+  venta: {
+    async findMany(query) {
+      state.activityQuery = query;
+      return state.activity.filter((item) => item.usuarioId === query.where.usuarioId)
+        .slice(query.skip, query.skip + query.take);
+    },
+  },
   turnoCaja,
   movimientoCaja,
   async $transaction(callback) {
@@ -75,11 +87,72 @@ const {
   createCashMovement,
   getCurrentCashShift,
   openCashShift,
+  listMyCashActivity,
 } = await import("../src/modules/caja/caja.service.js");
 
 beforeEach(() => {
   state.shift = null;
   state.movementId = 0;
+  state.activity = [];
+  state.activityQuery = null;
+});
+
+test("mi actividad pagina ventas propias, incluidas canceladas, con fecha de Honduras", async () => {
+  state.activity = Array.from({ length: 22 }, (_, index) => ({
+    id: index + 1, usuarioId: 2, turnoCajaId: 1, creadoEn: new Date("2026-08-27T20:00:00Z"),
+    total: "50", estado: index === 0 ? "CANCELADA" : "COMPLETADA",
+    detalles: [{ id: 1, productoNombre: "Pan", presentacionNombre: "Unidad", cantidad: "2", subtotal: "50" }],
+    pagos: [{ metodo: "EFECTIVO", monto: "50" }],
+  }));
+  state.activity.unshift({ ...state.activity[0], id: 999, usuarioId: 3 });
+  const first = await listMyCashActivity(2, { fecha: "2026-08-27", usuarioId: 3 });
+  assert.equal(first.registros.length, 20);
+  assert.equal(first.hayMas, true);
+  assert.equal(first.registros[0].id, 1);
+  assert.equal(first.registros[0].estado, "CANCELADA");
+  assert.equal(first.registros[0].productos[0].cantidad, 2);
+  assert.equal(state.activityQuery.where.usuarioId, 2);
+  assert.equal(state.activityQuery.where.creadoEn.gte.toISOString(), "2026-08-27T06:00:00.000Z");
+  assert.equal(state.activityQuery.where.creadoEn.lt.toISOString(), "2026-08-28T06:00:00.000Z");
+  const second = await listMyCashActivity(2, { fecha: "2026-08-27", page: 2 });
+  assert.deepEqual(second.registros.map((item) => item.id), [21, 22]);
+  assert.equal(second.hayMas, false);
+});
+
+test("mi actividad filtra ingresos y retiros por autor, no por quien abrió caja", async () => {
+  state.activity = [
+    { id: 1, usuarioId: 2, tipo: "INGRESO", monto: "25", motivo: "Cambio" },
+    { id: 2, usuarioId: 3, tipo: "INGRESO", monto: "80", motivo: "Otro usuario" },
+    { id: 3, usuarioId: 2, tipo: "RETIRO", monto: "10", motivo: "Pago" },
+  ];
+  const incomes = await listMyCashActivity(2, { tipo: "INGRESO" });
+  assert.deepEqual(incomes.registros.map((item) => item.id), [1]);
+  assert.equal(incomes.registros[0].monto, 25);
+  const withdrawals = await listMyCashActivity(2, { tipo: "RETIRO" });
+  assert.deepEqual(withdrawals.registros.map((item) => item.id), [3]);
+});
+
+test("valida identidad, fecha, tipo y página antes de consultar actividad", async () => {
+  await assert.rejects(() => listMyCashActivity(undefined), (error) => error.status === 401);
+  for (const filters of [{ fecha: "2026-02-30" }, { fecha: "" }, { tipo: "TODOS" }, { page: -1 }, { page: "abc" }]) {
+    await assert.rejects(() => listMyCashActivity(2, filters), (error) => error.status === 400);
+  }
+  assert.equal(state.activityQuery, null);
+});
+
+test("caja no expone movimientos ajenos pero conserva el saldo compartido", async () => {
+  state.shift = makeShift({ movimientos: [
+    { id: 1, tipo: "INGRESO", monto: "20", usuario: { id: 2 } },
+    { id: 2, tipo: "INGRESO", monto: "80", usuario: { id: 3 } },
+  ] });
+  const current = await getCurrentCashShift(2);
+  assert.equal(current.efectivoEsperado, 600);
+  assert.deepEqual(current.movimientos.map((item) => item.id), [1]);
+  const updated = await createCashMovement({ tipo: "INGRESO", monto: 10, motivo: "Cambio" }, 2);
+  assert.ok(updated.movimientos.every((item) => item.usuario.id === 2));
+  const closed = await closeCashShift({ efectivoContado: 610 }, 2);
+  assert.equal(closed.diferencia, 0);
+  assert.ok(closed.movimientos.every((item) => item.usuario.id === 2));
 });
 
 test("no permite abrir una segunda caja", async () => {
@@ -123,7 +196,7 @@ test("calcula efectivo, tarjeta, transferencia, ingresos y retiros", async () =>
     ],
   });
 
-  const result = await getCurrentCashShift();
+  const result = await getCurrentCashShift(2);
 
   assert.equal(result.efectivoEsperado, 590);
   assert.deepEqual(result.totales, {

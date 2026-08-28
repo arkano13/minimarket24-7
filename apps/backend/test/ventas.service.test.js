@@ -277,3 +277,21 @@ test("no crea la venta si falta inventario o efectivo", async () => {
   );
   assert.equal(state.createdSaleData, null);
 });
+
+test("tarjeta multiplica el total por 1.05 y conserva el redondeo al lempira", async () => {
+  for (const [precio, esperado] of [[100, 105], [200, 210], [150, 158]]) {
+    state.salePresentations = [presentation({ precioBase: String(precio) })];
+    const result = await createSale({
+      productos: [{ presentacionId: 10, cantidad: 1 }],
+      metodoPago: "TARJETA",
+    }, 2);
+    assert.equal(result.total, esperado);
+    assert.equal(Number(state.createdSaleData.pagos.create.monto), esperado);
+  }
+  state.salePresentations = [presentation({ precioBase: "100" })];
+  const transfer = await createSale({
+    productos: [{ presentacionId: 10, cantidad: 1 }],
+    metodoPago: "TRANSFERENCIA",
+  }, 2);
+  assert.equal(transfer.total, 100);
+});

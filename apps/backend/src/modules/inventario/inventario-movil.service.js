@@ -32,6 +32,18 @@ async function searchableProducts() {
   });
 }
 
+export async function searchMobileProducts(search) {
+  const term = normalized(search);
+  if (term.length < 2) return { productos: [] };
+  const products = await searchableProducts();
+  return { productos: products.filter((product) => normalized(product.nombre).includes(term)).slice(0, 15).map((product) => {
+    const presentation = product.presentaciones[0];
+    const factor = presentation ? Number(presentation.factorInventario) : 1;
+    return { id: product.id, nombre: product.nombre, stockActual: Number(product.stockActual) / factor,
+      unidad: product.unidadInventario === "PESO" ? "lb" : "unid." };
+  }) };
+}
+
 export async function previewMobileAdjustments(input) {
   const items = validateItems(input?.items);
   const products = await searchableProducts();

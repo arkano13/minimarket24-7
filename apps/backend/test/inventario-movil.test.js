@@ -15,7 +15,7 @@ const prisma = {
 };
 mock.module(new URL("../src/lib/prisma.js", import.meta.url).href, { namedExports: { prisma } });
 mock.module(new URL("../src/modules/bitacora/bitacora.service.js", import.meta.url).href, { namedExports: { registrarBitacora: async (data) => state.audit.push(data) } });
-const { previewMobileAdjustments, applyMobileAdjustments } = await import("../src/modules/inventario/inventario-movil.service.js");
+const { previewMobileAdjustments, applyMobileAdjustments, searchMobileProducts } = await import("../src/modules/inventario/inventario-movil.service.js");
 const product=(id,nombre,stock=10)=>({id,nombre,stockActual:String(stock),costoPromedio:"2",unidadInventario:"UNIDAD",presentaciones:[{id, nombre:"Unidad",esPrincipal:true,factorInventario:"1"}]});
 beforeEach(()=>{state.products=[product(1,"Coca-Cola Personal"),product(2,"Coca-Cola Lata")];state.movements=[];state.audit=[];});
 test("vista previa exige coincidencia única y muestra stock nuevo",async()=>{
@@ -23,6 +23,12 @@ test("vista previa exige coincidencia única y muestra stock nuevo",async()=>{
  assert.equal(exact.resultados[0].estado,"LISTO");assert.equal(exact.resultados[0].stockNuevo,13);
  const ambiguous=await previewMobileAdjustments({items:[{nombre:"coca cola",cantidad:3}]});
  assert.equal(ambiguous.resultados[0].estado,"AMBIGUO");assert.equal(ambiguous.resultados[0].coincidencias.length,2);
+});
+test("buscador móvil encuentra productos por una parte del nombre",async()=>{
+ const result=await searchMobileProducts("lata");
+ assert.deepEqual(result.productos.map((p)=>p.nombre),["Coca-Cola Lata"]);
+ assert.equal(result.productos[0].stockActual,10);
+ assert.deepEqual(await searchMobileProducts("c"),{productos:[]});
 });
 test("aplica ajustes, registra movimientos y rechaza inventario negativo",async()=>{
  const result=await applyMobileAdjustments({items:[{nombre:"Coca-Cola Personal",productoId:1,cantidad:3}]},7);

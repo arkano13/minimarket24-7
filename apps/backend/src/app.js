@@ -1,4 +1,5 @@
 import express from "express";
+import { fileURLToPath } from "node:url";
 import cors from "cors";
 
 import { healthRouter } from "./routes/health.routes.js";
@@ -8,6 +9,7 @@ import { authRouter } from "./modules/auth/auth.routes.js";
 import { productsRouter } from "./modules/productos/productos.routes.js";
 
 import { inventoryRouter } from "./modules/inventario/inventario.routes.js";
+import { mobileInventoryRouter } from "./modules/inventario/inventario-movil.routes.js";
 
 import { salesRouter } from "./modules/ventas/ventas.routes.js";
 
@@ -33,6 +35,7 @@ import { bitacoraRouter } from "./modules/bitacora/bitacora.routes.js";
 const allowedOrigins = new Set([
   "http://127.0.0.1:5173",
   "http://localhost:5173",
+  "https://minimarket24-7-production.up.railway.app",
 ]);
 
 export const app = express();
@@ -66,6 +69,11 @@ app.use("/api/auth", authRouter);
 
 app.use("/api/productos", productsRouter);
 
+app.get("/inventario-movil", (req, res) => {
+  res.sendFile(fileURLToPath(new URL("../public/inventario-movil.html", import.meta.url)));
+});
+
+app.use("/api/inventario-movil", mobileInventoryRouter);
 app.use("/api/inventario", inventoryRouter);
 
 app.use("/api/ventas", salesRouter);

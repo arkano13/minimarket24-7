@@ -91,7 +91,7 @@ function serializePurchase(purchase) {
     creadoEn: purchase.creadoEn,
     anuladaEn: purchase.anuladaEn,
 
-    productos: purchase.detalles.map((detail) => ({
+    productos: purchase.detalles?.map((detail) => ({
       id: detail.id,
       productoId: detail.productoId,
       presentacionId: detail.presentacionId,
@@ -294,6 +294,7 @@ export async function searchPurchaseProducts(
 export async function listPurchases(
   search = "",
   proveedorIdInput = null,
+  summary = false,
 ) {
   const term =
     typeof search === "string"
@@ -329,7 +330,7 @@ export async function listPurchases(
         }
       : undefined,
 
-    include: PURCHASE_INCLUDE,
+    include: summary ? { usuario: PURCHASE_INCLUDE.usuario } : PURCHASE_INCLUDE,
 
     orderBy: {
       creadoEn: "desc",
@@ -420,16 +421,19 @@ export async function createPurchase(
       );
     }
 
+    const cantidad = positiveDecimal(item.cantidad, "La cantidad");
+    // Preserve the entered total: dividing and then rounding the unit cost
+    // must not change the invoice amount (e.g. 100 / 300).
+    const costoTotal = item.costoTotal === undefined
+      ? cantidad.mul(positiveDecimal(item.costo, "El costo"))
+      : positiveDecimal(item.costoTotal, "El costo total");
+    if (item.costoTotal !== undefined && costoTotal.decimalPlaces() > 2) {
+      throw new AppError("El costo total admite hasta 2 decimales.", 400);
+    }
     items.set(presentationId, {
-      cantidad: positiveDecimal(
-        item.cantidad,
-        "La cantidad",
-      ),
-
-      costo: positiveDecimal(
-        item.costo,
-        "El costo",
-      ),
+      cantidad,
+      costo: costoTotal.div(cantidad),
+      costoTotal,
     });
   }
 
@@ -511,8 +515,7 @@ export async function createPurchase(
           .div(factor)
           .toDecimalPlaces(4);
 
-        const incomingValue =
-          item.cantidad.mul(item.costo);
+        const incomingValue = item.costoTotal;
 
         const subtotal =
           incomingValue.toDecimalPlaces(2);
@@ -552,7 +555,7 @@ export async function createPurchase(
           factorInventario: factor,
           cantidadInventario:
             inventoryQuantity,
-          costoPresentacion: item.costo,
+          costoPresentacion: item.costo.toDecimalPlaces(4),
           costoUnitarioInventario:
             inventoryUnitCost,
           subtotal,
@@ -579,6 +582,7 @@ export async function createPurchase(
           include: PURCHASE_INCLUDE,
         });
 
+      const movements = [];
       for (
         const [
           productId,
@@ -624,9 +628,7 @@ export async function createPurchase(
             },
           });
 
-        await transaction.movimientoInventario.create(
-          {
-            data: {
+        movements.push({
               productoId: productId,
               usuarioId: userId,
               compraId: purchase.id,
@@ -639,13 +641,14 @@ export async function createPurchase(
               motivo:
                 `Compra #${purchase.id} a ` +
                 `${supplier.nombre}.`,
-            },
-          },
-        );
+        });
       }
+
+      await transaction.movimientoInventario.createMany({ data: movements });
 
       return serializePurchase(purchase);
     },
+    { maxWait: 10_000, timeout: 60_000 },
   );
 }
 

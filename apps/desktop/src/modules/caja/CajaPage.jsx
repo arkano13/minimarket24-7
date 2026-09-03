@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import "./CajaPage.css";
+import { MiActividad } from "./MiActividad.jsx";
 
 import {
   closeCashShift,
@@ -345,7 +346,7 @@ export function CajaPage({ token }) {
               </span>
 
               <div>
-                <h2>Resumen del turno</h2>
+                <h2>Resumen general del turno</h2>
 
                 <p>
                   Abierta por {shift.usuarioApertura.nombre} · {formatDate(shift.abiertoEn)}
@@ -539,6 +540,7 @@ export function CajaPage({ token }) {
           </div>
         </>
       )}
+      <MiActividad token={token} revision={shift} />
     </main>
   );
 }

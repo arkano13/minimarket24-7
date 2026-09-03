@@ -65,6 +65,7 @@ purchasesRouter.get(
         await listPurchases(
           req.query.buscar,
           req.query.proveedorId,
+          req.query.resumen === "true",
         );
 
       res.json({

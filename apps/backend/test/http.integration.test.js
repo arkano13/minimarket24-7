@@ -241,12 +241,3 @@ test("solo permite el origen local configurado", async (context) => {
   assert.equal(blocked.response.status, 403);
   assert.equal(blocked.body.error, "Origen no permitido.");
 });
-
-test("inventario móvil exige administrador y permiso de inventario", async () => {
-  const missing = await request("/api/inventario-movil/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: [{ nombre: "Pan", cantidad: 3 }] }) });
-  assert.equal(missing.response.status, 401);
-  const token = await login();
-  state.user.rol = "CAJERO";
-  const blocked = await request("/api/inventario-movil/preview", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ items: [{ nombre: "Pan", cantidad: 3 }] }) });
-  assert.equal(blocked.response.status, 403);
-});

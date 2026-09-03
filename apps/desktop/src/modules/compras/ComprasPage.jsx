@@ -4,6 +4,7 @@ import "./ComprasPage.css";
 import {
   cancelPurchase,
   createPurchase,
+  getPurchase,
   listPurchases,
   searchPurchaseProducts,
   searchPurchaseSuppliers,
@@ -36,6 +37,8 @@ function decimalValue(setter, value, decimals) {
 export function ComprasPage({ token }) {
   const [purchases, setPurchases] = useState([]);
   const [selectedPurchase, setSelectedPurchase] = useState(null);
+  const [selectedPurchaseId, setSelectedPurchaseId] = useState(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   const [historySearch, setHistorySearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [suppliers, setSuppliers] = useState([]);
@@ -51,11 +54,12 @@ export function ComprasPage({ token }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [canceling, setCanceling] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
   const total = useMemo(
     () =>
       items.reduce(
-        (sum, item) => sum + Number(item.cantidad || 0) * Number(item.costo || 0),
+        (sum, item) => sum + Number(item.costoTotal || 0),
         0,
       ),
     [items],
@@ -63,14 +67,6 @@ export function ComprasPage({ token }) {
 
   async function handleCancelPurchase() {
     if (!selectedPurchase || canceling) {
-      return;
-    }
-
-    const confirmado = window.confirm(
-      `¿Anular la compra #${selectedPurchase.id}? Esto revierte el inventario recibido.`,
-    );
-
-    if (!confirmado) {
       return;
     }
 
@@ -92,6 +88,7 @@ export function ComprasPage({ token }) {
       setError(requestError.message);
     } finally {
       setCanceling(false);
+      setConfirmCancel(false);
     }
   }
 
@@ -100,14 +97,10 @@ export function ComprasPage({ token }) {
 
     const timer = window.setTimeout(async () => {
       try {
-        const result = await listPurchases(token, historySearch.trim());
+        const result = await listPurchases(token, historySearch.trim(), "", true);
 
         if (active) {
           setPurchases(result.compras);
-
-          setSelectedPurchase((current) =>
-            current ? result.compras.find((purchase) => purchase.id === current.id) ?? null : null,
-          );
         }
       } catch (requestError) {
         if (active) {
@@ -121,6 +114,25 @@ export function ComprasPage({ token }) {
       window.clearTimeout(timer);
     };
   }, [historySearch, token]);
+
+  useEffect(() => {
+    if (!selectedPurchaseId) return;
+    let active = true;
+    setLoadingDetail(true);
+    setConfirmCancel(false);
+    setSelectedPurchase(null);
+    getPurchase(token, selectedPurchaseId)
+      .then((result) => { if (active) setSelectedPurchase(result.compra); })
+      .catch((requestError) => {
+        if (active) {
+          setError(requestError.message);
+          setSelectedPurchaseId(null);
+          setLoadingDetail(false);
+        }
+      })
+      .finally(() => { if (active) setLoadingDetail(false); });
+    return () => { active = false; };
+  }, [selectedPurchaseId, token]);
 
   useEffect(() => {
     let active = true;
@@ -152,12 +164,13 @@ export function ComprasPage({ token }) {
     }
 
     let active = true;
+    const controller = new AbortController();
 
     const timer = window.setTimeout(async () => {
       setSearchingProducts(true);
 
       try {
-        const result = await searchPurchaseProducts(token, term);
+        const result = await searchPurchaseProducts(token, term, controller.signal);
 
         if (active) {
           setProductResults(result.productos);
@@ -176,6 +189,7 @@ export function ComprasPage({ token }) {
     return () => {
       active = false;
       window.clearTimeout(timer);
+      controller.abort();
     };
   }, [productSearch, showForm, token]);
 
@@ -193,11 +207,17 @@ export function ComprasPage({ token }) {
     resetForm();
     setShowForm(true);
     setSelectedPurchase(null);
+    setSelectedPurchaseId(null);
+    setLoadingDetail(false);
     setError("");
     setSuccess("");
   }
 
   function addProduct(product) {
+    if (items.length >= 100) {
+      setError("Cada entrada admite hasta 100 productos. Registra otra entrada para los restantes.");
+      return;
+    }
     const alreadyAdded = items.some(
       (item) => item.presentacionId === product.presentacionId,
     );
@@ -212,7 +232,7 @@ export function ComprasPage({ token }) {
       {
         ...product,
         cantidad: "1",
-        costo: Number(product.costoSugerido) > 0 ? Number(product.costoSugerido).toFixed(2) : "",
+        costoTotal: "",
       },
     ]);
 
@@ -239,6 +259,7 @@ export function ComprasPage({ token }) {
   }
 
   async function savePurchase() {
+    if (loading) return;
     setError("");
 
     if (!supplierId) {
@@ -248,7 +269,7 @@ export function ComprasPage({ token }) {
 
     if (
       items.length === 0 ||
-      items.some((item) => Number(item.cantidad) <= 0 || Number(item.costo) <= 0)
+      items.some((item) => Number(item.cantidad) <= 0 || Number(item.costoTotal) <= 0)
     ) {
       setError("Revisa las cantidades y costos de los productos.");
       return;
@@ -264,7 +285,10 @@ export function ComprasPage({ token }) {
         productos: items.map((item) => ({
           presentacionId: item.presentacionId,
           cantidad: item.cantidad,
-          costo: item.costo,
+          costoTotal: item.costoTotal,
+          // Compatibility with servers from before costoTotal was introduced.
+          // Current servers preserve costoTotal; older ones require unit cost.
+          costo: Number(item.costoTotal) / Number(item.cantidad),
         })),
       });
 
@@ -293,7 +317,7 @@ export function ComprasPage({ token }) {
           <p>Registra productos recibidos. Esta operación no paga al proveedor ni afecta la caja.</p>
         </div>
 
-        <button className="primary-button" onClick={openForm} type="button">
+        <button className="primary-button" disabled={loading || canceling} onClick={openForm} type="button">
           + Registrar mercancía
         </button>
       </header>
@@ -322,6 +346,7 @@ export function ComprasPage({ token }) {
             <strong>Costo total: L {money(total)}</strong>
           </div>
 
+          <fieldset disabled={loading} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           <div className="purchase-general-fields">
             <label className="field">
               <span>Proveedor</span>
@@ -432,24 +457,24 @@ export function ComprasPage({ token }) {
                   </label>
 
                   <label>
-                    <span>Costo por {item.presentacion.toLowerCase()}</span>
+                    <span>Costo total de la cantidad recibida</span>
 
                     <input
                       autoComplete="off"
                       onChange={(event) =>
                         decimalValue(
-                          (value) => updateItem(item.presentacionId, "costo", value),
+                          (value) => updateItem(item.presentacionId, "costoTotal", value),
                           event.target.value,
-                          4,
+                          2,
                         )
                       }
                       placeholder="0.00"
                       type="text"
-                      value={item.costo}
+                      value={item.costoTotal}
                     />
                   </label>
 
-                  <strong>L {money(Number(item.cantidad) * Number(item.costo))}</strong>
+                  <strong>Por {item.presentacion.toLowerCase()}: L {money(Number(item.cantidad) > 0 ? Number(item.costoTotal) / Number(item.cantidad) : 0)}</strong>
 
                   <button
                     aria-label={`Quitar ${item.nombre}`}
@@ -464,6 +489,7 @@ export function ComprasPage({ token }) {
             </div>
           )}
 
+          </fieldset>
           <div className="purchase-form-actions">
             <button
               className="secondary-button"
@@ -518,7 +544,8 @@ export function ComprasPage({ token }) {
                         : "purchase-history-item"
                     }
                     key={purchase.id}
-                    onClick={() => setSelectedPurchase(purchase)}
+                    disabled={canceling}
+                    onClick={() => setSelectedPurchaseId(purchase.id)}
                     type="button"
                   >
                     <span>
@@ -549,7 +576,7 @@ export function ComprasPage({ token }) {
                   </svg>
                 </span>
 
-                <h2>Selecciona una entrada</h2>
+                <h2>{loadingDetail ? "Cargando entrada..." : "Selecciona una entrada"}</h2>
 
                 <p>Aquí aparecerán el proveedor y los productos recibidos.</p>
               </div>
@@ -573,7 +600,7 @@ export function ComprasPage({ token }) {
                       <button
                         className="secondary-button purchase-cancel-button"
                         disabled={canceling}
-                        onClick={handleCancelPurchase}
+                        onClick={() => setConfirmCancel(true)}
                         type="button"
                       >
                         {canceling ? "Anulando..." : "Anular compra"}
@@ -582,6 +609,15 @@ export function ComprasPage({ token }) {
                   </div>
                 </header>
 
+                {confirmCancel ? (
+                  <section aria-label="Confirmar anulación">
+                    <p>¿Anular la compra #{selectedPurchase.id}? Esto revierte el inventario recibido.</p>
+                    <button className="secondary-button" disabled={canceling} onClick={() => setConfirmCancel(false)} type="button">Volver</button>
+                    <button className="primary-button" disabled={canceling} onClick={handleCancelPurchase} type="button">
+                      {canceling ? "Anulando..." : "Sí, anular compra"}
+                    </button>
+                  </section>
+                ) : null}
                 <div className="purchase-detail-summary">
                   <span>Fecha: {dateTime(selectedPurchase.creadoEn)}</span>
 

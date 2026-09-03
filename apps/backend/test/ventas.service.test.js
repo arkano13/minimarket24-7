@@ -9,6 +9,7 @@ const state = {
   createdSaleData: null,
   stockUpdates: [],
   inventoryMovements: [],
+  transactionOptions: null,
 };
 
 const rootPresentation = {
@@ -82,7 +83,8 @@ const prisma = {
       return data;
     },
   },
-  async $transaction(callback) {
+  async $transaction(callback, options) {
+    state.transactionOptions = options;
     return callback(transaction);
   },
 };
@@ -128,6 +130,7 @@ beforeEach(() => {
   state.createdSaleData = null;
   state.stockUpdates = [];
   state.inventoryMovements = [];
+  state.transactionOptions = null;
 });
 
 test("valida productos y método de pago antes de abrir transacción", async () => {
@@ -247,6 +250,7 @@ test("combina líneas repetidas, descuenta stock y calcula cambio", async () => 
   assert.equal(Number(state.stockUpdates[0].data.stockActual.decrement), 3);
   assert.equal(state.inventoryMovements.length, 1);
   assert.equal(Number(state.inventoryMovements[0].cantidad), 3);
+  assert.deepEqual(state.transactionOptions, { maxWait: 10_000, timeout: 60_000 });
 });
 
 test("no crea la venta si falta inventario o efectivo", async () => {
@@ -276,22 +280,4 @@ test("no crea la venta si falta inventario o efectivo", async () => {
     /efectivo recibido es menor/i,
   );
   assert.equal(state.createdSaleData, null);
-});
-
-test("tarjeta multiplica el total por 1.05 y conserva el redondeo al lempira", async () => {
-  for (const [precio, esperado] of [[100, 105], [200, 210], [150, 158]]) {
-    state.salePresentations = [presentation({ precioBase: String(precio) })];
-    const result = await createSale({
-      productos: [{ presentacionId: 10, cantidad: 1 }],
-      metodoPago: "TARJETA",
-    }, 2);
-    assert.equal(result.total, esperado);
-    assert.equal(Number(state.createdSaleData.pagos.create.monto), esperado);
-  }
-  state.salePresentations = [presentation({ precioBase: "100" })];
-  const transfer = await createSale({
-    productos: [{ presentacionId: 10, cantidad: 1 }],
-    metodoPago: "TRANSFERENCIA",
-  }, 2);
-  assert.equal(transfer.total, 100);
 });

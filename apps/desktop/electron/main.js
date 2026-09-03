@@ -5,10 +5,53 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildSalesReportHtml, safePdfName } from "./sales-report-pdf.js";
 import { buildAdministrativeReportHtml } from "./administrative-report-pdf.js";
+import { buildUserSalesReceiptHtml } from "./sale-receipt.js";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 const isDevelopment = !app.isPackaged;
+
+ipcMain.handle("sales:print-user-sales", async (event, report) => {
+  const ownerWindow = BrowserWindow.fromWebContents(event.sender);
+  const temporaryHtmlPath = path.join(
+    app.getPath("temp"),
+    `minisuper-receipt-${randomUUID()}.html`,
+  );
+  const receiptWindow = new BrowserWindow({
+    show: false,
+    parent: ownerWindow ?? undefined,
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+
+  try {
+    await writeFile(temporaryHtmlPath, buildUserSalesReceiptHtml(report), "utf8");
+    await receiptWindow.loadFile(temporaryHtmlPath);
+
+    const printers = await receiptWindow.webContents.getPrintersAsync();
+    const receiptPrinter = printers.find((printer) =>
+      /rpt\s*0*06|receipt|pos[-_ ]?80|thermal/i.test(
+        `${printer.name} ${printer.displayName ?? ""}`,
+      ),
+    ) ?? printers.find((printer) => printer.isDefault);
+
+    if (!receiptPrinter) {
+      throw new Error("No se encontró la impresora térmica RPT006S instalada en Windows.");
+    }
+
+    return await new Promise((resolve, reject) => {
+      receiptWindow.webContents.print(
+        { silent: true, deviceName: receiptPrinter.name, printBackground: true },
+        (success, failureReason) => {
+          if (success) resolve({ printed: true, printer: receiptPrinter.displayName ?? receiptPrinter.name });
+          else reject(new Error(failureReason || "No se pudo imprimir el recibo."));
+        },
+      );
+    });
+  } finally {
+    if (!receiptWindow.isDestroyed()) receiptWindow.destroy();
+    await unlink(temporaryHtmlPath).catch(() => {});
+  }
+});
 
 ipcMain.handle("reports:save-pdf", async (event, payload) => {
   if (!payload?.report || typeof payload.report !== "object") {

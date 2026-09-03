@@ -256,7 +256,7 @@ export function VentasPage({ token }) {
 
   const cardSurcharge =
     paymentMethod === "TARJETA"
-      ? round2(totalWithAlcoholSurcharge * 0.05)
+      ? round2(totalWithAlcoholSurcharge * 0.0105)
       : 0;
 
   const total = Math.round(totalWithAlcoholSurcharge + cardSurcharge);

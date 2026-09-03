@@ -34,10 +34,10 @@ const productos = [
   ["PRUEBA-024", "7500000000024", "Papel higiénico paquete de 4", "Higiene personal", "PAQUETE", "Paquete", 34, 45, 16, 4],
   ["PRUEBA-025", "7500000000025", "Champú 400 ml", "Higiene personal", "UNIDAD", "Unidad", 48, 62, 12, 3],
 
-  ["PRUEBA-026", "7500000000026", "Tomate por kilogramo", "Frutas y verduras", "PESO", "Kilogramo", 22, 32, 18, 4],
-  ["PRUEBA-027", "7500000000027", "Cebolla por kilogramo", "Frutas y verduras", "PESO", "Kilogramo", 25, 36, 16, 4],
-  ["PRUEBA-028", "7500000000028", "Papa por kilogramo", "Frutas y verduras", "PESO", "Kilogramo", 18, 27, 24, 6],
-  ["PRUEBA-029", "7500000000029", "Banano por kilogramo", "Frutas y verduras", "PESO", "Kilogramo", 14, 22, 20, 5],
+  ["PRUEBA-026", "7500000000026", "Tomate por libra", "Frutas y verduras", "PESO", "Libra", 22, 32, 18, 4],
+  ["PRUEBA-027", "7500000000027", "Cebolla por libra", "Frutas y verduras", "PESO", "Libra", 25, 36, 16, 4],
+  ["PRUEBA-028", "7500000000028", "Papa por libra", "Frutas y verduras", "PESO", "Libra", 18, 27, 24, 6],
+  ["PRUEBA-029", "7500000000029", "Banano por libra", "Frutas y verduras", "PESO", "Libra", 14, 22, 20, 5],
 
   ["PRUEBA-030", "7500000000030", "Hielo bolsa de 5 kg", "Congelados", "PAQUETE", "Bolsa", 28, 40, 15, 4, 45, 48],
 ];
@@ -57,7 +57,7 @@ const tipos = {
   },
   PESO: {
     unidadInventario: "GRAMO",
-    factor: 1000,
+    factor: 454,
   },
   VOLUMEN: {
     unidadInventario: "MILILITRO",

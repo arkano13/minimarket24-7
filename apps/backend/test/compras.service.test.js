@@ -74,6 +74,11 @@ const transaction = {
   compra,
   producto,
   movimientoInventario: {
+    async createMany({ data }) {
+      state.movements.push(...data);
+      state.movementBatches += 1;
+      return { count: data.length };
+    },
     async create({ data }) {
       state.movements.push(data);
       return data;
@@ -82,6 +87,12 @@ const transaction = {
 };
 
 const prisma = {
+  compra: {
+    async findMany(query) {
+      state.listQuery = query;
+      return [{ ...state.purchase, detalles: query.include.detalles ? state.purchase.detalles : undefined }];
+    },
+  },
   bitacora: {
     async create({ data }) {
       state.audit.push(data);
@@ -96,7 +107,7 @@ const prisma = {
 const prismaModule = new URL("../src/lib/prisma.js", import.meta.url);
 mock.module(prismaModule.href, { namedExports: { prisma } });
 
-const { cancelPurchase, createPurchase } = await import(
+const { cancelPurchase, createPurchase, listPurchases } = await import(
   "../src/modules/compras/compras.service.js"
 );
 
@@ -137,6 +148,61 @@ beforeEach(() => {
   state.productUpdates = [];
   state.movements = [];
   state.audit = [];
+  state.movementBatches = 0;
+});
+
+test("divide el costo total sin alterar el importe por redondeo", async () => {
+  state.presentations[0].factorInventario = "1";
+  const result = await createPurchase(purchaseInput({
+    productos: [{ presentacionId: 10, cantidad: 300, costoTotal: "100.00" }],
+  }), 2);
+  assert.equal(result.total, 100);
+  assert.equal(result.productos[0].subtotal, 100);
+  assert.equal(result.productos[0].costo, 0.3333);
+  assert.equal(Number(state.product.stockActual), 360);
+  assert.equal(Number(state.product.costoPromedio), 0.9444);
+});
+
+test("acepta 300 cervezas por 6000 y calcula 20 por unidad", async () => {
+  state.presentations[0].factorInventario = "1";
+  const result = await createPurchase(purchaseInput({
+    productos: [{ presentacionId: 10, cantidad: 300, costoTotal: 6000 }],
+  }), 2);
+  assert.equal(result.productos[0].costo, 20);
+  assert.equal(result.total, 6000);
+});
+
+test("el historial resumido omite detalles y conserva el contrato anterior por defecto", async () => {
+  await createPurchase(purchaseInput(), 2);
+  const summaries = await listPurchases("", null, true);
+  assert.equal(state.listQuery.include.detalles, undefined);
+  assert.equal(summaries[0].productos, undefined);
+  assert.equal(summaries[0].total, 200);
+  const full = await listPurchases();
+  assert.equal(full[0].productos.length, 1);
+});
+
+test("valida el total y no acepta fracciones de centavo", async () => {
+  for (const costoTotal of [0, -1, "abc", "", "0.001"]) {
+    await assert.rejects(() => createPurchase(purchaseInput({
+      productos: [{ presentacionId: 10, cantidad: 300, costoTotal }],
+    }), 2), /costo total/i);
+  }
+});
+
+test("registra 100 productos con un solo lote de movimientos", async () => {
+  state.presentations = Array.from({ length: 100 }, (_, index) => ({
+    ...presentation(), id: index + 1, productoId: index + 1,
+  }));
+  const result = await createPurchase(purchaseInput({
+    productos: state.presentations.map(({ id }) => ({
+      presentacionId: id, cantidad: 3, costoTotal: 100,
+    })),
+  }), 2);
+  assert.equal(result.total, 10000);
+  assert.equal(result.productos.length, 100);
+  assert.equal(state.movements.length, 100);
+  assert.equal(state.movementBatches, 1);
 });
 
 test("valida proveedor, productos y líneas duplicadas", async () => {

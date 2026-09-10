@@ -52,7 +52,7 @@ test("agrega ventas, pagos, productos, costos y horas", async () => {
   state.sales = [
     {
       id: 1,
-      creadoEn: new Date(2026, 7, 3, 14, 10),
+      creadoEn: new Date("2026-08-03T14:10:00-06:00"),
       clienteNombre: null,
       total: "125.50",
       usuario: { id: 2, nombre: "Caja" },
@@ -76,7 +76,7 @@ test("agrega ventas, pagos, productos, costos y horas", async () => {
     },
     {
       id: 2,
-      creadoEn: new Date(2026, 7, 3, 14, 40),
+      creadoEn: new Date("2026-08-03T14:40:00-06:00"),
       clienteNombre: "Cliente especial",
       total: "50",
       usuario: { id: 2, nombre: "Caja" },
@@ -130,4 +130,6 @@ test("agrega ventas, pagos, productos, costos y horas", async () => {
     { hora: 14, operaciones: 2, total: 175.5 },
   ]);
   assert.equal(state.lastQuery.where.estado, "COMPLETADA");
+  assert.equal(state.lastQuery.where.creadoEn.gte.toISOString(), "2026-08-03T06:00:00.000Z");
+  assert.equal(state.lastQuery.where.creadoEn.lte.toISOString(), "2026-08-04T05:59:59.999Z");
 });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./CancelacionesPage.css";
 
 import { cancelSale, listSales } from "../../services/api.js";
@@ -24,22 +24,11 @@ export function CancelacionesPage({ token }) {
 
   const [selectedSale, setSelectedSale] = useState(null);
   const [canceling, setCanceling] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const searchRef = useRef(null);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-
-  async function loadSales() {
-    setLoadingList(true);
-
-    try {
-      const result = await listSales(token, searchText.trim());
-      setSales(result.ventas);
-    } catch (requestError) {
-      setError(requestError.message);
-    } finally {
-      setLoadingList(false);
-    }
-  }
 
   useEffect(() => {
     let active = true;
@@ -71,6 +60,8 @@ export function CancelacionesPage({ token }) {
   }, [searchText, token]);
 
   function selectSale(sale) {
+    if (canceling) return;
+    setConfirming(false);
     setSelectedSale(sale);
     setError("");
     setSuccess("");
@@ -78,14 +69,6 @@ export function CancelacionesPage({ token }) {
 
   async function handleCancel() {
     if (!selectedSale || canceling) {
-      return;
-    }
-
-    const confirmado = window.confirm(
-      `¿Cancelar la venta #${selectedSale.id} por L ${money(selectedSale.total)}? Esto devuelve el stock vendido al inventario.`,
-    );
-
-    if (!confirmado) {
       return;
     }
 
@@ -98,11 +81,15 @@ export function CancelacionesPage({ token }) {
 
       setSuccess(result.mensaje);
       setSelectedSale(null);
-      await loadSales();
+      setSales((current) => current.map((sale) =>
+        sale.id === selectedSale.id ? { ...sale, estado: "CANCELADA" } : sale,
+      ));
     } catch (requestError) {
       setError(requestError.message);
     } finally {
       setCanceling(false);
+      setConfirming(false);
+      searchRef.current?.focus();
     }
   }
 
@@ -119,6 +106,7 @@ export function CancelacionesPage({ token }) {
       <div className="returns-workspace">
         <aside className="returns-list-card">
           <input
+            ref={searchRef}
             onChange={(event) => setSearchText(event.target.value)}
             placeholder="Buscar por cliente o cajero"
             value={searchText}
@@ -222,11 +210,22 @@ export function CancelacionesPage({ token }) {
 
               {selectedSale.estado === "CANCELADA" ? (
                 <p className="returns-status-cancelada">Esta venta ya está cancelada.</p>
+              ) : confirming ? (
+                <section aria-label="Confirmar cancelación" className="return-confirmation">
+                  <p>¿Cancelar la venta #{selectedSale.id} por L {money(selectedSale.total)}? Esto devuelve el stock vendido al inventario.</p>
+                  <button autoFocus className="secondary-button" disabled={canceling} onClick={() => {
+                    setConfirming(false);
+                    searchRef.current?.focus();
+                  }} type="button">Volver</button>
+                  <button className="primary-button" disabled={canceling} onClick={handleCancel} type="button">
+                    {canceling ? "Cancelando..." : "Sí, cancelar venta"}
+                  </button>
+                </section>
               ) : (
                 <button
                   className="primary-button"
                   disabled={canceling}
-                  onClick={handleCancel}
+                  onClick={() => setConfirming(true)}
                   type="button"
                 >
                   {canceling ? "Cancelando..." : "Cancelar venta"}

@@ -425,3 +425,55 @@ export async function closeCashShift(
     },
   );
 }
+
+
+// apps/backend/src/modules/caja/caja.service.js
+// (agregar al final del archivo, junto a los demás exports)
+
+function serializeShiftCompleto(shift) {
+  const totals = calculateTotals(shift);
+
+  return {
+    id: shift.id,
+    estado: shift.estado,
+    fondoInicial: Number(shift.fondoInicial),
+    efectivoEsperado: Number(shift.efectivoEsperadoCierre ?? totals.expectedCash),
+    efectivoContado: shift.efectivoContado === null ? null : Number(shift.efectivoContado),
+    diferencia: shift.diferencia === null ? null : Number(shift.diferencia),
+    abiertoEn: shift.abiertoEn,
+    cerradoEn: shift.cerradoEn,
+    usuarioApertura: shift.usuarioApertura,
+    usuarioCierre: shift.usuarioCierre,
+    totales: {
+      cantidadVentas: shift.ventas.length,
+      ventas: Number(totals.salesTotal),
+      efectivo: Number(totals.cash),
+      tarjeta: Number(totals.card),
+      transferencia: Number(totals.transfer),
+      ingresos: Number(totals.income),
+      retiros: Number(totals.withdrawal),
+    },
+    movimientos: shift.movimientos.map((m) => ({
+      id: m.id, tipo: m.tipo, monto: Number(m.monto),
+      motivo: m.motivo, creadoEn: m.creadoEn, usuario: m.usuario,
+    })),
+  };
+}
+
+export async function listCashShifts(dateInput) {
+  const fecha =
+    typeof dateInput === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)
+      ? dateInput
+      : new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const from = new Date(`${fecha}T00:00:00-06:00`);
+  const to = new Date(from.getTime() + 86_400_000);
+
+  const shifts = await prisma.turnoCaja.findMany({
+    where: { abiertoEn: { gte: from, lt: to } },
+    include: SHIFT_INCLUDE,
+    orderBy: { abiertoEn: "desc" },
+  });
+
+  return shifts.map(serializeShiftCompleto);
+}

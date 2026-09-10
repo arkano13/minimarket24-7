@@ -543,3 +543,32 @@ model DevolucionDetalle {
   @@index([productoId])
   @@map("devoluciones_detalle")
 }
+
+enum CanalAsistente {
+  TELEGRAM
+  WHATSAPP
+}
+
+model ConversacionAsistente {
+  id            Int                @id @default(autoincrement())
+  canal         CanalAsistente
+  identificador String             @db.VarChar(100) // chatId de Telegram o remoteJid de WhatsApp
+  mensajes      MensajeAsistente[]
+  creadoEn      DateTime           @default(now()) @map("creado_en")
+  actualizadoEn DateTime           @updatedAt @map("actualizado_en")
+
+  @@unique([canal, identificador])
+  @@map("conversaciones_asistente")
+}
+
+model MensajeAsistente {
+  id             Int                    @id @default(autoincrement())
+  conversacionId Int                    @map("conversacion_id")
+  rol            String                 @db.VarChar(20) // "user" | "assistant"
+  contenido      String
+  creadoEn       DateTime               @default(now()) @map("creado_en")
+  conversacion   ConversacionAsistente  @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+
+  @@index([conversacionId, creadoEn])
+  @@map("mensajes_asistente")
+}

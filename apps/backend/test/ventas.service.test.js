@@ -92,6 +92,7 @@ mock.module(prismaModule.href, { namedExports: { prisma } });
 
 const {
   createSale,
+  alcoholSurchargePerUnit,
   repriceCartForClient,
   searchSaleProducts,
 } = await import("../src/modules/ventas/ventas.service.js");
@@ -294,4 +295,10 @@ test("tarjeta multiplica el total por 1.05 y conserva el redondeo al lempira", a
     metodoPago: "TRANSFERENCIA",
   }, 2);
   assert.equal(transfer.total, 100);
+});
+test("Tomar acá cobra L3 de 8am a 10pm y L5 durante la noche", () => {
+  assert.equal(Number(alcoholSurchargePerUnit(7 * 60 + 59)), 5);
+  assert.equal(Number(alcoholSurchargePerUnit(8 * 60)), 3);
+  assert.equal(Number(alcoholSurchargePerUnit(21 * 60 + 59)), 3);
+  assert.equal(Number(alcoholSurchargePerUnit(22 * 60)), 5);
 });

@@ -1,15 +1,38 @@
-const API_URL = `${import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001"}/api`;
+const API_URL = `${import.meta.env?.VITE_API_URL ?? "http://127.0.0.1:3001"}/api`;
 
   async function request(path, options = {}) {
-    const response = await fetch(`${API_URL}${path}`, {
+    const readOnly = !options.method || options.method === "GET";
+    let response;
+    for (let attempt = 0; attempt < (readOnly ? 2 : 1); attempt += 1) {
+      try {
+        response = await fetch(`${API_URL}${path}`, {
       ...options,
+      signal: options.signal
+        ? AbortSignal.any([options.signal, AbortSignal.timeout(readOnly ? 30_000 : 90_000)])
+        : AbortSignal.timeout(readOnly ? 30_000 : 90_000),
       headers: {
         "Content-Type": "application/json",
         ...options.headers,
       },
-    });
+        });
+        break;
+      } catch (error) {
+        if (options.signal?.aborted) throw error;
+        if (readOnly && attempt === 0) continue;
+        throw new Error(readOnly
+          ? "No se pudo consultar el servidor. Revisa la conexión e intenta de nuevo."
+          : "Se perdió la conexión o el servidor tardó demasiado. Revisa el historial antes de repetir la operación: podría haberse registrado.");
+      }
+    }
 
-    const body = response.status === 204 ? null : await response.json();
+    let body;
+    try {
+      body = response.status === 204 ? null : await response.json();
+    } catch {
+      throw new Error(readOnly
+        ? "La respuesta del servidor llegó incompleta o no es válida. Intenta consultar de nuevo."
+        : "No se pudo leer la respuesta del servidor. Revisa el historial antes de repetir la operación.");
+    }
 
     if (!response.ok) {
       throw new Error(body?.error ?? "No se pudo completar la solicitud.");
@@ -221,6 +244,14 @@ const API_URL = `${import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001"}/api`
     });
   }
 
+  export function listMyCashActivity(token, { fecha, tipo, page = 1 }, signal) {
+    const params = new URLSearchParams({ fecha, tipo, page: String(page) });
+    return request(`/caja/mi-actividad?${params}`, {
+      signal,
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  }
+
   export function getCurrentCashShift(token) {
     return request("/caja/actual", {
       headers: {
@@ -379,8 +410,11 @@ const API_URL = `${import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001"}/api`
     token,
     search = "",
     proveedorId = "",
+    summary = false,
   ) {
     const params = new URLSearchParams();
+
+    if (summary) params.set("resumen", "true");
 
     if (search) {
       params.set("buscar", search);
@@ -433,6 +467,7 @@ const API_URL = `${import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001"}/api`
   export function searchPurchaseProducts(
     token,
     search = "",
+    signal,
   ) {
     const query = search
       ? `?buscar=${encodeURIComponent(search)}`
@@ -441,6 +476,7 @@ const API_URL = `${import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001"}/api`
     return request(
       `/compras/productos${query}`,
       {
+        signal,
         headers: {
           Authorization: `Bearer ${token}`,
         },

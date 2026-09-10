@@ -5,6 +5,17 @@
    toda la pantalla quepa sin necesidad de scroll.
    ========================================================= */
 
+.cash-my-activity { margin-top: 18px; }
+.cash-my-activity > p { color: var(--muted); }
+.cash-activity-filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin: 16px 0; }
+.cash-activity-list { display: grid; gap: 12px; }
+.cash-activity-list article { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; }
+.cash-activity-list article header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; }
+.cash-activity-list article header span { color: var(--muted); }
+.cash-activity-list summary { cursor: pointer; color: var(--accent); }
+.cash-activity-list li { margin-top: 6px; }
+.cash-activity-pagination { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 16px; }
+
 .cash-page {
   box-sizing: border-box;
   width: min(100% - 40px, 1100px);

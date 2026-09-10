@@ -925,3 +925,14 @@ export async function setProductComponents(productIdInput, componentsInput, user
 
   return serializeProduct(product);
 }
+
+export async function listLowStockProducts() {
+  const products = await prisma.producto.findMany({
+    where: { activo: true, controlaInventario: true },
+    include: PRODUCT_INCLUDE,
+  });
+
+  return products
+    .map(serializeProduct)
+    .filter((p) => p.stock <= p.stockMinimo);
+}

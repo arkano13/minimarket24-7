@@ -7,6 +7,7 @@ import {
   getSalesReport,
   listBitacora,
   listPurchases,
+  listMyCashActivity,
   login,
   logout,
   searchSaleProducts,
@@ -25,6 +26,20 @@ function jsonResponse(status, body) {
     },
   };
 }
+
+test("mi actividad envía fecha, tipo y página sin permitir elegir otro usuario", async () => {
+  mock.method(globalThis, "fetch", async (url, options) => {
+    const parsed = new URL(url);
+    assert.equal(parsed.pathname, "/api/caja/mi-actividad");
+    assert.equal(parsed.searchParams.get("fecha"), "2026-08-27");
+    assert.equal(parsed.searchParams.get("tipo"), "RETIRO");
+    assert.equal(parsed.searchParams.get("page"), "2");
+    assert.equal(parsed.searchParams.has("usuarioId"), false);
+    assert.equal(options.headers.Authorization, "Bearer token");
+    return jsonResponse(200, { registros: [], hayMas: false });
+  });
+  await listMyCashActivity("token", { fecha: "2026-08-27", tipo: "RETIRO", page: 2, usuarioId: 999 });
+});
 
 test("login envía credenciales JSON al backend local", async () => {
   let request;
@@ -138,4 +153,37 @@ test("usa un mensaje seguro cuando el backend no entrega detalle", async () => {
     () => cancelSale("token", 1),
     /No se pudo completar la solicitud\./,
   );
+});
+
+test("reintenta una consulta fallida pero nunca una escritura", async () => {
+  let calls = 0;
+  mock.method(globalThis, "fetch", async () => {
+    calls += 1;
+    if (calls === 1) throw new TypeError("Failed to fetch");
+    return jsonResponse(200, { compras: [] });
+  });
+  assert.deepEqual(await listPurchases("token"), { compras: [] });
+  assert.equal(calls, 2);
+
+  calls = 0;
+  await assert.rejects(() => createSale("token", {}), /Revisa el historial/);
+  assert.equal(calls, 1);
+});
+
+test("explica respuestas incompletas sin repetir operaciones", async () => {
+  let calls = 0;
+  mock.method(globalThis, "fetch", async () => {
+    calls += 1;
+    return { status: 502, ok: false, async json() { throw new SyntaxError("HTML"); } };
+  });
+  await assert.rejects(() => cancelSale("token", 1), /Revisa el historial/);
+  assert.equal(calls, 1);
+});
+
+test("solicita historial resumido solo cuando se pide", async () => {
+  mock.method(globalThis, "fetch", async (url) => {
+    assert.equal(new URL(url).searchParams.get("resumen"), "true");
+    return jsonResponse(200, { compras: [] });
+  });
+  await listPurchases("token", "", "", true);
 });

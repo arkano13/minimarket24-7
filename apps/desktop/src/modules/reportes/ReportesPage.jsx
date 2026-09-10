@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import "./ReportesPage.css";
 import { cancelSale, getSalesReport } from "../../services/api.js";
+import { emptyShifts, shiftIdForDate } from "./shifts.js";
 
 const PAYMENT_LABELS = {
   EFECTIVO: "Efectivo",
@@ -295,18 +296,12 @@ function OperationalView({
     [...report.ventas].sort((first, second) => Number(second.total) - Number(first.total))[0] ??
     null;
 
-  const shifts = [
-    { id: 1, name: "Turno 1", schedule: "8:00 a. m. – 10:00 p. m.", operations: 0, total: 0 },
-    { id: 2, name: "Turno 2", schedule: "10:00 p. m. – 2:00 a. m.", operations: 0, total: 0 },
-    { id: 3, name: "Turno 3", schedule: "2:00 a. m. – 8:00 a. m.", operations: 0, total: 0 },
-  ];
+  const shifts = emptyShifts();
 
   const users = new Map();
 
   for (const sale of report.ventas) {
-    const saleDate = new Date(sale.creadoEn);
-    const hour = saleDate.getHours();
-    const shiftId = hour >= 8 && hour < 22 ? 1 : hour >= 22 || hour < 2 ? 2 : 3;
+    const shiftId = shiftIdForDate(sale.creadoEn);
     const shift = shifts.find((item) => item.id === shiftId);
 
     shift.operations += 1;
@@ -575,6 +570,7 @@ export function ReportesPage({ token }) {
   const [saleSearch, setSaleSearch] = useState("");
   const [selectedSaleId, setSelectedSaleId] = useState(null);
   const [cancelingSaleId, setCancelingSaleId] = useState(null);
+  const [confirmCancelId, setConfirmCancelId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [savingPdf, setSavingPdf] = useState(false);
   const [error, setError] = useState("");
@@ -634,14 +630,6 @@ export function ReportesPage({ token }) {
       return;
     }
 
-    const confirmado = window.confirm(
-      `¿Cancelar la venta #${saleId}? Esto devuelve el stock vendido al inventario.`,
-    );
-
-    if (!confirmado) {
-      return;
-    }
-
     setCancelingSaleId(saleId);
     setError("");
     setMessage("");
@@ -655,6 +643,7 @@ export function ReportesPage({ token }) {
       setError(requestError.message);
     } finally {
       setCancelingSaleId(null);
+      setConfirmCancelId(null);
     }
   }
 
@@ -839,6 +828,15 @@ export function ReportesPage({ token }) {
         </p>
       ) : null}
 
+      {confirmCancelId ? (
+        <section aria-label="Confirmar cancelación" className="page-message">
+          <p>¿Cancelar la venta #{confirmCancelId}? Esto devuelve el stock vendido al inventario.</p>
+          <button autoFocus className="secondary-button" disabled={Boolean(cancelingSaleId)} onClick={() => setConfirmCancelId(null)} type="button">Volver</button>
+          <button className="primary-button" disabled={Boolean(cancelingSaleId)} onClick={() => handleCancelSale(confirmCancelId)} type="button">
+            {cancelingSaleId ? "Cancelando..." : "Sí, cancelar venta"}
+          </button>
+        </section>
+      ) : null}
       {report ? (
         <>
           <div className="reports-period-heading">
@@ -856,7 +854,7 @@ export function ReportesPage({ token }) {
             <OperationalView
               cancelingSaleId={cancelingSaleId}
               filteredSales={filteredSales}
-              onCancelSale={handleCancelSale}
+              onCancelSale={(saleId) => { if (!cancelingSaleId) setConfirmCancelId(saleId); }}
               report={report}
               saleSearch={saleSearch}
               selectedSaleId={selectedSaleId}

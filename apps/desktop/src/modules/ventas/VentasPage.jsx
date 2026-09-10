@@ -119,6 +119,19 @@ function hasContainerSurcharge(item) {
   return combos.some((combo) => nombre.includes(combo));
 }
 
+function hondurasMinute(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Tegucigalpa", hour12: false,
+    hour: "2-digit", minute: "2-digit",
+  }).formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === "hour").value) % 24;
+  const minute = Number(parts.find((part) => part.type === "minute").value);
+  return hour * 60 + minute;
+}
+
+function alcoholSurchargeRate(minute) {
+  return minute >= 8 * 60 && minute < 22 * 60 ? 3 : 5;
+}
 function round2(value) {
   return Math.round(value * 100) / 100;
 }
@@ -151,6 +164,7 @@ export function VentasPage({ token }) {
   const searchInputRef = useRef(null);
 
   const [search, setSearch] = useState("");
+  const [currentHondurasMinute, setCurrentHondurasMinute] = useState(hondurasMinute);
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
 
@@ -182,6 +196,13 @@ export function VentasPage({ token }) {
   const [searchingClients, setSearchingClients] = useState(false);
   const [repricing, setRepricing] = useState(false);
 
+  useEffect(() => {
+    const updateClock = () => setCurrentHondurasMinute(hondurasMinute());
+    const interval = setInterval(updateClock, 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const alcoholSurchargeRateNow = alcoholSurchargeRate(currentHondurasMinute);
   const merchandiseTotal = useMemo(
     () =>
       cart.reduce(
@@ -231,7 +252,7 @@ export function VentasPage({ token }) {
 
   const alcoholSurcharge =
     alcoholSurchargeEnabled && alcoholUnits > 0
-      ? round2(alcoholUnits * 5)
+      ? round2(alcoholUnits * alcoholSurchargeRateNow)
       : 0;
 
   const alcoholDiscount =
@@ -951,11 +972,11 @@ export function VentasPage({ token }) {
                 >
                   <span>
                     {alcoholSurchargeEnabled ? "✓ " : "+ "}
-                    Tomar acá (+5)
+                    Tomar acá (+{alcoholSurchargeRateNow})
                   </span>
 
                   <strong>
-                    L {formatMoney(alcoholUnits * 5)}
+                    L {formatMoney(alcoholUnits * alcoholSurchargeRateNow)}
                   </strong>
                 </button>
 

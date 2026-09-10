@@ -143,7 +143,7 @@ test("crea producto unitario, código de barras e inventario inicial", async () 
   assert.equal(Number(state.initialMovement.cantidad), 10);
 });
 
-test("convierte kilogramos visibles a gramos internos sin alterar valores visibles", async () => {
+test("maneja libras visibles y conserva el factor interno de 454 gramos por libra", async () => {
   const result = await createProduct(validProduct({
     tipoVenta: "PESO",
     stockInicial: 2.5,
@@ -153,9 +153,12 @@ test("convierte kilogramos visibles a gramos internos sin alterar valores visibl
   }), 2);
 
   assert.equal(state.createData.unidadInventario, "GRAMO");
-  assert.equal(Number(state.createData.stockActual), 2500);
-  assert.equal(Number(state.createData.stockMinimo), 500);
-  assert.equal(Number(state.createData.costoPromedio), 0.08);
+  assert.equal(Number(state.createData.stockActual), 1135);
+  assert.equal(Number(state.createData.stockMinimo), 227);
+  assert.equal(Number(state.createData.costoPromedio), 80 / 454);
+  assert.equal(result.presentacionPrincipal.nombre, "Libra");
+  assert.equal(result.presentacionPrincipal.factorInventario, 454);
+  assert.equal(Number(state.initialMovement.cantidad), 1135);
   assert.equal(result.stock, 2.5);
   assert.equal(result.stockMinimo, 0.5);
   assert.equal(result.costo, 80);

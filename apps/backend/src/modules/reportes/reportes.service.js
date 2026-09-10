@@ -39,10 +39,11 @@ function localDate(
     : "00:00:00.000";
 
   const date = new Date(
-    `${value}T${time}`,
+    `${value}T${time}-06:00`,
   );
 
-  if (Number.isNaN(date.getTime())) {
+  if (Number.isNaN(date.getTime()) ||
+      new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) !== value) {
     throw new AppError(
       `${field} no es válida.`,
       400,
@@ -53,16 +54,16 @@ function localDate(
 }
 
 function todayText() {
-  const now = new Date();
+  const now = new Date(Date.now() - 6 * 60 * 60 * 1000);
 
-  const year = now.getFullYear();
+  const year = now.getUTCFullYear();
 
   const month = String(
-    now.getMonth() + 1,
+    now.getUTCMonth() + 1,
   ).padStart(2, "0");
 
   const day = String(
-    now.getDate(),
+    now.getUTCDate(),
   ).padStart(2, "0");
 
   return `${year}-${month}-${day}`;

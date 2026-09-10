@@ -10,8 +10,10 @@ const PAYMENT_METHODS = new Set(["EFECTIVO", "TARJETA", "TRANSFERENCIA"]);
 // Recargo por pagar con tarjeta: 5% del total (total multiplicado por 1.05).
 const CARD_SURCHARGE_RATE = new Prisma.Decimal(0.05);
 
-// Recargo por bebida alcohólica: L5 por cada unidad en el carrito.
-const ALCOHOL_SURCHARGE_PER_UNIT = new Prisma.Decimal(5);
+// Recargo "Tomar acá" por cerveza: L3 de 8am a 10pm y L5 de 10pm a 8am.
+export function alcoholSurchargePerUnit(minute) {
+  return new Prisma.Decimal(minute >= 8 * 60 && minute < 22 * 60 ? 3 : 5);
+}
 
 // Descuento por cerveza caliente: L5 por cada unidad en el carrito.
 const ALCOHOL_DISCOUNT_PER_UNIT = new Prisma.Decimal(5);
@@ -904,7 +906,7 @@ export async function createSale(data, userId) {
       Boolean(data.recargoBebidasAlcoholicas) && alcoholUnits.greaterThan(0);
 
     const alcoholSurcharge = applyAlcoholSurcharge
-      ? alcoholUnits.mul(ALCOHOL_SURCHARGE_PER_UNIT).toDecimalPlaces(2)
+      ? alcoholUnits.mul(alcoholSurchargePerUnit(saleMinute)).toDecimalPlaces(2)
       : new Prisma.Decimal(0);
 
     const applyAlcoholDiscount =

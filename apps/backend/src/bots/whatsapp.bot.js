@@ -57,10 +57,13 @@ async function iniciarBot() {
   sock.ev.on("messages.upsert", async ({ messages }) => {
     const msg = messages[0];
     if (!msg.message || msg.key.fromMe) return;
+    if (msg.key.remoteJid === "status@broadcast") return; // ignorar estados/historias, no son chats reales
 
-    const remitente = msg.key.remoteJid;
-    if (remitente !== NUMERO_AUTORIZADO) {
-      console.warn(`Mensaje ignorado de número no autorizado: ${remitente}`);
+    const remitente = msg.key.remoteJid; // puede venir como @lid, se usa para responder/historial
+    const numeroReal = msg.key.remoteJidAlt || msg.key.senderPn || remitente; // número real, para autorizar
+
+    if (numeroReal !== NUMERO_AUTORIZADO) {
+      console.warn(`Mensaje ignorado de número no autorizado: ${numeroReal} (jid: ${remitente})`);
       return;
     }
 

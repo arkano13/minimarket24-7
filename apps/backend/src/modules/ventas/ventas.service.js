@@ -7,8 +7,8 @@ import { registrarBitacora } from "../bitacora/bitacora.service.js";
 
 const PAYMENT_METHODS = new Set(["EFECTIVO", "TARJETA", "TRANSFERENCIA"]);
 
-// Recargo por pagar con tarjeta: 5% del total (total multiplicado por 1.05).
-const CARD_SURCHARGE_RATE = new Prisma.Decimal(0.05);
+// Recargo por pagar con tarjeta: 1.05% del total.
+const CARD_SURCHARGE_RATE = new Prisma.Decimal(0.0105);
 
 // Recargo "Tomar acá" por cerveza: L3 de 8am a 10pm y L5 de 10pm a 8am.
 export function alcoholSurchargePerUnit(minute) {
@@ -1055,7 +1055,7 @@ export async function createSale(data, userId) {
     }
 
     return serializeSale(sale);
-  });
+  }, { maxWait: 10_000, timeout: 60_000 });
 }
 
 export async function cancelSale(saleIdInput, userId) {

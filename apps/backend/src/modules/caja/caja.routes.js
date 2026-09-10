@@ -21,11 +21,15 @@ cashRouter.use(
 
 cashRouter.get("/mi-actividad", async (req, res, next) => {
   try {
-    res.json(await listMyCashActivity(req.auth.usuario.id, {
+    const activity = await listMyCashActivity(req.auth.usuario.id, {
       fecha: req.query.fecha,
       tipo: req.query.tipo,
       page: req.query.page,
-    }));
+    });
+    res.json({
+      ...activity,
+      usuario: { id: req.auth.usuario.id, nombre: req.auth.usuario.nombre },
+    });
   } catch (error) {
     next(error);
   }

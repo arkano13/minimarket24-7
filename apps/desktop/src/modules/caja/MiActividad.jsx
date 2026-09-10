@@ -5,6 +5,36 @@ const money = (value) => new Intl.NumberFormat("es-HN", { minimumFractionDigits:
 const dateTime = (value) => new Intl.DateTimeFormat("es-HN", { timeZone: "America/Tegucigalpa", dateStyle: "short", timeStyle: "short" }).format(new Date(value));
 const labels = { VENTA: "Venta", INGRESO: "Ingreso", RETIRO: "Retiro" };
 
+function nextDate(date) {
+  const value = new Date(`${date}T12:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + 1);
+  return value.toISOString().slice(0, 10);
+}
+
+function localDateAndMinute(value) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Tegucigalpa", year: "numeric", month: "2-digit",
+    day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(new Date(value));
+  const part = (type) => parts.find((item) => item.type === type)?.value;
+  return {
+    date: `${part("year")}-${part("month")}-${part("day")}`,
+    minute: Number(part("hour")) * 60 + Number(part("minute")),
+  };
+}
+
+async function loadAllSales(token, date) {
+  const sales = [];
+  let page = 1;
+  let response;
+  do {
+    response = await listMyCashActivity(token, { fecha: date, tipo: "VENTA", page });
+    sales.push(...response.registros);
+    page += 1;
+  } while (response.hayMas);
+  return { sales, user: response.usuario };
+}
+
 export function MiActividad({ token, revision }) {
   const [fecha, setFecha] = useState(() => new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString().slice(0, 10));
   const [tipo, setTipo] = useState("VENTA");
@@ -13,6 +43,46 @@ export function MiActividad({ token, revision }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [printing, setPrinting] = useState(false);
+
+  async function printMySales() {
+    if (printing) return;
+    if (!window.desktop?.printUserSales) {
+      setError("La impresión solo está disponible en la aplicación de escritorio.");
+      return;
+    }
+    setPrinting(true);
+    setError("");
+    try {
+      const followingDate = nextDate(fecha);
+      const [current, following] = await Promise.all([
+        loadAllSales(token, fecha),
+        loadAllSales(token, followingDate),
+      ]);
+      const shifts = [
+        { nombre: "A", horario: "2:00 a. m. – 8:00 a. m.", ventas: [] },
+        { nombre: "B", horario: "8:00 a. m. – 6:00 p. m.", ventas: [] },
+        { nombre: "C", horario: "6:00 p. m. – 2:00 a. m.", ventas: [] },
+      ];
+      for (const sale of [...current.sales, ...following.sales]) {
+        const local = localDateAndMinute(sale.creadoEn);
+        if (local.date === fecha && local.minute >= 120 && local.minute < 480) shifts[0].ventas.push(sale);
+        else if (local.date === fecha && local.minute >= 480 && local.minute < 1080) shifts[1].ventas.push(sale);
+        else if ((local.date === fecha && local.minute >= 1080) ||
+          (local.date === followingDate && local.minute < 120)) shifts[2].ventas.push(sale);
+      }
+      const sales = shifts.flatMap((shift) => shift.ventas);
+      if (sales.length === 0) {
+        setError("No tienes ventas para imprimir en la fecha seleccionada.");
+        return;
+      }
+      await window.desktop.printUserSales({ fecha, usuario: current.user ?? following.user, turnos: shifts });
+    } catch (err) {
+      setError(err.message || "No se pudieron imprimir tus ventas.");
+    } finally {
+      setPrinting(false);
+    }
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -44,6 +114,9 @@ export function MiActividad({ token, revision }) {
           </select>
         </label>
         <button type="button" className="secondary-button" disabled={loading} onClick={() => { setPage(1); setRefresh((value) => value + 1); }}>Actualizar actividad</button>
+        <button type="button" className="primary-button" disabled={loading || printing} onClick={printMySales}>
+          {printing ? "Preparando impresión..." : "Imprimir mis ventas"}
+        </button>
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
       {loading ? <p role="status">Cargando tu actividad...</p> : result && (

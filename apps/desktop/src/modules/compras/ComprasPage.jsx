@@ -286,6 +286,9 @@ export function ComprasPage({ token }) {
           presentacionId: item.presentacionId,
           cantidad: item.cantidad,
           costoTotal: item.costoTotal,
+          // Compatibility with servers from before costoTotal was introduced.
+          // Current servers preserve costoTotal; older ones require unit cost.
+          costo: Number(item.costoTotal) / Number(item.cantidad),
         })),
       });
 

@@ -12,6 +12,9 @@ contextBridge.exposeInMainWorld("desktop", {
       payload,
     ),
 
+  printUserSales: (report) =>
+    ipcRenderer.invoke("sales:print-user-sales", report),
+
   versions: {
     chrome: process.versions.chrome,
     electron: process.versions.electron,

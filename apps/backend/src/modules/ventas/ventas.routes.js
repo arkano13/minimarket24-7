@@ -6,6 +6,7 @@ import {
 import {
   cancelSale,
   createSale,
+  listCreditSales,
   listSales,
   repriceCartForClient,
   searchSaleClients,
@@ -20,6 +21,17 @@ salesRouter.get("/clientes", async (req, res, next) => {
   try {
     const clients = await searchSaleClients(req.query.buscar);
     res.json({ clientes: clients });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Créditos ("fiado") de TODOS los cajeros, no solo del usuario autenticado —
+// a propósito, para que cualquiera pueda ver a quién se le fió.
+salesRouter.get("/creditos", async (req, res, next) => {
+  try {
+    const ventas = await listCreditSales(req.query.buscar);
+    res.json({ ventas });
   } catch (error) {
     next(error);
   }

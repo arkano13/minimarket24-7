@@ -1,6 +1,7 @@
+// apps/backend/src/modules/asistente/asistente.memory.js
 import { prisma } from "../../lib/prisma.js";
 
-const MAX_MENSAJES = 20;
+const MAX_MENSAJES = 10;
 
 export async function cargarHistorial(canal, identificador) {
   const conversacion = await prisma.conversacionAsistente.findUnique({

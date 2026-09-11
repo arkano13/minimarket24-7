@@ -936,3 +936,25 @@ export async function listLowStockProducts() {
     .map(serializeProduct)
     .filter((p) => p.stock <= p.stockMinimo);
 }
+
+export async function listCategories() {
+  const categorias = await prisma.categoria.findMany({
+    where: { activo: true },
+    orderBy: { nombre: "asc" },
+  });
+
+  return categorias.map((c) => c.nombre);
+}
+
+export async function listProductsByCategory(categoria) {
+  const products = await prisma.producto.findMany({
+    where: {
+      activo: true,
+      categoria: { nombre: { contains: categoria, mode: "insensitive" } },
+    },
+    include: PRODUCT_INCLUDE,
+    orderBy: { nombre: "asc" },
+  });
+
+  return products.map(serializeProduct);
+}

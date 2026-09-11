@@ -4,7 +4,7 @@ import { Type } from "@google/genai";
 export const tools = [
   {
     name: "list_products",
-    description: "Busca productos por nombre, SKU o código de barras. Devuelve stock, precio y presentaciones",
+    description: "Busca UN producto específico por nombre, SKU o código de barras. Para preguntas sobre un tipo o categoría de producto en general (ej: cervezas, bebidas, snacks), usa list_products_by_category en su lugar.",
     parameters: {
       type: Type.OBJECT,
       properties: {
@@ -16,6 +16,20 @@ export const tools = [
     name: "list_low_stock_products",
     description: "Lista productos activos cuyo stock actual está en o por debajo del mínimo configurado",
     parameters: { type: Type.OBJECT, properties: {} },
+  },
+  {
+    name: "list_categories",
+    description: "Lista todas las categorías de productos existentes. Úsala primero cuando no estés seguro de qué categoría corresponde a lo que preguntan (ej: 'cervezas', 'snacks'), para elegir la categoría real antes de llamar a list_products_by_category.",
+    parameters: { type: Type.OBJECT, properties: {} },
+  },
+  {
+    name: "list_products_by_category",
+    description: "Lista TODOS los productos de una categoría. Úsala para preguntas generales sobre un tipo de producto (ej: '¿cuántas cervezas tengo?', 'productos de la categoría bebidas'), no para un producto específico por nombre — para eso usa list_products.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: { categoria: { type: Type.STRING, description: "Nombre exacto o parcial de la categoría" } },
+      required: ["categoria"],
+    },
   },
   {
     name: "list_suppliers",
@@ -49,13 +63,14 @@ export const tools = [
   },
   {
     name: "get_sales_report",
-    description: "Resumen de ventas completadas en un rango de fechas: totales y desglose por método de pago",
+    description: "Resumen de ventas completadas en un rango de fechas. Incluye: total general, desglose por método de pago (efectivo/tarjeta/transferencia), desglose por hora del día, y desglose COMPLETO POR PRODUCTO con cantidad vendida, monto y ganancia de cada uno. Úsala también para preguntas sobre cuánto se vendió de un producto o tipo de producto específico en un rango de fechas — filtrá vos mismo el resultado según lo que te pidan (ej: solo los productos de cerveza) en vez de decir que no tenés esa información.",
     parameters: {
       type: Type.OBJECT,
       properties: {
         from: { type: Type.STRING, description: "YYYY-MM-DD" },
         to: { type: Type.STRING, description: "YYYY-MM-DD, opcional (default = from)" },
       },
+      required: ["from"],
     },
   },
   {

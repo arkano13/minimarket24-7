@@ -1,18 +1,52 @@
 // apps/backend/src/bots/whatsapp.bot.js
 import "dotenv/config";
+import express from "express";
+import qrcode from "qrcode";
 import { makeWASocket, useMultiFileAuthState, downloadMediaMessage, DisconnectReason } from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
-import qrcode from "qrcode-terminal";
 import pino from "pino";
 import { handleMessage, transcribirAudio } from "../modules/asistente/asistente.service.js";
 import { cargarHistorial, guardarMensaje } from "../modules/asistente/asistente.memory.js";
 
 const AUTH_DIR = process.env.WHATSAPP_SESSION_DIR || "./whatsapp-session-asistente";
 const NUMERO_AUTORIZADO = process.env.WHATSAPP_NUMERO_AUTORIZADO;
+const QR_PAGE_SECRET = process.env.QR_PAGE_SECRET;
 
-if (!NUMERO_AUTORIZADO) {
-  throw new Error("Falta WHATSAPP_NUMERO_AUTORIZADO en el .env");
-}
+if (!NUMERO_AUTORIZADO) throw new Error("Falta WHATSAPP_NUMERO_AUTORIZADO en el .env");
+
+let estadoConexion = "conectando";
+let ultimoQrDataUrl = null;
+
+const app = express();
+
+app.get("/pair", async (req, res) => {
+  if (QR_PAGE_SECRET && req.query.clave !== QR_PAGE_SECRET) {
+    return res.status(403).send("No autorizado.");
+  }
+
+  if (estadoConexion === "conectado") {
+    return res.send(`<h1>Ya conectado</h1><p>El bot de WhatsApp del asistente ya está vinculado.</p>`);
+  }
+
+  if (!ultimoQrDataUrl) {
+    return res.send(`<meta http-equiv="refresh" content="3"><p>Generando QR, esperá unos segundos...</p>`);
+  }
+
+  res.send(`
+    <html>
+      <head><meta http-equiv="refresh" content="20"></head>
+      <body style="display:flex;flex-direction:column;align-items:center;font-family:sans-serif;padding-top:40px;">
+        <h1>Escaneá con WhatsApp</h1>
+        <p>Dispositivos vinculados → Vincular dispositivo</p>
+        <img src="${ultimoQrDataUrl}" width="300" height="300" />
+      </body>
+    </html>
+  `);
+});
+
+app.listen(process.env.PORT || 3002, () => {
+  console.log(`Página de pairing en el puerto ${process.env.PORT || 3002}`);
+});
 
 async function iniciarBot() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
@@ -24,27 +58,29 @@ async function iniciarBot() {
 
   sock.ev.on("creds.update", saveCreds);
 
-  sock.ev.on("connection.update", (update) => {
+  sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      console.log("Escanea este QR con WhatsApp (Dispositivos vinculados -> Vincular dispositivo):");
-      qrcode.generate(qr, { small: true });
+      estadoConexion = "esperando_qr";
+      ultimoQrDataUrl = await qrcode.toDataURL(qr);
+      console.log("QR generado. Visitá /pair para escanearlo.");
     }
 
     if (connection === "close") {
       const motivo = new Boom(lastDisconnect?.error)?.output?.statusCode;
       const debeReconectar = motivo !== DisconnectReason.loggedOut;
 
+      estadoConexion = "conectando";
       console.log(
         "Conexión cerrada.",
-        debeReconectar
-          ? "Reconectando..."
-          : "Sesión cerrada, borra la carpeta de sesión y vuelve a escanear el QR.",
+        debeReconectar ? "Reconectando..." : "Sesión cerrada, borra la carpeta de sesión y vuelve a escanear.",
       );
 
       if (debeReconectar) iniciarBot();
     } else if (connection === "open") {
+      estadoConexion = "conectado";
+      ultimoQrDataUrl = null;
       console.log("Bot de WhatsApp del asistente conectado.");
     }
   });
@@ -70,15 +106,12 @@ async function iniciarBot() {
         const buffer = await downloadMediaMessage(msg, "buffer", {});
         const base64Audio = buffer.toString("base64");
         const mimeType = msg.message.audioMessage.mimetype || "audio/ogg";
-
         texto = await transcribirAudio(base64Audio, mimeType);
 
         if (!texto) {
           await sock.sendMessage(remitente, { text: "No pude entender el audio, ¿podrías escribirlo o intentar de nuevo?" });
           return;
         }
-
-        console.log(`Audio transcrito de ${remitente}: ${texto}`);
       } catch (err) {
         console.error("Error transcribiendo audio:", err);
         await sock.sendMessage(remitente, { text: "Tuve un problema procesando el audio, intenta escribiendo tu pregunta." });

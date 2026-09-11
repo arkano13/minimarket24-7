@@ -222,6 +222,16 @@ const API_URL = `${import.meta.env?.VITE_API_URL ?? "http://127.0.0.1:3001"}/api
     });
   }
 
+  export function listCreditSales(token, search = "") {
+    const query = search ? `?buscar=${encodeURIComponent(search)}` : "";
+
+    return request(`/ventas/creditos${query}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  }
+
   export function cancelSale(token, saleId) {
     return request(`/ventas/${saleId}/cancelar`, {
       method: "POST",

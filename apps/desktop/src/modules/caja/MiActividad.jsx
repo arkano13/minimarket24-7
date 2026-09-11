@@ -1,9 +1,21 @@
 import { useEffect, useState } from "react";
-import { listMyCashActivity } from "../../services/api.js";
+import { listCreditSales, listMyCashActivity } from "../../services/api.js";
 
 const money = (value) => new Intl.NumberFormat("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 const dateTime = (value) => new Intl.DateTimeFormat("es-HN", { timeZone: "America/Tegucigalpa", dateStyle: "short", timeStyle: "short" }).format(new Date(value));
 const labels = { VENTA: "Venta", INGRESO: "Ingreso", RETIRO: "Retiro" };
+const movementMethodLabels = { EFECTIVO: "Efectivo", TARJETA: "Tarjeta" };
+
+// Verde = venta, rojo = venta cancelada, amarillo = ingreso, azul = retiro.
+function activityColorClass(item) {
+  if (item.tipo === "VENTA") {
+    return item.estado === "CANCELADA" ? "activity-card--cancelada" : "activity-card--venta";
+  }
+  if (item.tipo === "INGRESO") {
+    return "activity-card--ingreso";
+  }
+  return "activity-card--retiro";
+}
 
 function nextDate(date) {
   const value = new Date(`${date}T12:00:00Z`);
@@ -44,6 +56,14 @@ export function MiActividad({ token, revision }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [printing, setPrinting] = useState(false);
+
+  // Créditos de TODO el negocio (cualquier cajero), no solo los propios.
+  const [showCredits, setShowCredits] = useState(false);
+  const [creditsSearch, setCreditsSearch] = useState("");
+  const [creditsResult, setCreditsResult] = useState(null);
+  const [creditsError, setCreditsError] = useState("");
+  const [creditsLoading, setCreditsLoading] = useState(false);
+  const [creditsRefresh, setCreditsRefresh] = useState(0);
 
   async function printMySales() {
     if (printing) return;
@@ -96,6 +116,32 @@ export function MiActividad({ token, revision }) {
     return () => controller.abort();
   }, [token, fecha, tipo, page, refresh, revision]);
 
+  useEffect(() => {
+    if (!showCredits) {
+      return undefined;
+    }
+
+    let active = true;
+    setCreditsLoading(true);
+    setCreditsError("");
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const data = await listCreditSales(token, creditsSearch.trim());
+        if (active) setCreditsResult(data.ventas);
+      } catch (err) {
+        if (active) setCreditsError(err.message);
+      } finally {
+        if (active) setCreditsLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [token, showCredits, creditsSearch, creditsRefresh]);
+
   return (
     <section className="cash-details-card cash-my-activity" aria-labelledby="my-activity-title">
       <h2 id="my-activity-title">Mi actividad</h2>
@@ -117,6 +163,9 @@ export function MiActividad({ token, revision }) {
         <button type="button" className="primary-button" disabled={loading || printing} onClick={printMySales}>
           {printing ? "Preparando impresión..." : "Imprimir mis ventas"}
         </button>
+        <button type="button" className="secondary-button" onClick={() => setShowCredits((value) => !value)}>
+          {showCredits ? "Ocultar créditos" : "Ver todos los créditos"}
+        </button>
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
       {loading ? <p role="status">Cargando tu actividad...</p> : result && (
@@ -124,9 +173,12 @@ export function MiActividad({ token, revision }) {
           {result.registros.length === 0 ? <p>No tienes registros de este tipo en la fecha seleccionada.</p> : (
             <div className="cash-activity-list">
               {result.registros.map((item) => (
-                <article key={`${item.tipo}-${item.id}`}>
+                <article key={`${item.tipo}-${item.id}`} className={`activity-card ${activityColorClass(item)}`}>
                   <header>
-                    <strong>{labels[item.tipo]} #{item.id}</strong>
+                    <strong>
+                      {labels[item.tipo]} #{item.id}
+                      {item.tipo === "VENTA" && item.estado === "CANCELADA" ? " · Cancelada" : ""}
+                    </strong>
                     <span>{dateTime(item.creadoEn)} · {item.turnoCajaId ? `Caja #${item.turnoCajaId}` : "Sin turno asociado"}</span>
                     <strong>L {money(item.monto)}</strong>
                   </header>
@@ -137,7 +189,7 @@ export function MiActividad({ token, revision }) {
                       <ul>{item.productos.map((product) => <li key={product.id}>{product.cantidad} × {product.nombre} ({product.presentacion}) — L {money(product.subtotal)}</li>)}</ul>
                       <p>{item.pagos.map((payment) => `${payment.metodo}: L ${money(payment.monto)}`).join(" · ")}</p>
                     </details>
-                  </> : <p>{item.motivo}</p>}
+                  </> : <p>{item.motivo}{item.metodo ? ` (${movementMethodLabels[item.metodo] ?? item.metodo})` : ""}</p>}
                 </article>
               ))}
             </div>
@@ -149,6 +201,60 @@ export function MiActividad({ token, revision }) {
           </nav>
         </>
       )}
+
+      {showCredits ? (
+        <section className="credits-global" aria-labelledby="credits-global-title">
+          <h3 id="credits-global-title">Créditos de todo el negocio</h3>
+          <p>Fiado registrado por cualquier cajero, no solo el tuyo. Se le puede fiar a cualquier persona, esté o no registrada como cliente especial.</p>
+
+          <div className="cash-activity-filters">
+            <label className="field">
+              <span>Buscar por nombre</span>
+              <input
+                type="text"
+                value={creditsSearch}
+                onChange={(event) => setCreditsSearch(event.target.value)}
+                placeholder="Ejemplo: Don Chepe"
+              />
+            </label>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={creditsLoading}
+              onClick={() => setCreditsRefresh((value) => value + 1)}
+            >
+              Actualizar créditos
+            </button>
+          </div>
+
+          {creditsError && <p className="form-error" role="alert">{creditsError}</p>}
+
+          {creditsLoading ? (
+            <p role="status">Cargando créditos...</p>
+          ) : creditsResult && creditsResult.length === 0 ? (
+            <p>No hay créditos registrados.</p>
+          ) : creditsResult ? (
+            <div className="cash-activity-list">
+              {creditsResult.map((venta) => (
+                <article
+                  key={venta.id}
+                  className={`activity-card ${venta.estado === "CANCELADA" ? "activity-card--cancelada" : "activity-card--venta"}`}
+                >
+                  <header>
+                    <strong>
+                      {venta.cliente?.nombre ?? "Sin nombre"} · Venta #{venta.id}
+                      {venta.estado === "CANCELADA" ? " · Cancelada" : ""}
+                    </strong>
+                    <span>{dateTime(venta.creadoEn)} · Vendió: {venta.usuario.nombre}</span>
+                    <strong>L {money(venta.total)}</strong>
+                  </header>
+                  <p>{venta.estado === "CANCELADA" ? "Cancelada — no cuenta como deuda" : "Pendiente de cobro"}</p>
+                </article>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
     </section>
   );
 }

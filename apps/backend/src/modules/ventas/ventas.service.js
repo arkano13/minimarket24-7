@@ -5,7 +5,7 @@ import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/AppError.js";
 import { registrarBitacora } from "../bitacora/bitacora.service.js";
 
-const PAYMENT_METHODS = new Set(["EFECTIVO", "TARJETA", "TRANSFERENCIA"]);
+const PAYMENT_METHODS = new Set(["EFECTIVO", "TARJETA", "TRANSFERENCIA", "CREDITO"]);
 
 // Recargo por pagar con tarjeta: 1.05% del total.
 const CARD_SURCHARGE_RATE = new Prisma.Decimal(0.0105);
@@ -254,9 +254,9 @@ function serializeSale(sale) {
     total: Number(sale.total),
     creadoEn: sale.creadoEn,
 
-    cliente: sale.clienteEspecialId
+    cliente: sale.clienteEspecialId || sale.clienteNombre
       ? {
-          id: sale.clienteEspecialId,
+          id: sale.clienteEspecialId ?? null,
 
           nombre: sale.clienteNombre,
         }
@@ -702,9 +702,12 @@ export async function createSale(data, userId) {
   const saleMinute = currentMinute();
 
   return prisma.$transaction(async (transaction) => {
+    // Cada cajero vende contra SU PROPIA caja abierta, no contra cualquier
+    // caja abierta en el sistema.
     const openCashShift = await transaction.turnoCaja.findFirst({
       where: {
         estado: "ABIERTO",
+        usuarioAperturaId: userId,
       },
 
       select: {
@@ -736,6 +739,15 @@ export async function createSale(data, userId) {
 
     if (clientId && !specialClient) {
       throw new AppError("El cliente especial no existe o está inactivo.", 404);
+    }
+
+    // El crédito ("fiado") se le puede dar a CUALQUIER persona, no solo a
+    // los clientes especiales registrados: si no se eligió un cliente
+    // especial, se exige al menos un nombre para poder cobrarle después.
+    const creditClientName = optionalText(data.nombreCredito, 120);
+
+    if (paymentMethod === "CREDITO" && !specialClient && !creditClientName) {
+      throw new AppError("Escribe el nombre de la persona para el crédito.", 400);
     }
 
     const presentations = await transaction.presentacionProducto.findMany({
@@ -807,7 +819,11 @@ export async function createSale(data, userId) {
         saleMinute,
       );
 
-      const subtotal = quantity.mul(currentPrice.price).toDecimalPlaces(2);
+      // No hay moneda fraccionaria en caja: cada producto se redondea al
+      // lempira entero individualmente (no solo el total al final).
+      const subtotal = quantity
+        .mul(currentPrice.price)
+        .toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP);
 
       const visibleCost = new Prisma.Decimal(
         presentation.producto.costoPromedio,
@@ -969,6 +985,10 @@ export async function createSale(data, userId) {
       change = received.sub(grandTotal).toDecimalPlaces(2);
     }
 
+    // CREDITO ("fiado"): el producto sale de inventario pero no entra
+    // dinero a la caja. No pide efectivo recibido ni aplica recargo de
+    // tarjeta; el pago queda registrado con monto = total, sin efectivo.
+
     const sale = await transaction.venta.create({
       data: {
         usuarioId: userId,
@@ -977,7 +997,7 @@ export async function createSale(data, userId) {
 
         clienteEspecialId: specialClient?.id ?? null,
 
-        clienteNombre: specialClient?.nombre ?? null,
+        clienteNombre: specialClient?.nombre ?? creditClientName ?? null,
 
         subtotal: total,
 
@@ -1183,6 +1203,37 @@ export async function listSales(search = "") {
     include: SALE_INCLUDE,
     orderBy: { creadoEn: "desc" },
     take: 100,
+  });
+
+  return sales.map(serializeSale);
+}
+
+// Lista TODOS los créditos ("fiado") del negocio, de cualquier cajero —
+// a diferencia de "Mi actividad", que solo muestra lo propio de cada
+// usuario. Sirve para que cualquiera vea a quién se le fió y cuánto debe.
+export async function listCreditSales(search = "") {
+  const term = typeof search === "string" ? search.trim() : "";
+
+  const sales = await prisma.venta.findMany({
+    where: {
+      pagos: {
+        some: {
+          metodo: "CREDITO",
+        },
+      },
+      ...(term
+        ? {
+            clienteNombre: {
+              contains: term,
+              mode: "insensitive",
+            },
+          }
+        : {}),
+    },
+
+    include: SALE_INCLUDE,
+    orderBy: { creadoEn: "desc" },
+    take: 200,
   });
 
   return sales.map(serializeSale);

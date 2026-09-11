@@ -58,6 +58,7 @@ enum MetodoPago {
   EFECTIVO
   TARJETA
   TRANSFERENCIA
+  CREDITO
 }
 
 enum EstadoTurnoCaja {
@@ -68,6 +69,14 @@ enum EstadoTurnoCaja {
 enum TipoMovimientoCaja {
   INGRESO
   RETIRO
+}
+
+// Método del dinero de un movimiento de caja. Los retiros siempre son en
+// efectivo (es dinero físico que sale de la caja); los ingresos pueden ser
+// en efectivo o con tarjeta (ej. un ingreso registrado por datáfono).
+enum MetodoMovimientoCaja {
+  EFECTIVO
+  TARJETA
 }
 
 model Usuario {
@@ -346,15 +355,16 @@ model TurnoCaja {
 }
 
 model MovimientoCaja {
-  id          Int                @id @default(autoincrement())
-  turnoCajaId Int                @map("turno_caja_id")
-  usuarioId   Int                @map("usuario_id")
+  id          Int                   @id @default(autoincrement())
+  turnoCajaId Int                   @map("turno_caja_id")
+  usuarioId   Int                   @map("usuario_id")
   tipo        TipoMovimientoCaja
-  monto       Decimal            @db.Decimal(14, 2)
-  motivo      String             @db.VarChar(200)
-  creadoEn    DateTime           @default(now()) @map("creado_en")
-  turnoCaja   TurnoCaja          @relation(fields: [turnoCajaId], references: [id], onDelete: Cascade)
-  usuario     Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  metodo      MetodoMovimientoCaja  @default(EFECTIVO)
+  monto       Decimal               @db.Decimal(14, 2)
+  motivo      String                @db.VarChar(200)
+  creadoEn    DateTime              @default(now()) @map("creado_en")
+  turnoCaja   TurnoCaja             @relation(fields: [turnoCajaId], references: [id], onDelete: Cascade)
+  usuario     Usuario               @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
 
   @@index([turnoCajaId, creadoEn])
   @@index([creadoEn])

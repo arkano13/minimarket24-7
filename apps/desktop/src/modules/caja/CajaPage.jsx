@@ -85,9 +85,10 @@ function updateMoneyValue(setter, value) {
 export function CajaPage({ token }) {
   const [shift, setShift] = useState(undefined);
   const [lastClosedShift, setLastClosedShift] = useState(null);
-  const [initialFund, setInitialFund] = useState("500");
+  const [initialFund, setInitialFund] = useState("0");
   const [countedCash, setCountedCash] = useState("");
   const [movementType, setMovementType] = useState("INGRESO");
+  const [movementMethod, setMovementMethod] = useState("EFECTIVO");
   const [movementAmount, setMovementAmount] = useState("");
   const [movementReason, setMovementReason] = useState("");
   const [loading, setLoading] = useState(false);
@@ -146,7 +147,7 @@ export function CajaPage({ token }) {
 
       setShift(result.turno);
       setLastClosedShift(null);
-      setInitialFund("500");
+      setInitialFund("0");
 
       setSuccess("Caja abierta correctamente.");
     } catch (requestError) {
@@ -166,6 +167,7 @@ export function CajaPage({ token }) {
     try {
       const result = await createCashMovement(token, {
         tipo: movementType,
+        metodo: movementType === "INGRESO" ? movementMethod : "EFECTIVO",
         monto: movementAmount,
         motivo: movementReason,
       });
@@ -173,6 +175,7 @@ export function CajaPage({ token }) {
       setShift(result.turno);
       setMovementAmount("");
       setMovementReason("");
+      setMovementMethod("EFECTIVO");
 
       setSuccess(
         movementType === "INGRESO"
@@ -308,7 +311,7 @@ export function CajaPage({ token }) {
                   value={initialFund}
                 />
 
-                <small>El fondo habitual es de L 500.00.</small>
+                <small>Escribe el efectivo real que tenés en la gaveta.</small>
               </label>
 
               <button className="primary-button" disabled={loading} type="submit">
@@ -431,6 +434,43 @@ export function CajaPage({ token }) {
                     <strong>Retiro</strong>
                   </label>
                 </div>
+
+                {movementType === "INGRESO" ? (
+                  <div className="cash-movement-types cash-movement-methods">
+                    <label>
+                      <input
+                        checked={movementMethod === "EFECTIVO"}
+                        name="metodoMovimientoCaja"
+                        onChange={() => setMovementMethod("EFECTIVO")}
+                        type="radio"
+                      />
+
+                      <strong>Efectivo</strong>
+                    </label>
+
+                    <label>
+                      <input
+                        checked={movementMethod === "TARJETA"}
+                        name="metodoMovimientoCaja"
+                        onChange={() => setMovementMethod("TARJETA")}
+                        type="radio"
+                      />
+
+                      <strong>Tarjeta</strong>
+                    </label>
+
+                    <label>
+                      <input
+                        checked={movementMethod === "TRANSFERENCIA"}
+                        name="metodoMovimientoCaja"
+                        onChange={() => setMovementMethod("TRANSFERENCIA")}
+                        type="radio"
+                      />
+
+                      <strong>Transferencia</strong>
+                    </label>
+                  </div>
+                ) : null}
 
                 <label className="field">
                   <span>Monto</span>

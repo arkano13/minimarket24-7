@@ -650,6 +650,35 @@
   opacity: 0.5;
 }
 
+/* Botón pequeño de venta a crédito ("fiado"): baja el producto pero no
+   suma dinero a la caja. Se ve deliberadamente más chico y discreto que
+   el botón principal de Cobrar. */
+.credit-sale-button {
+  min-height: 34px;
+  margin-top: 6px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  color: var(--ink-soft);
+  background: transparent;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
+}
+
+.credit-sale-button:hover:not(:disabled) {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: var(--gold-tint);
+}
+
+.credit-sale-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 /* --- Aviso de caja cerrada --- */
 
 .cash-closed-warning {
@@ -734,6 +763,24 @@
 .sale-confirmation__card .primary-button {
   width: 100%;
   margin-top: 5px;
+}
+
+/* Formulario de "¿a nombre de quién?" al fiar sin cliente especial */
+.credit-name-form {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+}
+
+.credit-name-form__buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.credit-name-form__buttons .secondary-button,
+.credit-name-form__buttons .primary-button {
+  flex: 1;
+  margin-top: 0;
 }
 
 @media (max-width: 1180px) {

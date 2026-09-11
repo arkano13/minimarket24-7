@@ -136,6 +136,16 @@ function round2(value) {
   return Math.round(value * 100) / 100;
 }
 
+// No hay moneda fraccionaria en caja: cada producto se redondea al
+// lempira entero, igual que hace el backend al crear la venta.
+function round0(value) {
+  return Math.round(value);
+}
+
+function itemSubtotal(item) {
+  return round0(item.precio * Number(item.cantidad || 0));
+}
+
 function unitLabel(type) {
   if (type === "PESO") {
     return "lb";
@@ -195,6 +205,8 @@ export function VentasPage({ token }) {
   const [clientResults, setClientResults] = useState([]);
   const [searchingClients, setSearchingClients] = useState(false);
   const [repricing, setRepricing] = useState(false);
+  const [showCreditNamePrompt, setShowCreditNamePrompt] = useState(false);
+  const [creditName, setCreditName] = useState("");
 
   useEffect(() => {
     const updateClock = () => setCurrentHondurasMinute(hondurasMinute());
@@ -204,12 +216,7 @@ export function VentasPage({ token }) {
 
   const alcoholSurchargeRateNow = alcoholSurchargeRate(currentHondurasMinute);
   const merchandiseTotal = useMemo(
-    () =>
-      cart.reduce(
-        (sum, item) =>
-          sum + item.precio * Number(item.cantidad || 0),
-        0,
-      ),
+    () => cart.reduce((sum, item) => sum + itemSubtotal(item), 0),
     [cart],
   );
 
@@ -693,6 +700,97 @@ export function VentasPage({ token }) {
     }
   }
 
+  // "Crédito"/fiado: el producto sale de inventario pero no entra dinero a
+  // la caja. Se le puede fiar a CUALQUIER persona: si está registrada como
+  // cliente especial se usa esa ficha, si no se pide solo un nombre.
+  function handleCreditClick() {
+    setError("");
+
+    if (!cashShift) {
+      setError("Debes abrir la caja antes de vender.");
+      return;
+    }
+
+    if (cart.length === 0) {
+      setError("Agrega al menos un producto a la venta.");
+      return;
+    }
+
+    if (
+      cart.some(
+        (item) =>
+          !Number.isFinite(Number(item.cantidad)) ||
+          Number(item.cantidad) <= 0,
+      )
+    ) {
+      setError("Revisa la cantidad de los productos.");
+      return;
+    }
+
+    if (selectedClient) {
+      submitCredit({ clienteId: selectedClient.id });
+      return;
+    }
+
+    // No hay cliente especial elegido: pedimos solo un nombre para el
+    // crédito, sin obligar a que esté registrado.
+    setCreditName("");
+    setShowCreditNamePrompt(true);
+  }
+
+  function confirmCreditWithName(event) {
+    event.preventDefault();
+
+    const name = creditName.trim();
+
+    if (!name) {
+      setError("Escribe el nombre de la persona para el crédito.");
+      return;
+    }
+
+    setShowCreditNamePrompt(false);
+    submitCredit({ nombreCredito: name });
+  }
+
+  async function submitCredit({ clienteId, nombreCredito }) {
+    setCharging(true);
+
+    try {
+      const result = await createSale(token, {
+        productos: cart.map((item) => ({
+          presentacionId: item.presentacionId,
+          cantidad: Number(item.cantidad),
+        })),
+        metodoPago: "CREDITO",
+        clienteId,
+        nombreCredito,
+        recargoBebidasAlcoholicas: alcoholSurchargeEnabled,
+        descuentoCervezaCaliente: alcoholDiscountEnabled,
+        recargoSopaInstantanea: soupSurchargeEnabled,
+        recargoEnvaseCantidad: containerSurchargeCount,
+      });
+
+      setLastSale(result.venta);
+      setCart([]);
+      setReceivedAmount("");
+      setPaymentMethod("EFECTIVO");
+      setAlcoholSurchargeEnabled(false);
+      setAlcoholDiscountEnabled(false);
+      setSoupSurchargeEnabled(false);
+      setContainerSurchargeCount(0);
+      setSearch("");
+      setProducts([]);
+      setSelectedClient(null);
+      setShowClientPicker(false);
+      setCreditName("");
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setCharging(false);
+      focusSearch();
+    }
+  }
+
   return (
     <main className="sales-page">
       {error ? (
@@ -943,10 +1041,7 @@ export function VentasPage({ token }) {
                     />
 
                     <strong className="cart-item__subtotal">
-                      L{" "}
-                      {formatMoney(
-                        item.precio * Number(item.cantidad || 0),
-                      )}
+                      L {formatMoney(itemSubtotal(item))}
                     </strong>
                   </div>
                 </article>
@@ -1137,9 +1232,61 @@ export function VentasPage({ token }) {
                 ? "Cobrando..."
                 : `Cobrar L ${formatMoney(total)}`}
             </button>
+
+            <button
+              className="credit-sale-button"
+              disabled={charging || cart.length === 0 || !cashShift}
+              onClick={handleCreditClick}
+              title="Se le puede fiar a cualquier cliente. El producto baja de existencia pero no entra dinero a la caja."
+              type="button"
+            >
+              Fiar (crédito){selectedClient ? ` · ${selectedClient.nombre}` : ""}
+            </button>
           </div>
         </aside>
       </div>
+
+      {showCreditNamePrompt ? (
+        <div
+          className="sale-confirmation"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="sale-confirmation__card">
+            <p className="eyebrow">Crédito (fiado)</p>
+            <h2>¿A nombre de quién?</h2>
+
+            <form onSubmit={confirmCreditWithName} className="credit-name-form">
+              <label className="field">
+                <span>Nombre de la persona</span>
+
+                <input
+                  autoComplete="off"
+                  autoFocus
+                  onChange={(event) => setCreditName(event.target.value)}
+                  placeholder="Ejemplo: Don Chepe"
+                  type="text"
+                  value={creditName}
+                />
+              </label>
+
+              <div className="credit-name-form__buttons">
+                <button
+                  className="secondary-button"
+                  onClick={() => setShowCreditNamePrompt(false)}
+                  type="button"
+                >
+                  Cancelar
+                </button>
+
+                <button className="primary-button" type="submit">
+                  Confirmar crédito
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
 
       {lastSale ? (
         <div
@@ -1174,12 +1321,11 @@ export function VentasPage({ token }) {
             </strong>
 
             <p>
-              {
-                PAYMENT_METHODS.find(
-                  (method) =>
-                    method.value === lastSale.pago?.metodo,
-                )?.label
-              }
+              {lastSale.pago?.metodo === "CREDITO"
+                ? "Crédito (fiado)"
+                : PAYMENT_METHODS.find(
+                    (method) => method.value === lastSale.pago?.metodo,
+                  )?.label}
             </p>
 
             {lastSale.cliente ? (

@@ -21,6 +21,9 @@
 .cash-movement-methods { margin-top: -6px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .credits-global { margin-top: 22px; border-top: 1px dashed var(--border); padding-top: 18px; }
 .credits-global > p { color: var(--muted); }
+.field--checkbox { justify-content: end; }
+.cash-see-all { display: flex; align-items: center; gap: 8px; padding: 14px 0; color: var(--ink-soft); font-size: 0.9rem; }
+.cash-see-all input { width: 16px; height: 16px; }
 .cash-activity-list article header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; }
 .cash-activity-list article header span { color: var(--muted); }
 .cash-activity-list summary { cursor: pointer; color: var(--accent); }

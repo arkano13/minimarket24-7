@@ -3,19 +3,33 @@ import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/AppError.js";
 
 const MOVEMENT_TYPES = new Set(["INGRESO", "RETIRO"]);
-const MOVEMENT_METHODS = new Set(["EFECTIVO", "TARJETA"]);
+const MOVEMENT_METHODS = new Set(["EFECTIVO", "TARJETA", "TRANSFERENCIA"]);
 
 // Identity comes from the authenticated session, never from client filters.
 export async function listMyCashActivity(userId, filters = {}) {
   if (!Number.isSafeInteger(userId) || userId <= 0) {
     throw new AppError("Sesión no válida.", 401);
   }
-  const fecha = filters.fecha ?? new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const calendarDate = typeof fecha === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fecha)
-    ? new Date(`${fecha}T00:00:00Z`) : new Date(NaN);
-  if (!Number.isFinite(calendarDate.getTime()) || calendarDate.toISOString().slice(0, 10) !== fecha) {
-    throw new AppError("La fecha no es válida.", 400);
+
+  // "TODAS" ignora el filtro de fecha y trae todo el historial del usuario,
+  // paginado igual que el resto (para cuando no se sabe qué día buscar).
+  const showAllDates = filters.fecha === "TODAS";
+
+  let fecha = null;
+  let from = null;
+  let to = null;
+
+  if (!showAllDates) {
+    fecha = filters.fecha ?? new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const calendarDate = typeof fecha === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fecha)
+      ? new Date(`${fecha}T00:00:00Z`) : new Date(NaN);
+    if (!Number.isFinite(calendarDate.getTime()) || calendarDate.toISOString().slice(0, 10) !== fecha) {
+      throw new AppError("La fecha no es válida.", 400);
+    }
+    from = new Date(`${fecha}T00:00:00-06:00`);
+    to = new Date(from.getTime() + 86_400_000);
   }
+
   const tipo = filters.tipo ?? "VENTA";
   if (!["VENTA", "INGRESO", "RETIRO"].includes(tipo)) {
     throw new AppError("Selecciona ventas, ingresos o retiros.", 400);
@@ -24,10 +38,11 @@ export async function listMyCashActivity(userId, filters = {}) {
   if (!Number.isSafeInteger(page) || page < 1 || page > 10000) {
     throw new AppError("La página no es válida.", 400);
   }
-  const from = new Date(`${fecha}T00:00:00-06:00`);
-  const to = new Date(from.getTime() + 86_400_000);
   const query = {
-    where: { usuarioId: userId, creadoEn: { gte: from, lt: to } },
+    where: {
+      usuarioId: userId,
+      ...(showAllDates ? {} : { creadoEn: { gte: from, lt: to } }),
+    },
     orderBy: [{ creadoEn: "desc" }, { id: "desc" }],
     skip: (page - 1) * 20,
     take: 21,
@@ -62,7 +77,13 @@ export async function listMyCashActivity(userId, filters = {}) {
     });
     records = movements.map((movement) => ({ ...movement, monto: Number(movement.monto) }));
   }
-  return { registros: records.slice(0, 20), page, hayMas: records.length > 20, fecha, tipo };
+  return {
+    registros: records.slice(0, 20),
+    page,
+    hayMas: records.length > 20,
+    fecha: showAllDates ? "TODAS" : fecha,
+    tipo,
+  };
 }
 
 const SHIFT_INCLUDE = {
@@ -148,8 +169,9 @@ function cleanReason(value) {
 }
 
 // Todos los pagos de venta en EFECTIVO son dinero físico en caja. Los
-// ingresos/retiros ahora tienen su propio "metodo" (efectivo o tarjeta):
-// solo los que son en efectivo mueven el efectivo esperado de la gaveta.
+// ingresos/retiros ahora tienen su propio "metodo" (efectivo, tarjeta o
+// transferencia): solo los que son en efectivo mueven el efectivo esperado
+// de la gaveta.
 function calculateTotals(shift) {
   let cash = new Prisma.Decimal(0);
   let card = new Prisma.Decimal(0);
@@ -157,6 +179,7 @@ function calculateTotals(shift) {
   let salesTotal = new Prisma.Decimal(0);
   let incomeCash = new Prisma.Decimal(0);
   let incomeCard = new Prisma.Decimal(0);
+  let incomeTransfer = new Prisma.Decimal(0);
   let withdrawal = new Prisma.Decimal(0);
 
   for (const sale of shift.ventas) {
@@ -178,6 +201,8 @@ function calculateTotals(shift) {
     if (movement.tipo === "INGRESO") {
       if (movement.metodo === "TARJETA") {
         incomeCard = incomeCard.add(movement.monto);
+      } else if (movement.metodo === "TRANSFERENCIA") {
+        incomeTransfer = incomeTransfer.add(movement.monto);
       } else {
         incomeCash = incomeCash.add(movement.monto);
       }
@@ -187,7 +212,7 @@ function calculateTotals(shift) {
     }
   }
 
-  const income = incomeCash.add(incomeCard);
+  const income = incomeCash.add(incomeCard).add(incomeTransfer);
 
   const expectedCash = new Prisma.Decimal(
     shift.fondoInicial,
@@ -205,6 +230,7 @@ function calculateTotals(shift) {
     income,
     incomeCash,
     incomeCard,
+    incomeTransfer,
     withdrawal,
     expectedCash,
   };
@@ -248,6 +274,7 @@ function serializeShift(shift, userId) {
       ingresos: Number(totals.income),
       ingresosEfectivo: Number(totals.incomeCash),
       ingresosTarjeta: Number(totals.incomeCard),
+      ingresosTransferencia: Number(totals.incomeTransfer),
       retiros: Number(totals.withdrawal),
     },
 
@@ -352,7 +379,8 @@ export async function createCashMovement(
   }
 
   // Los retiros son siempre en efectivo (es plata física que sale de la
-  // gaveta). Los ingresos sí pueden declararse en efectivo o tarjeta.
+  // gaveta). Los ingresos sí pueden declararse en efectivo, tarjeta o
+  // transferencia.
   const method =
     type === "RETIRO"
       ? "EFECTIVO"
@@ -360,7 +388,7 @@ export async function createCashMovement(
 
   if (!MOVEMENT_METHODS.has(method)) {
     throw new AppError(
-      "Selecciona efectivo o tarjeta.",
+      "Selecciona efectivo, tarjeta o transferencia.",
       400,
     );
   }
@@ -496,6 +524,7 @@ function serializeShiftCompleto(shift) {
       ingresos: Number(totals.income),
       ingresosEfectivo: Number(totals.incomeCash),
       ingresosTarjeta: Number(totals.incomeCard),
+      ingresosTransferencia: Number(totals.incomeTransfer),
       retiros: Number(totals.withdrawal),
     },
     movimientos: shift.movimientos.map((m) => ({

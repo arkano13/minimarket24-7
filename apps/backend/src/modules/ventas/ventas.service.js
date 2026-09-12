@@ -230,6 +230,46 @@ function compositeAvailableStock(producto) {
   return Number.isFinite(minStock) ? minStock : 0;
 }
 
+// PEPS/FIFO para productos que se venden directo (no aplica a los
+// ingredientes de un compuesto, que siguen usando el costo promedio).
+// Descuenta primero del lote más viejo; si los lotes no alcanzan a
+// cubrir todo lo vendido (típicamente porque hay stock de antes de
+// activar esto, que nunca se convirtió en lote), el resto se costea con
+// el costo promedio actual del producto como respaldo.
+async function consumeFifoCost(transaction, productId, inventoryQuantity, legacyUnitCost, lotQueues) {
+  let remaining = inventoryQuantity;
+  let totalCost = new Prisma.Decimal(0);
+
+  const queue = lotQueues.get(productId) ?? [];
+
+  for (const lot of queue) {
+    if (remaining.lessThanOrEqualTo(0)) {
+      break;
+    }
+
+    if (lot.cantidadRestante.lessThanOrEqualTo(0)) {
+      continue;
+    }
+
+    const taken = Prisma.Decimal.min(remaining, lot.cantidadRestante);
+
+    totalCost = totalCost.add(taken.mul(lot.costoUnitario));
+    lot.cantidadRestante = lot.cantidadRestante.sub(taken);
+    remaining = remaining.sub(taken);
+
+    await transaction.loteInventario.update({
+      where: { id: lot.id },
+      data: { cantidadRestante: lot.cantidadRestante },
+    });
+  }
+
+  if (remaining.greaterThan(0)) {
+    totalCost = totalCost.add(remaining.mul(legacyUnitCost));
+  }
+
+  return totalCost;
+}
+
 const COMPONENT_INCLUDE = {
   componentes: {
     include: {
@@ -802,6 +842,41 @@ export async function createSale(data, userId) {
       throw new AppError("Uno de los productos ya no está disponible.", 400);
     }
 
+    // PEPS: precarga los lotes disponibles (más viejo primero) de los
+    // productos que se venden directo en este carrito, para descontar de
+    // ahí su costo real en vez del promedio.
+    const nonCompositeProductIds = [
+      ...new Set(
+        presentations
+          .filter((presentation) => !presentation.producto.esCompuesto)
+          .map((presentation) => presentation.productoId),
+      ),
+    ];
+
+    const lotQueues = new Map();
+
+    if (nonCompositeProductIds.length > 0) {
+      const lots = await transaction.loteInventario.findMany({
+        where: {
+          productoId: { in: nonCompositeProductIds },
+          cantidadRestante: { gt: 0 },
+        },
+        orderBy: { creadoEn: "asc" },
+      });
+
+      for (const lot of lots) {
+        const queue = lotQueues.get(lot.productoId) ?? [];
+
+        queue.push({
+          id: lot.id,
+          cantidadRestante: new Prisma.Decimal(lot.cantidadRestante),
+          costoUnitario: new Prisma.Decimal(lot.costoUnitario),
+        });
+
+        lotQueues.set(lot.productoId, queue);
+      }
+    }
+
     const deductionsByProduct = new Map();
 
     const details = [];
@@ -832,13 +907,29 @@ export async function createSale(data, userId) {
         .mul(currentPrice.price)
         .toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP);
 
-      const visibleCost = new Prisma.Decimal(
-        presentation.producto.costoPromedio,
-      ).mul(factor);
+      const isComposite =
+        presentation.producto.esCompuesto && presentation.producto.componentes?.length;
+
+      // PEPS solo para lo que se vende directo. Los ingredientes de un
+      // compuesto siguen costeándose con el promedio del producto, como
+      // antes.
+      const visibleCost = isComposite
+        ? new Prisma.Decimal(presentation.producto.costoPromedio).mul(factor)
+        : (
+            await consumeFifoCost(
+              transaction,
+              presentation.productoId,
+              inventoryQuantity,
+              new Prisma.Decimal(presentation.producto.costoPromedio),
+              lotQueues,
+            )
+          )
+            .div(quantity)
+            .toDecimalPlaces(4);
 
       const currentDeduction = deductionsByProduct.get(presentation.productoId);
 
-      if (presentation.producto.esCompuesto && presentation.producto.componentes?.length) {
+      if (isComposite) {
         // Producto compuesto: se descuenta una cantidad FIJA de cada
         // componente por cada unidad vendida del padre (ej. 56 lb pierna
         // + 56 lb pechuga por cada "saco" vendido), no una proporción.

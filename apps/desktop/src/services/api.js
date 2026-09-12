@@ -254,8 +254,11 @@ const API_URL = `${import.meta.env?.VITE_API_URL ?? "http://127.0.0.1:3001"}/api
     });
   }
 
-  export function listMyCashActivity(token, { fecha, tipo, page = 1 }, signal) {
+  export function listMyCashActivity(token, { fecha, tipo, page = 1, turnos }, signal) {
     const params = new URLSearchParams({ fecha, tipo, page: String(page) });
+    if (Array.isArray(turnos) && turnos.length > 0 && turnos.length < 3) {
+      params.set("turnos", turnos.join(","));
+    }
     return request(`/caja/mi-actividad?${params}`, {
       signal,
       headers: { Authorization: `Bearer ${token}` },

@@ -628,6 +628,24 @@ export async function createPurchase(
             },
           });
 
+        // PEPS: cada compra crea su propio lote con su propio costo, para
+        // que las ventas puedan descontar del más viejo primero en vez de
+        // usar el promedio. No aplica a productos compuestos (no se
+        // compran directamente, no tienen stock propio).
+        if (!incoming.producto.esCompuesto) {
+          await transaction.loteInventario.create({
+            data: {
+              productoId: productId,
+              compraId: purchase.id,
+              cantidadInicial: incoming.cantidad,
+              cantidadRestante: incoming.cantidad,
+              costoUnitario: incoming.valor
+                .div(incoming.cantidad)
+                .toDecimalPlaces(4),
+            },
+          });
+        }
+
         movements.push({
               productoId: productId,
               usuarioId: userId,
@@ -683,6 +701,15 @@ export async function cancelPurchase(purchaseIdInput, userId) {
           400,
         );
       }
+
+      // Elimina los lotes PEPS que había creado esta compra (la
+      // validación de abajo ya garantiza que no se vendió nada de por
+      // medio, así que no queda nada suelto).
+      await transaction.loteInventario.deleteMany({
+        where: {
+          compraId: purchase.id,
+        },
+      });
 
       const restoreByProduct = new Map();
 

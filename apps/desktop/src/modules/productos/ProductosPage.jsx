@@ -668,8 +668,8 @@ export function ProductosPage({ token, onBack }) {
                   min="0"
                   name="costo"
                   onChange={updateField}
-                  placeholder="0.00"
-                  step="0.01"
+                  placeholder="0.0000"
+                  step="0.0001"
                   type="number"
                   value={form.costo}
                 />

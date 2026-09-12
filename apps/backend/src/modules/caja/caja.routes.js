@@ -25,6 +25,9 @@ cashRouter.get("/mi-actividad", async (req, res, next) => {
       fecha: req.query.fecha,
       tipo: req.query.tipo,
       page: req.query.page,
+      turnos: typeof req.query.turnos === "string" && req.query.turnos.length > 0
+        ? req.query.turnos.split(",")
+        : undefined,
     });
     res.json({
       ...activity,

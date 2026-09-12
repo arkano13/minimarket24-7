@@ -73,10 +73,11 @@ enum TipoMovimientoCaja {
 
 // Método del dinero de un movimiento de caja. Los retiros siempre son en
 // efectivo (es dinero físico que sale de la caja); los ingresos pueden ser
-// en efectivo o con tarjeta (ej. un ingreso registrado por datáfono).
+// en efectivo, tarjeta o transferencia.
 enum MetodoMovimientoCaja {
   EFECTIVO
   TARJETA
+  TRANSFERENCIA
 }
 
 model Usuario {
@@ -157,6 +158,7 @@ model Producto {
   detallesDevolucion DevolucionDetalle[]
   componentes        ComponenteProducto[]    @relation("componentesDelPadre")
   esComponenteDe     ComponenteProducto[]    @relation("productoEsComponenteDe")
+  lotesInventario    LoteInventario[]
 
   @@index([nombre])
   @@index([categoriaId])
@@ -267,6 +269,38 @@ model MovimientoInventario {
   @@index([compraId])
   @@index([creadoEn])
   @@map("movimientos_inventario")
+}
+
+// PEPS/FIFO: cada compra que entra crea su propio lote con su propio
+// costo. Al vender, se descuenta primero del lote más viejo, así que si
+// compraste 100 a L25.34 y después 100 más a L26.57, las primeras 100
+// ventas se costean a 25.34 y recién después a 26.57 — no se mezcla en
+// un promedio. Arranca desde que se activó esta función: el stock e
+// historial de compras previos NO se convierten a lotes retroactivamente.
+// Los ajustes manuales de stock (no compras) NO generan ni tocan lotes.
+// Tampoco aplica a los ingredientes que consumen los productos
+// compuestos (esos siguen usando el costo promedio del producto, igual
+// que antes).
+model LoteInventario {
+  id               Int      @id @default(autoincrement())
+  productoId       Int      @map("producto_id")
+  compraId         Int?     @map("compra_id")
+
+  // En unidades de inventario (ej. gramos), igual que stockActual.
+  cantidadInicial  Decimal  @map("cantidad_inicial") @db.Decimal(16, 3)
+  cantidadRestante Decimal  @map("cantidad_restante") @db.Decimal(16, 3)
+
+  // Costo por unidad de inventario (ej. por gramo), igual que costoPromedio.
+  costoUnitario    Decimal  @map("costo_unitario") @db.Decimal(14, 4)
+
+  creadoEn         DateTime @default(now()) @map("creado_en")
+
+  producto         Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  compra           Compra?  @relation(fields: [compraId], references: [id], onDelete: SetNull)
+
+  @@index([productoId, creadoEn])
+  @@index([compraId])
+  @@map("lotes_inventario")
 }
 
 model Venta {
@@ -446,6 +480,7 @@ model Compra {
   detalles        CompraDetalle[]
   movimientos     MovimientoInventario[]
    devoluciones    Devolucion[]
+  lotesInventario LoteInventario[]
 
   @@index([proveedorId])
   @@index([usuarioId])

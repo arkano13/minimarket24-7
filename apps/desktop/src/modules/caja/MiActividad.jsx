@@ -6,6 +6,12 @@ const dateTime = (value) => new Intl.DateTimeFormat("es-HN", { timeZone: "Americ
 const labels = { VENTA: "Venta", INGRESO: "Ingreso", RETIRO: "Retiro" };
 const movementMethodLabels = { EFECTIVO: "Efectivo", TARJETA: "Tarjeta" };
 
+const SHIFT_OPTIONS = [
+  { value: "A", label: "Turno A · 2am–8am" },
+  { value: "B", label: "Turno B · 8am–6pm" },
+  { value: "C", label: "Turno C · 6pm–2am" },
+];
+
 // Verde = venta, rojo = venta cancelada, amarillo = ingreso, azul = retiro.
 function activityColorClass(item) {
   if (item.tipo === "VENTA") {
@@ -49,8 +55,8 @@ async function loadAllSales(token, date) {
 
 export function MiActividad({ token, revision }) {
   const [fecha, setFecha] = useState(() => new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString().slice(0, 10));
-  const [verTodo, setVerTodo] = useState(false);
-  const [tipo, setTipo] = useState("VENTA");
+  const [tipo, setTipo] = useState("TODO");
+  const [turnos, setTurnos] = useState(["A", "B", "C"]);
   const [page, setPage] = useState(1);
   const [refresh, setRefresh] = useState(0);
   const [result, setResult] = useState(null);
@@ -65,6 +71,20 @@ export function MiActividad({ token, revision }) {
   const [creditsError, setCreditsError] = useState("");
   const [creditsLoading, setCreditsLoading] = useState(false);
   const [creditsRefresh, setCreditsRefresh] = useState(0);
+
+  function toggleTurno(value) {
+    setTurnos((current) => {
+      const has = current.includes(value);
+
+      // No dejar seleccionado cero turnos.
+      if (has && current.length === 1) {
+        return current;
+      }
+
+      return has ? current.filter((item) => item !== value) : [...current, value];
+    });
+    setPage(1);
+  }
 
   async function printMySales() {
     if (printing) return;
@@ -110,12 +130,12 @@ export function MiActividad({ token, revision }) {
     setLoading(true);
     setResult(null);
     setError("");
-    listMyCashActivity(token, { fecha: verTodo ? "TODAS" : fecha, tipo, page }, controller.signal)
+    listMyCashActivity(token, { fecha, tipo, page, turnos }, controller.signal)
       .then((data) => { if (!controller.signal.aborted) setResult(data); })
       .catch((err) => { if (!controller.signal.aborted) setError(err.message); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [token, fecha, verTodo, tipo, page, refresh, revision]);
+  }, [token, fecha, tipo, turnos, page, refresh, revision]);
 
   useEffect(() => {
     if (!showCredits) {
@@ -150,32 +170,32 @@ export function MiActividad({ token, revision }) {
       <div className="cash-activity-filters">
         <label className="field">
           <span>Fecha de actividad</span>
-          <input
-            type="date"
-            value={fecha}
-            disabled={verTodo}
-            onChange={(event) => { setFecha(event.target.value); setPage(1); }}
-          />
-        </label>
-        <label className="field field--checkbox">
-          <span>&nbsp;</span>
-          <span className="cash-see-all">
-            <input
-              type="checkbox"
-              checked={verTodo}
-              onChange={(event) => { setVerTodo(event.target.checked); setPage(1); }}
-            />
-            Ver todo el historial
-          </span>
+          <input type="date" value={fecha} onChange={(event) => { setFecha(event.target.value); setPage(1); }} />
         </label>
         <label className="field">
           <span>Tipo de actividad</span>
           <select value={tipo} onChange={(event) => { setTipo(event.target.value); setPage(1); }}>
+            <option value="TODO">Todo</option>
             <option value="VENTA">Mis ventas</option>
             <option value="INGRESO">Mis ingresos</option>
             <option value="RETIRO">Mis retiros</option>
           </select>
         </label>
+        <fieldset className="field cash-shift-filter">
+          <span>Turnos</span>
+          <div className="cash-shift-checks">
+            {SHIFT_OPTIONS.map((shift) => (
+              <label key={shift.value}>
+                <input
+                  type="checkbox"
+                  checked={turnos.includes(shift.value)}
+                  onChange={() => toggleTurno(shift.value)}
+                />
+                {shift.label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
         <button type="button" className="secondary-button" disabled={loading} onClick={() => { setPage(1); setRefresh((value) => value + 1); }}>Actualizar actividad</button>
         <button type="button" className="primary-button" disabled={loading || printing} onClick={printMySales}>
           {printing ? "Preparando impresión..." : "Imprimir mis ventas"}
@@ -187,7 +207,7 @@ export function MiActividad({ token, revision }) {
       {error && <p className="form-error" role="alert">{error}</p>}
       {loading ? <p role="status">Cargando tu actividad...</p> : result && (
         <>
-          {result.registros.length === 0 ? <p>{verTodo ? "No tienes registros de este tipo." : "No tienes registros de este tipo en la fecha seleccionada."}</p> : (
+          {result.registros.length === 0 ? <p>No tienes registros de este tipo en la fecha seleccionada.</p> : (
             <div className="cash-activity-list">
               {result.registros.map((item) => (
                 <article key={`${item.tipo}-${item.id}`} className={`activity-card ${activityColorClass(item)}`}>

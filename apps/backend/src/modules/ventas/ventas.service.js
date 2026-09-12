@@ -496,8 +496,13 @@ export async function searchSaleProducts(search = "", clientIdInput = null) {
 
       const compositeStock = compositeAvailableStock(presentation.producto);
 
-      const baseStock =
-        compositeStock !== null ? compositeStock : Number(presentation.producto.stockActual);
+      // Para un compuesto, compositeAvailableStock ya devuelve el stock en
+      // unidades de ESTA presentación (la "cantidad" de cada componente se
+      // define por unidad vendida del padre) — dividirlo de nuevo por el
+      // factor de inventario lo reduce mal. Solo se divide por factor
+      // cuando el stock viene crudo (producto normal, no compuesto).
+      const stock =
+        compositeStock !== null ? compositeStock : Number(presentation.producto.stockActual) / factor;
 
       return {
         presentacionId: presentation.id,
@@ -516,7 +521,7 @@ export async function searchSaleProducts(search = "", clientIdInput = null) {
 
         categoria: presentation.producto.categoria,
 
-        stock: baseStock / factor,
+        stock,
 
         precio: Number(currentPrice.price),
 
@@ -638,8 +643,10 @@ export async function repriceCartForClient(
 
     const compositeStock = compositeAvailableStock(presentation.producto);
 
-    const baseStock =
-      compositeStock !== null ? compositeStock : Number(presentation.producto.stockActual);
+    // Mismo caso que en la búsqueda: el stock de un compuesto ya viene en
+    // unidades de esta presentación, no hay que dividirlo por el factor.
+    const stock =
+      compositeStock !== null ? compositeStock : Number(presentation.producto.stockActual) / factor;
 
     return {
       presentacionId: presentation.id,
@@ -650,7 +657,7 @@ export async function repriceCartForClient(
       codigoBarra: barcode,
       sku: presentation.producto.sku,
       categoria: presentation.producto.categoria,
-      stock: baseStock / factor,
+      stock,
       precio: Number(currentPrice.price),
       precioOrigen: currentPrice.origin,
       turno: currentPrice.shift,

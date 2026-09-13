@@ -116,6 +116,42 @@ function reportRange(
   };
 }
 
+// Mismos turnos que "Mi actividad" en caja: A (2am-8am), B (8am-6pm),
+// C (6pm-2am). Se clasifica por la hora del día nada más (no importa a
+// qué fecha calendario pertenezca), así una venta de la 1am cuenta para
+// el Turno C de esa madrugada, no queda "cortada" en un turno que no es.
+const ALL_SHIFTS = ["A", "B", "C"];
+
+function reportShift(date) {
+  const hour = hondurasHour(date);
+
+  if (hour >= 2 && hour < 8) {
+    return "A";
+  }
+
+  if (hour >= 8 && hour < 18) {
+    return "B";
+  }
+
+  return "C";
+}
+
+function normalizeShifts(turnosInput) {
+  if (!Array.isArray(turnosInput) || turnosInput.length === 0) {
+    return ALL_SHIFTS;
+  }
+
+  const normalized = [
+    ...new Set(turnosInput.map((value) => String(value).toUpperCase())),
+  ].filter((value) => ALL_SHIFTS.includes(value));
+
+  if (normalized.length === 0) {
+    throw new AppError("Selecciona al menos un turno.", 400);
+  }
+
+  return normalized;
+}
+
 function roundMoney(value) {
   return (
     Math.round(
@@ -124,16 +160,41 @@ function roundMoney(value) {
   );
 }
 
+// Lista liviana de usuarios (solo id y nombre) para el selector de
+// Reportes — a propósito NO exige ser administrador como sí exige
+// GET /api/usuarios, ya que cualquiera con acceso al módulo REPORTES debe
+// poder filtrar por usuario.
+export async function listReportUsers() {
+  const users = await prisma.usuario.findMany({
+    where: { activo: true },
+    select: { id: true, nombre: true },
+    orderBy: { nombre: "asc" },
+  });
+
+  return users;
+}
+
 export async function getSalesReport(
   fromInput,
   toInput,
+  turnosInput,
+  usuarioIdInput,
 ) {
   const range = reportRange(
     fromInput,
     toInput,
   );
 
-  const sales = await prisma.venta.findMany({
+  const shifts = normalizeShifts(turnosInput);
+  const shiftSet = new Set(shifts);
+
+  const usuarioId = usuarioIdInput ? Number(usuarioIdInput) : null;
+
+  if (usuarioIdInput && (!Number.isSafeInteger(usuarioId) || usuarioId <= 0)) {
+    throw new AppError("El usuario no es válido.", 400);
+  }
+
+  const allSales = await prisma.venta.findMany({
     where: {
       estado: "COMPLETADA",
 
@@ -141,6 +202,8 @@ export async function getSalesReport(
         gte: range.from,
         lte: range.to,
       },
+
+      ...(usuarioId ? { usuarioId } : {}),
     },
 
     include: {
@@ -168,6 +231,11 @@ export async function getSalesReport(
       creadoEn: "desc",
     },
   });
+
+  // Filtra por turno DESPUÉS de traer todo: así el resumen, los productos,
+  // los pagos, las horas y el listado de ventas quedan todos consistentes
+  // entre sí, reflejando solo lo que pasó en los turnos elegidos.
+  const sales = allSales.filter((sale) => shiftSet.has(reportShift(sale.creadoEn)));
 
   const payments = new Map([
     [
@@ -279,6 +347,8 @@ export async function getSalesReport(
     periodo: {
       desde: range.desde,
       hasta: range.hasta,
+      turnos: shifts,
+      usuarioId: usuarioId ?? null,
     },
 
     resumen: {

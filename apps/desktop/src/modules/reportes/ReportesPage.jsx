@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import "./ReportesPage.css";
-import { cancelSale, getSalesReport } from "../../services/api.js";
+import { cancelSale, getSalesReport, listReportUsers } from "../../services/api.js";
 import { emptyShifts, shiftIdForDate } from "./shifts.js";
 
 const PAYMENT_LABELS = {
@@ -566,6 +566,9 @@ export function ReportesPage({ token }) {
   const [activeView, setActiveView] = useState("EXECUTIVE");
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(today);
+  const [turnos, setTurnos] = useState(["A", "B", "C"]);
+  const [usuarioId, setUsuarioId] = useState("");
+  const [users, setUsers] = useState([]);
   const [report, setReport] = useState(null);
   const [saleSearch, setSaleSearch] = useState("");
   const [selectedSaleId, setSelectedSaleId] = useState(null);
@@ -603,13 +606,24 @@ export function ReportesPage({ token }) {
     });
   }, [report, saleSearch]);
 
-  async function loadReport(selectedFrom = from, selectedTo = to) {
+  async function loadReport(
+    selectedFrom = from,
+    selectedTo = to,
+    selectedTurnos = turnos,
+    selectedUsuarioId = usuarioId,
+  ) {
     setLoading(true);
     setError("");
     setMessage("");
 
     try {
-      const result = await getSalesReport(token, selectedFrom, selectedTo);
+      const result = await getSalesReport(
+        token,
+        selectedFrom,
+        selectedTo,
+        selectedTurnos,
+        selectedUsuarioId || undefined,
+      );
 
       setReport(result.reporte);
       setSelectedSaleId(null);
@@ -621,8 +635,49 @@ export function ReportesPage({ token }) {
     }
   }
 
+  function toggleTurno(value) {
+    setTurnos((current) => {
+      const has = current.includes(value);
+
+      // No dejar seleccionado cero turnos.
+      if (has && current.length === 1) {
+        return current;
+      }
+
+      const next = has ? current.filter((item) => item !== value) : [...current, value];
+
+      loadReport(from, to, next, usuarioId);
+
+      return next;
+    });
+  }
+
+  function handleUsuarioChange(value) {
+    setUsuarioId(value);
+    loadReport(from, to, turnos, value);
+  }
+
   useEffect(() => {
     loadReport(today, today);
+  }, [token]);
+
+  useEffect(() => {
+    let active = true;
+
+    listReportUsers(token)
+      .then((result) => {
+        if (active) {
+          setUsers(result.usuarios);
+        }
+      })
+      .catch(() => {
+        // Si falla, simplemente no se muestra el selector de usuario —
+        // el resto del reporte sigue funcionando igual.
+      });
+
+    return () => {
+      active = false;
+    };
   }, [token]);
 
   async function handleCancelSale(saleId) {
@@ -813,6 +868,44 @@ export function ReportesPage({ token }) {
           <button disabled={loading} onClick={() => loadReport()} type="button">
             {loading ? "Actualizando..." : "Actualizar"}
           </button>
+        </div>
+
+        <div className="reports-shift-filter">
+          <span>Turnos</span>
+
+          {[
+            { value: "A", label: "Turno A · 2am–8am" },
+            { value: "B", label: "Turno B · 8am–6pm" },
+            { value: "C", label: "Turno C · 6pm–2am" },
+          ].map((shift) => (
+            <label key={shift.value}>
+              <input
+                checked={turnos.includes(shift.value)}
+                onChange={() => toggleTurno(shift.value)}
+                type="checkbox"
+              />
+              {shift.label}
+            </label>
+          ))}
+
+          {users.length > 0 ? (
+            <label className="reports-user-filter">
+              <span>Usuario</span>
+
+              <select
+                onChange={(event) => handleUsuarioChange(event.target.value)}
+                value={usuarioId}
+              >
+                <option value="">Todos</option>
+
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </div>
       </section>
 

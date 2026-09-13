@@ -522,6 +522,8 @@ const API_URL = `${import.meta.env?.VITE_API_URL ?? "http://127.0.0.1:3001"}/api
     token,
     from,
     to,
+    turnos,
+    usuarioId,
   ) {
     const params = new URLSearchParams();
 
@@ -531,6 +533,14 @@ const API_URL = `${import.meta.env?.VITE_API_URL ?? "http://127.0.0.1:3001"}/api
 
     if (to) {
       params.set("hasta", to);
+    }
+
+    if (Array.isArray(turnos) && turnos.length > 0 && turnos.length < 3) {
+      params.set("turnos", turnos.join(","));
+    }
+
+    if (usuarioId) {
+      params.set("usuarioId", String(usuarioId));
     }
 
     const query = params.size
@@ -545,6 +555,14 @@ const API_URL = `${import.meta.env?.VITE_API_URL ?? "http://127.0.0.1:3001"}/api
         },
       },
     );
+  }
+
+  export function listReportUsers(token) {
+    return request("/reportes/usuarios", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
   }
 
   export function listUsers(token) {

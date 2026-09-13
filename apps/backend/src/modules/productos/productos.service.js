@@ -3,6 +3,27 @@ import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/AppError.js";
 import { registrarBitacora } from "../bitacora/bitacora.service.js";
 
+// Un código de barras debe ser único... salvo que el producto sea
+// COMPUESTO: ahí sí se le permite repetir el código de otro producto (ej.
+// "Barcena Caguama" y "Barcena Caguama + Envase" son físicamente el mismo
+// código, uno es el otro con un agregado). No aplica al crear un producto
+// nuevo porque recién ahí nunca es compuesto todavía (eso se define
+// después, con setProductComponents).
+async function assertBarcodeAvailable(transaction, codigo, esCompuesto) {
+  if (!codigo || esCompuesto) {
+    return;
+  }
+
+  const existing = await transaction.codigoBarraProducto.findFirst({
+    where: { codigo, activo: true },
+    select: { id: true },
+  });
+
+  if (existing) {
+    throw new AppError("Ese código de barras ya pertenece a otro producto.", 409);
+  }
+}
+
 const TIPOS_VENTA = {
   UNIDAD: {
     unidadInventario: "UNIDAD",
@@ -310,6 +331,10 @@ export async function createProduct(data, userId) {
         }
       }
 
+      // Un producto recién creado nunca es compuesto todavía (eso se
+      // define después), así que acá el código siempre tiene que ser único.
+      await assertBarcodeAvailable(transaction, barcode, false);
+
       const product = await transaction.producto.create({
         data: {
           sku,
@@ -459,6 +484,8 @@ export async function updateProduct(productIdInput, data, userId) {
         where: { presentacionId: principal.id },
       });
 
+      await assertBarcodeAvailable(transaction, barcode, currentProduct.esCompuesto);
+
       await transaction.presentacionProducto.update({
         where: { id: principal.id },
 
@@ -596,7 +623,7 @@ export async function addPresentation(productIdInput, data, userId) {
     const product = await prisma.$transaction(async (transaction) => {
       const parentProduct = await transaction.producto.findFirst({
         where: { id: productId, activo: true },
-        select: { id: true },
+        select: { id: true, esCompuesto: true },
       });
 
       if (!parentProduct) {
@@ -611,6 +638,8 @@ export async function addPresentation(productIdInput, data, userId) {
       if (existingNames) {
         throw new AppError("Ya existe una presentación con ese nombre en este producto.", 409);
       }
+
+      await assertBarcodeAvailable(transaction, barcode, parentProduct.esCompuesto);
 
       await transaction.presentacionProducto.create({
         data: {
@@ -672,6 +701,7 @@ export async function updatePresentation(productIdInput, presentationIdInput, da
     const product = await prisma.$transaction(async (transaction) => {
       const presentation = await transaction.presentacionProducto.findFirst({
         where: { id: presentationId, productoId: productId, activo: true },
+        include: { producto: { select: { esCompuesto: true } } },
       });
 
       if (!presentation) {
@@ -696,6 +726,8 @@ export async function updatePresentation(productIdInput, presentationIdInput, da
       await transaction.codigoBarraProducto.deleteMany({
         where: { presentacionId: presentationId },
       });
+
+      await assertBarcodeAvailable(transaction, barcode, presentation.producto.esCompuesto);
 
       await transaction.presentacionProducto.update({
         where: { id: presentationId },

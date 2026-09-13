@@ -214,12 +214,17 @@ model PresentacionProducto {
 model CodigoBarraProducto {
   id             Int                  @id @default(autoincrement())
   presentacionId Int                  @map("presentacion_id")
-  codigo         String               @unique @db.VarChar(80)
+  // Ya no es @unique a nivel de base de datos: un producto COMPUESTO puede
+  // compartir código de barras con el producto del que sale (ej. "Barcena
+  // Caguama" y "Barcena Caguama + Envase" son el mismo código físico). La
+  // unicidad para productos normales se valida en productos.service.js.
+  codigo         String               @db.VarChar(80)
   principal      Boolean              @default(true)
   activo         Boolean              @default(true)
   presentacion   PresentacionProducto @relation(fields: [presentacionId], references: [id], onDelete: Cascade)
 
   @@index([presentacionId])
+  @@index([codigo])
   @@map("codigos_barra_producto")
 }
 

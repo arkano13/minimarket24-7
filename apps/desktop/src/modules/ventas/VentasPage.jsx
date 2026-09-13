@@ -130,7 +130,7 @@ function hondurasMinute(date = new Date()) {
 }
 
 function alcoholSurchargeRate(minute) {
-  return minute >= 8 * 60 && minute < 22 * 60 ? 3 : 5;
+  return minute >= 8 * 60 && minute < 18 * 60 ? 3 : 5;
 }
 function round2(value) {
   return Math.round(value * 100) / 100;
@@ -284,7 +284,7 @@ export function VentasPage({ token }) {
 
   const cardSurcharge =
     paymentMethod === "TARJETA"
-      ? round2(totalWithAlcoholSurcharge * 0.0105)
+      ? round2(totalWithAlcoholSurcharge * 0.05)
       : 0;
 
   const total = Math.round(totalWithAlcoholSurcharge + cardSurcharge);
@@ -430,20 +430,35 @@ export function VentasPage({ token }) {
 
   useEffect(() => {
     function handleGlobalShortcut(event) {
-      if (event.key !== "/") {
-        return;
-      }
-
       const tag = event.target.tagName;
       const isTyping =
-        tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        event.target.isContentEditable;
 
       if (isTyping || !cashShift) {
         return;
       }
 
-      event.preventDefault();
-      focusSearch();
+      if (event.key === "/") {
+        event.preventDefault();
+        focusSearch();
+        return;
+      }
+
+      // Cualquier tecla "normal" (letra, número, lo que manda un lector de
+      // código de barras) redirige el foco al buscador YA, sin esperar al
+      // próximo ciclo, para que el carácter caiga ahí en vez de perderse.
+      // Así no hace falta hacerle click a la barra antes de escanear.
+      if (
+        event.key.length === 1 &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.metaKey
+      ) {
+        searchInputRef.current?.focus();
+      }
     }
 
     window.addEventListener("keydown", handleGlobalShortcut);
@@ -504,15 +519,10 @@ export function VentasPage({ token }) {
         selectedClient?.id,
       );
 
-      const exactProduct = result.productos.find(
-        (product) => product.coincidenciaExacta,
-      );
-
-      if (exactProduct) {
-        addProduct(exactProduct);
-        return;
-      }
-
+      // No se auto-agrega nunca, aunque haya una sola coincidencia exacta:
+      // varios productos pueden compartir el mismo código de barras (ej.
+      // un compuesto que usa el mismo código que su producto base), así
+      // que siempre se muestra la lista y el cajero elige con un click.
       setProducts(result.productos);
 
       if (result.productos.length === 0) {

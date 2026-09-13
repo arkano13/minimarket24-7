@@ -10,9 +10,9 @@ const PAYMENT_METHODS = new Set(["EFECTIVO", "TARJETA", "TRANSFERENCIA", "CREDIT
 // Recargo por pagar con tarjeta: el total se multiplica por 1.05 (5%).
 const CARD_SURCHARGE_RATE = new Prisma.Decimal(0.05);
 
-// Recargo "Tomar acá" por cerveza: L3 de 8am a 10pm y L5 de 10pm a 8am.
+// Recargo "Tomar acá" por cerveza: L3 de 8am a 6pm y L5 de 6pm a 8am.
 export function alcoholSurchargePerUnit(minute) {
-  return new Prisma.Decimal(minute >= 8 * 60 && minute < 22 * 60 ? 3 : 5);
+  return new Prisma.Decimal(minute >= 8 * 60 && minute < 18 * 60 ? 3 : 5);
 }
 
 // Descuento por cerveza caliente: L5 por cada unidad en el carrito.

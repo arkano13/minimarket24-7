@@ -3,8 +3,7 @@ import { randomUUID } from "node:crypto";
 import { unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildSalesReportHtml, safePdfName } from "./sales-report-pdf.js";
-import { buildAdministrativeReportHtml } from "./administrative-report-pdf.js";
+import { generarInformeTurnoHTML, safePdfName } from "./shift-report-pdf.js";
 import { buildUserSalesReceiptHtml } from "./sale-receipt.js";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -53,13 +52,13 @@ ipcMain.handle("sales:print-user-sales", async (event, report) => {
   }
 });
 
+// Un solo tipo de reporte: el informe de turno unificado. Reemplaza los
+// antiguos "administrativo" (ADMINISTRATIVE) y "operativo" (ventas) —
+// ya no se distingue reportType, siempre se genera el mismo documento.
 ipcMain.handle("reports:save-pdf", async (event, payload) => {
   if (!payload?.report || typeof payload.report !== "object") {
     throw new Error("No se recibieron los datos del reporte.");
   }
-
-  const isAdministrative = payload.reportType === "ADMINISTRATIVE";
-
 
   const ownerWindow = BrowserWindow.fromWebContents(event.sender);
 
@@ -102,22 +101,16 @@ ipcMain.handle("reports:save-pdf", async (event, payload) => {
   });
 
   try {
-    const reportHtml = isAdministrative
-      ? buildAdministrativeReportHtml(payload.report)
-      : buildSalesReportHtml(payload.report);
+    const reportHtml = generarInformeTurnoHTML(payload.report);
 
     await writeFile(temporaryHtmlPath, reportHtml, "utf8");
 
     await reportWindow.loadFile(temporaryHtmlPath);
 
-    const reportName = isAdministrative
-      ? "Reporte administrativo"
-      : "Reporte operativo";
-
     const pdf = await reportWindow.webContents.printToPDF({
       pageSize: "A4",
 
-      landscape: !isAdministrative,
+      landscape: false,
 
       printBackground: true,
       preferCSSPageSize: true,
@@ -140,7 +133,7 @@ ipcMain.handle("reports:save-pdf", async (event, payload) => {
             >
               <span>
                 Minimarket 24/7 ·
-                ${reportName}
+                Informe de turno
               </span>
 
               <span>

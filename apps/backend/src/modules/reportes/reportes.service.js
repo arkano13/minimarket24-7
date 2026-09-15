@@ -19,6 +19,19 @@ function hondurasHour(date) {
   return hour % 24;
 }
 
+function addDaysToIsoDate(value, days) {
+  const [year, month, day] = value.split("-").map(Number);
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+
+  return `${y}-${m}-${d}`;
+}
+
 function localDate(
   value,
   field,
@@ -34,12 +47,21 @@ function localDate(
     );
   }
 
+  // El día comercial va de 2:00 a.m. a 1:59:59.999 a.m. del día
+  // calendario SIGUIENTE — no de medianoche a medianoche. Coincide con
+  // el arranque del Turno A (2am-8am), así el Turno C (6pm-2am) queda
+  // completo dentro de un solo día comercial, sin cortarse a la mitad
+  // por el cambio de fecha calendario a medianoche.
+  const targetDate = endOfDay
+    ? addDaysToIsoDate(value, 1)
+    : value;
+
   const time = endOfDay
-    ? "23:59:59.999"
-    : "00:00:00.000";
+    ? "01:59:59.999"
+    : "02:00:00.000";
 
   const date = new Date(
-    `${value}T${time}-06:00`,
+    `${targetDate}T${time}-06:00`,
   );
 
   if (Number.isNaN(date.getTime()) ||
@@ -54,7 +76,10 @@ function localDate(
 }
 
 function todayText() {
-  const now = new Date(Date.now() - 6 * 60 * 60 * 1000);
+  // Resta 8 horas al UTC actual: 6 por la zona horaria de Honduras más
+  // 2 por el corte del día comercial. Antes de las 2am (hora de
+  // Honduras) todavía estamos dentro del día comercial anterior.
+  const now = new Date(Date.now() - 8 * 60 * 60 * 1000);
 
   const year = now.getUTCFullYear();
 
@@ -122,6 +147,12 @@ function reportRange(
 // el Turno C de esa madrugada, no queda "cortada" en un turno que no es.
 const ALL_SHIFTS = ["A", "B", "C"];
 
+const SHIFT_LABELS = {
+  A: "Turno A · 2:00 a. m. – 8:00 a. m.",
+  B: "Turno B · 8:00 a. m. – 6:00 p. m.",
+  C: "Turno C · 6:00 p. m. – 2:00 a. m.",
+};
+
 function reportShift(date) {
   const hour = hondurasHour(date);
 
@@ -152,6 +183,14 @@ function normalizeShifts(turnosInput) {
   return normalized;
 }
 
+function shiftLabel(shifts) {
+  if (shifts.length === ALL_SHIFTS.length) {
+    return "Día completo (Turnos A, B y C)";
+  }
+
+  return shifts.map((shift) => SHIFT_LABELS[shift]).join(" + ");
+}
+
 function roundMoney(value) {
   return (
     Math.round(
@@ -174,7 +213,105 @@ export async function listReportUsers() {
   return users;
 }
 
-export async function getSalesReport(
+async function loadCashMovements(
+  range,
+  shiftSet,
+  usuarioId,
+) {
+  const movements = await prisma.movimientoCaja.findMany({
+    where: {
+      creadoEn: {
+        gte: range.from,
+        lte: range.to,
+      },
+
+      ...(usuarioId ? { usuarioId } : {}),
+    },
+
+    orderBy: {
+      creadoEn: "asc",
+    },
+  });
+
+  const filtered = movements.filter((movement) =>
+    shiftSet.has(reportShift(movement.creadoEn)),
+  );
+
+  const entradas = filtered
+    .filter((movement) => movement.tipo === "INGRESO")
+    .map((movement) => ({
+      id: movement.id,
+      creadoEn: movement.creadoEn,
+      motivo: movement.motivo,
+      metodo: movement.metodo,
+      monto: Number(movement.monto),
+    }));
+
+  const salidas = filtered
+    .filter((movement) => movement.tipo === "RETIRO")
+    .map((movement) => ({
+      id: movement.id,
+      creadoEn: movement.creadoEn,
+      motivo: movement.motivo,
+      metodo: movement.metodo,
+      monto: Number(movement.monto),
+    }));
+
+  return {
+    entradas,
+    salidas,
+
+    totalEntradas: roundMoney(
+      entradas.reduce((sum, entry) => sum + entry.monto, 0),
+    ),
+
+    totalSalidas: roundMoney(
+      salidas.reduce((sum, entry) => sum + entry.monto, 0),
+    ),
+  };
+}
+
+async function loadPurchases(
+  range,
+  shiftSet,
+  usuarioId,
+) {
+  const purchases = await prisma.compra.findMany({
+    where: {
+      estado: "RECIBIDA",
+
+      creadoEn: {
+        gte: range.from,
+        lte: range.to,
+      },
+
+      ...(usuarioId ? { usuarioId } : {}),
+    },
+
+    orderBy: {
+      creadoEn: "asc",
+    },
+  });
+
+  const filtered = purchases
+    .filter((purchase) => shiftSet.has(reportShift(purchase.creadoEn)))
+    .map((purchase) => ({
+      id: purchase.id,
+      creadoEn: purchase.creadoEn,
+      proveedor: purchase.proveedorNombre,
+      total: Number(purchase.total),
+    }));
+
+  return {
+    compras: filtered,
+
+    totalCompras: roundMoney(
+      filtered.reduce((sum, entry) => sum + entry.total, 0),
+    ),
+  };
+}
+
+export async function getShiftReport(
   fromInput,
   toInput,
   turnosInput,
@@ -343,11 +480,85 @@ export async function getSalesReport(
     }
   }
 
+  const productosOrdenados = [...products.values()]
+    .map((product) => ({
+      ...product,
+
+      cantidad:
+        Math.round(
+          product.cantidad * 1000,
+        ) / 1000,
+
+      ventas: roundMoney(
+        product.ventas,
+      ),
+
+      costo: roundMoney(
+        product.costo,
+      ),
+
+      ganancia: roundMoney(
+        product.ganancia,
+      ),
+    }))
+    .sort(
+      (first, second) =>
+        second.ventas - first.ventas,
+    );
+
+  const horasOrdenadas = [...hours.values()]
+    .map((hour) => ({
+      ...hour,
+
+      total: roundMoney(
+        hour.total,
+      ),
+    }))
+    .sort(
+      (first, second) =>
+        first.hora - second.hora,
+    );
+
+  const [caja, compras] = await Promise.all([
+    loadCashMovements(range, shiftSet, usuarioId),
+    loadPurchases(range, shiftSet, usuarioId),
+  ]);
+
+  const efectivoVentas = roundMoney(
+    payments.get("EFECTIVO")?.total ?? 0,
+  );
+
+  const efectivoEsperado = roundMoney(
+    efectivoVentas + caja.totalEntradas - caja.totalSalidas,
+  );
+
+  const gananciaEstimada = roundMoney(total - totalCost);
+
+  const margenEstimado =
+    total > 0
+      ? roundMoney((gananciaEstimada / total) * 100)
+      : 0;
+
+  const liderIngresos = productosOrdenados[0] ?? null;
+
+  const liderCantidad =
+    [...productosOrdenados]
+      .sort((first, second) => second.cantidad - first.cantidad)[0] ?? null;
+
+  const liderGanancia =
+    [...productosOrdenados]
+      .sort((first, second) => second.ganancia - first.ganancia)[0] ?? null;
+
+  const horaConMasVentas =
+    [...horasOrdenadas]
+      .sort((first, second) => second.total - first.total)[0] ?? null;
+
   return {
     periodo: {
       desde: range.desde,
       hasta: range.hasta,
       turnos: shifts,
+      turnoEtiqueta: shiftLabel(shifts),
       usuarioId: usuarioId ?? null,
     },
 
@@ -356,13 +567,14 @@ export async function getSalesReport(
 
       total: roundMoney(total),
 
+      efectivoEsperado,
+
       costoEstimado:
         roundMoney(totalCost),
 
-      gananciaEstimada:
-        roundMoney(
-          total - totalCost,
-        ),
+      gananciaEstimada,
+
+      margenEstimado,
 
       promedio:
         sales.length > 0
@@ -379,47 +591,44 @@ export async function getSalesReport(
         total: roundMoney(
           payment.total,
         ),
+
+        porcentaje:
+          total > 0
+            ? roundMoney((payment.total / total) * 100)
+            : 0,
       }),
     ),
 
-    productos: [...products.values()]
-      .map((product) => ({
-        ...product,
+    cierre: {
+      efectivoVentas,
+      entradas: caja.totalEntradas,
+      salidas: caja.totalSalidas,
+      efectivoEsperado,
+    },
 
-        cantidad:
-          Math.round(
-            product.cantidad * 1000,
-          ) / 1000,
+    lideres: {
+      mayorIngreso: liderIngresos,
+      mayorCantidad: liderCantidad,
+      mayorGanancia: liderGanancia,
+      horaConMasVentas,
+    },
 
-        ventas: roundMoney(
-          product.ventas,
-        ),
+    productos: productosOrdenados,
 
-        costo: roundMoney(
-          product.costo,
-        ),
+    horas: horasOrdenadas,
 
-        ganancia: roundMoney(
-          product.ganancia,
-        ),
-      }))
-      .sort(
-        (first, second) =>
-          second.ventas - first.ventas,
-      ),
+    caja: {
+      entradas: caja.entradas,
+      salidas: caja.salidas,
+    },
 
-    horas: [...hours.values()]
-      .map((hour) => ({
-        ...hour,
+    compras: compras.compras,
 
-        total: roundMoney(
-          hour.total,
-        ),
-      }))
-      .sort(
-        (first, second) =>
-          first.hora - second.hora,
-      ),
+    // Pendientes de conectar a datos reales: se mantienen vacíos hasta
+    // que se defina el origen de créditos (fiar) e inventario para el
+    // informe de turno.
+    creditos: [],
+    movimientosInventario: [],
 
     ventas: sales.map((sale) => {
       const payment =

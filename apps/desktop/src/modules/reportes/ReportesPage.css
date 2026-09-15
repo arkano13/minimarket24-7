@@ -306,7 +306,7 @@
 
 .reports-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -889,6 +889,70 @@
   }
 }
 
+/* --- Cierre --- */
+
+.reports-close-list {
+  display: grid;
+  gap: 2px;
+}
+
+.reports-close-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 2px;
+  border-bottom: 1px dashed var(--border);
+}
+
+.reports-close-row span {
+  color: var(--ink-soft);
+}
+
+.reports-close-row strong {
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+
+.reports-close-row--total {
+  margin-top: 4px;
+  border-top: 2px solid var(--accent);
+  border-bottom: none;
+  padding-top: 14px;
+}
+
+.reports-close-row--total span {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.reports-close-row--total strong {
+  font-size: 1.1rem;
+}
+
+.reports-negative {
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+/* --- Desglose de movimientos --- */
+
+.reports-movements-panel h3 {
+  margin: 18px 0 8px;
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+
+.reports-movements-panel h3:first-of-type {
+  margin-top: 0;
+}
+
+.reports-movements-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
 @media (max-width: 700px) {
   .reports-dashboard {
     width: min(100% - 28px, 1360px);
@@ -912,5 +976,9 @@
 
   .reports-date-range {
     flex-wrap: wrap;
+  }
+
+  .reports-movements-grid {
+    grid-template-columns: 1fr;
   }
 }

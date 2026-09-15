@@ -518,7 +518,7 @@ const API_URL = `${import.meta.env?.VITE_API_URL ?? "http://127.0.0.1:3001"}/api
     });
   }
 
-  export function getSalesReport(
+  export function getShiftReport(
     token,
     from,
     to,
@@ -548,7 +548,7 @@ const API_URL = `${import.meta.env?.VITE_API_URL ?? "http://127.0.0.1:3001"}/api
       : "";
 
     return request(
-      `/reportes/ventas${query}`,
+      `/reportes/turno${query}`,
       {
         headers: {
           Authorization: `Bearer ${token}`,

@@ -11,7 +11,7 @@ import {
 import { listSuppliers } from "../proveedores/proveedores.service.js";
 import { listPurchases, getPurchase } from "../compras/compras.service.js";
 import { listSales } from "../ventas/ventas.service.js";
-import { getSalesReport } from "../reportes/reportes.service.js";
+import { getShiftReport } from "../reportes/reportes.service.js";
 import { listInventoryMovements } from "../inventario/inventario.service.js";
 import { listSpecialClients } from "../clientes/clientes.service.js";
 import { listCashShifts } from "../caja/caja.service.js";
@@ -94,7 +94,7 @@ async function executeTool(name, args) {
         return recortarLista(ventas, ["id", "total", "estado", "creadoEn"], 15);
       }
       case "get_sales_report":
-        return await getSalesReport(args.from, args.to);
+        return await getShiftReport(args.from, args.to);
       case "list_inventory_movements": {
         const resultado = await listInventoryMovements(args.productId);
         const movimientos = Array.isArray(resultado) ? resultado : resultado.movimientos ?? [];

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import "./ReportesPage.css";
-import { cancelSale, getSalesReport, listReportUsers } from "../../services/api.js";
+import { cancelSale, getShiftReport, listReportUsers } from "../../services/api.js";
 import { emptyShifts, shiftIdForDate } from "./shifts.js";
 
 const PAYMENT_LABELS = {
@@ -43,16 +43,6 @@ function hourLabel(hour) {
   }).format(new Date(2000, 0, 1, Number(hour), 0));
 }
 
-function percentage(value, total) {
-  const numericTotal = Number(total ?? 0);
-
-  if (numericTotal <= 0) {
-    return 0;
-  }
-
-  return Math.round((Number(value ?? 0) / numericTotal) * 100);
-}
-
 function periodLabel(from, to) {
   const formatter = new Intl.DateTimeFormat("es-HN", {
     day: "numeric",
@@ -73,22 +63,67 @@ function periodLabel(from, to) {
   return `${formatter.format(parse(from))} — ` + `${formatter.format(parse(to))}`;
 }
 
-function ExecutiveView({ report, maximumHourlyTotal }) {
-  const productsByQuantity = [...report.productos].sort(
-    (first, second) => Number(second.cantidad) - Number(first.cantidad),
+function ShiftReportView({
+  cancelingSaleId,
+  filteredSales,
+  maximumHourlyTotal,
+  onCancelSale,
+  report,
+  saleSearch,
+  selectedSaleId,
+  setSaleSearch,
+  setSelectedSaleId,
+}) {
+  const SALES_PER_PAGE = 15;
+  const [salesPage, setSalesPage] = useState(1);
+
+  useEffect(() => {
+    setSalesPage(1);
+  }, [filteredSales]);
+
+  const totalSalesPages = Math.max(1, Math.ceil(filteredSales.length / SALES_PER_PAGE));
+
+  const pagedSales = filteredSales.slice(
+    (salesPage - 1) * SALES_PER_PAGE,
+    salesPage * SALES_PER_PAGE,
   );
 
-  const productsByProfit = [...report.productos].sort(
-    (first, second) => Number(second.ganancia) - Number(first.ganancia),
-  );
+  const totalUnits = report.productos.reduce((sum, product) => sum + Number(product.cantidad), 0);
 
-  const peakHour =
-    [...report.horas].sort((first, second) => Number(second.total) - Number(first.total))[0] ??
-    null;
+  const lideres = report.lideres ?? {};
+  const cierre = report.cierre ?? {};
+  const entradas = report.caja?.entradas ?? [];
+  const salidas = report.caja?.salidas ?? [];
+  const compras = report.compras ?? [];
 
-  const topSales = report.productos[0] ?? null;
-  const topQuantity = productsByQuantity[0] ?? null;
-  const topProfit = productsByProfit[0] ?? null;
+  const shifts = emptyShifts();
+  const users = new Map();
+
+  for (const sale of report.ventas) {
+    const shiftId = shiftIdForDate(sale.creadoEn);
+    const shift = shifts.find((item) => item.id === shiftId);
+
+    shift.operations += 1;
+    shift.total += Number(sale.total);
+
+    const userId = sale.usuario?.id ?? `name-${sale.usuario?.nombre ?? "unknown"}`;
+
+    const user = users.get(userId) ?? {
+      id: userId,
+      name: sale.usuario?.nombre ?? "Sin usuario",
+      operations: 0,
+      units: 0,
+      total: 0,
+    };
+
+    user.operations += 1;
+    user.total += Number(sale.total);
+    user.units += sale.productos.reduce((sum, product) => sum + Number(product.cantidad), 0);
+
+    users.set(userId, user);
+  }
+
+  const userPerformance = [...users.values()].sort((first, second) => second.total - first.total);
 
   return (
     <div className="reports-view-content">
@@ -100,49 +135,61 @@ function ExecutiveView({ report, maximumHourlyTotal }) {
         </article>
 
         <article className="reports-kpi reports-kpi--blue">
+          <span>Efectivo esperado</span>
+          <strong>L {money(report.resumen.efectivoEsperado)}</strong>
+          <small>Tras entradas y salidas de caja</small>
+        </article>
+
+        <article className="reports-kpi reports-kpi--violet">
           <span>Ventas realizadas</span>
           <strong>{report.resumen.operaciones}</strong>
           <small>Operaciones completadas</small>
         </article>
 
+        <article className="reports-kpi">
+          <span>Costo estimado</span>
+          <strong>L {money(report.resumen.costoEstimado)}</strong>
+          <small>Costo de lo vendido</small>
+        </article>
+
         <article className="reports-kpi reports-kpi--green">
           <span>Ganancia estimada</span>
           <strong>L {money(report.resumen.gananciaEstimada)}</strong>
-          <small>Costo: L {money(report.resumen.costoEstimado)}</small>
+          <small>Sobre el costo registrado</small>
         </article>
 
-        <article className="reports-kpi reports-kpi--violet">
-          <span>Promedio por venta</span>
-          <strong>L {money(report.resumen.promedio)}</strong>
-          <small>Valor promedio por operación</small>
+        <article className="reports-kpi reports-kpi--green">
+          <span>Margen estimado</span>
+          <strong>{money(report.resumen.margenEstimado)}%</strong>
+          <small>Ganancia / total vendido</small>
         </article>
       </section>
 
       <section className="reports-executive-highlights">
         <article>
           <span>Líder por ingresos</span>
-          <strong>{topSales?.nombre ?? "Sin información"}</strong>
-          <small>{topSales ? `L ${money(topSales.ventas)} vendidos` : "Sin ventas"}</small>
+          <strong>{lideres.mayorIngreso?.nombre ?? "Sin información"}</strong>
+          <small>{lideres.mayorIngreso ? `L ${money(lideres.mayorIngreso.ventas)} vendidos` : "Sin ventas"}</small>
         </article>
 
         <article>
           <span>Mayor cantidad vendida</span>
-          <strong>{topQuantity?.nombre ?? "Sin información"}</strong>
+          <strong>{lideres.mayorCantidad?.nombre ?? "Sin información"}</strong>
           <small>
-            {topQuantity ? `${quantity(topQuantity.cantidad)} unidades` : "Sin ventas"}
+            {lideres.mayorCantidad ? `${quantity(lideres.mayorCantidad.cantidad)} unidades` : "Sin ventas"}
           </small>
         </article>
 
         <article>
           <span>Mayor ganancia</span>
-          <strong>{topProfit?.nombre ?? "Sin información"}</strong>
-          <small>{topProfit ? `L ${money(topProfit.ganancia)} estimados` : "Sin ventas"}</small>
+          <strong>{lideres.mayorGanancia?.nombre ?? "Sin información"}</strong>
+          <small>{lideres.mayorGanancia ? `L ${money(lideres.mayorGanancia.ganancia)} estimados` : "Sin ventas"}</small>
         </article>
 
         <article>
           <span>Hora con más ventas</span>
-          <strong>{peakHour ? hourLabel(peakHour.hora) : "Sin información"}</strong>
-          <small>{peakHour ? `L ${money(peakHour.total)} vendidos` : "Sin ventas"}</small>
+          <strong>{lideres.horaConMasVentas ? hourLabel(lideres.horaConMasVentas.hora) : "Sin información"}</strong>
+          <small>{lideres.horaConMasVentas ? `L ${money(lideres.horaConMasVentas.total)} vendidos` : "Sin ventas"}</small>
         </article>
       </section>
 
@@ -156,29 +203,25 @@ function ExecutiveView({ report, maximumHourlyTotal }) {
           </header>
 
           <div className="reports-payments">
-            {report.pagos.map((payment) => {
-              const share = percentage(payment.total, report.resumen.total);
-
-              return (
-                <div
-                  className={`reports-payment reports-payment--${payment.metodo.toLowerCase()}`}
-                  key={payment.metodo}
-                >
-                  <div className="reports-payment__heading">
-                    <span>{PAYMENT_LABELS[payment.metodo] ?? payment.metodo}</span>
-                    <strong>L {money(payment.total)}</strong>
-                  </div>
-
-                  <div className="reports-payment__track">
-                    <i style={{ width: `${share}%` }} />
-                  </div>
-
-                  <small>
-                    {share}% del total · {payment.operaciones} operaciones
-                  </small>
+            {report.pagos.map((payment) => (
+              <div
+                className={`reports-payment reports-payment--${payment.metodo.toLowerCase()}`}
+                key={payment.metodo}
+              >
+                <div className="reports-payment__heading">
+                  <span>{PAYMENT_LABELS[payment.metodo] ?? payment.metodo}</span>
+                  <strong>L {money(payment.total)}</strong>
                 </div>
-              );
-            })}
+
+                <div className="reports-payment__track">
+                  <i style={{ width: `${payment.porcentaje}%` }} />
+                </div>
+
+                <small>
+                  {money(payment.porcentaje)}% del total · {payment.operaciones} operaciones
+                </small>
+              </div>
+            ))}
           </div>
         </article>
 
@@ -214,147 +257,38 @@ function ExecutiveView({ report, maximumHourlyTotal }) {
         </article>
       </section>
 
-      <section className="reports-panel reports-products-panel">
-        <header className="reports-panel__header">
-          <div>
-            <h2>Productos con mejor rendimiento</h2>
-            <p>Los 20 productos con mayor valor vendido</p>
+      <section className="reports-insight-grid">
+        <article className="reports-panel">
+          <header className="reports-panel__header">
+            <div>
+              <h2>Cierre</h2>
+              <p>Efectivo de ventas contra movimientos de caja</p>
+            </div>
+          </header>
+
+          <div className="reports-close-list">
+            <div className="reports-close-row">
+              <span>Efectivo por ventas</span>
+              <strong>L {money(cierre.efectivoVentas)}</strong>
+            </div>
+
+            <div className="reports-close-row">
+              <span>+ Entradas de caja</span>
+              <strong className="reports-positive">+ L {money(cierre.entradas)}</strong>
+            </div>
+
+            <div className="reports-close-row">
+              <span>− Salidas de caja</span>
+              <strong className="reports-negative">− L {money(cierre.salidas)}</strong>
+            </div>
+
+            <div className="reports-close-row reports-close-row--total">
+              <span>Efectivo esperado</span>
+              <strong>L {money(cierre.efectivoEsperado)}</strong>
+            </div>
           </div>
-
-          <span className="reports-panel__badge">Top {Math.min(report.productos.length, 20)}</span>
-        </header>
-
-        {report.productos.length ? (
-          <div className="reports-table-wrap">
-            <table className="reports-data-table">
-              <thead>
-                <tr>
-                  <th>Posición</th>
-                  <th>Producto</th>
-                  <th>Cantidad</th>
-                  <th>Total vendido</th>
-                  <th>Ganancia estimada</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {report.productos.slice(0, 20).map((product, index) => (
-                  <tr key={product.productoId}>
-                    <td>
-                      <span className="reports-rank">{index + 1}</span>
-                    </td>
-
-                    <td>
-                      <strong>{product.nombre}</strong>
-                    </td>
-
-                    <td>{quantity(product.cantidad)}</td>
-
-                    <td>L {money(product.ventas)}</td>
-
-                    <td className="reports-positive">L {money(product.ganancia)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="reports-empty">No se vendieron productos en este periodo.</p>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function OperationalView({
-  cancelingSaleId,
-  filteredSales,
-  onCancelSale,
-  report,
-  saleSearch,
-  selectedSaleId,
-  setSaleSearch,
-  setSelectedSaleId,
-}) {
-  const SALES_PER_PAGE = 15;
-  const [salesPage, setSalesPage] = useState(1);
-
-  useEffect(() => {
-    setSalesPage(1);
-  }, [filteredSales]);
-
-  const totalSalesPages = Math.max(1, Math.ceil(filteredSales.length / SALES_PER_PAGE));
-
-  const pagedSales = filteredSales.slice(
-    (salesPage - 1) * SALES_PER_PAGE,
-    salesPage * SALES_PER_PAGE,
-  );
-
-  const totalUnits = report.productos.reduce((sum, product) => sum + Number(product.cantidad), 0);
-
-  const largestSale =
-    [...report.ventas].sort((first, second) => Number(second.total) - Number(first.total))[0] ??
-    null;
-
-  const shifts = emptyShifts();
-
-  const users = new Map();
-
-  for (const sale of report.ventas) {
-    const shiftId = shiftIdForDate(sale.creadoEn);
-    const shift = shifts.find((item) => item.id === shiftId);
-
-    shift.operations += 1;
-    shift.total += Number(sale.total);
-
-    const userId = sale.usuario?.id ?? `name-${sale.usuario?.nombre ?? "unknown"}`;
-
-    const user = users.get(userId) ?? {
-      id: userId,
-      name: sale.usuario?.nombre ?? "Sin usuario",
-      operations: 0,
-      units: 0,
-      total: 0,
-    };
-
-    user.operations += 1;
-    user.total += Number(sale.total);
-    user.units += sale.productos.reduce((sum, product) => sum + Number(product.cantidad), 0);
-
-    users.set(userId, user);
-  }
-
-  const userPerformance = [...users.values()].sort((first, second) => second.total - first.total);
-
-  return (
-    <div className="reports-view-content">
-      <section className="reports-operational-summary">
-        <article>
-          <span>Total vendido</span>
-          <strong>L {money(report.resumen.total)}</strong>
-          <small>Ingresos del periodo</small>
         </article>
 
-        <article>
-          <span>Operaciones</span>
-          <strong>{report.resumen.operaciones}</strong>
-          <small>Ventas completadas</small>
-        </article>
-
-        <article>
-          <span>Unidades vendidas</span>
-          <strong>{quantity(totalUnits)}</strong>
-          <small>En todos los productos</small>
-        </article>
-
-        <article>
-          <span>Venta más alta</span>
-          <strong>L {money(largestSale?.total)}</strong>
-          <small>{largestSale ? `Venta #${largestSale.id}` : "Sin operaciones"}</small>
-        </article>
-      </section>
-
-      <section className="reports-operational-grid">
         <article className="reports-panel reports-shifts-panel">
           <header className="reports-panel__header">
             <div>
@@ -381,37 +315,105 @@ function OperationalView({
             ))}
           </div>
         </article>
+      </section>
 
-        <article className="reports-panel reports-collection-panel">
-          <header className="reports-panel__header">
-            <div>
-              <h2>Cobros registrados</h2>
-              <p>Totales separados por método de pago</p>
-            </div>
-          </header>
+      <section className="reports-panel reports-movements-panel">
+        <header className="reports-panel__header">
+          <div>
+            <h2>Desglose de movimientos</h2>
+            <p>Entradas, salidas de caja y compras a proveedores</p>
+          </div>
+        </header>
 
-          <div className="reports-collection-list">
-            {report.pagos.map((payment) => (
-              <article key={payment.metodo}>
-                <span
-                  className={`reports-collection-dot reports-collection-dot--${payment.metodo.toLowerCase()}`}
-                />
+        <div className="reports-movements-grid">
+          <div>
+            <h3>Entradas de caja</h3>
 
-                <div>
-                  <strong>{PAYMENT_LABELS[payment.metodo] ?? payment.metodo}</strong>
-                  <small>{payment.operaciones} operaciones</small>
-                </div>
+            {entradas.length ? (
+              <div className="reports-table-wrap">
+                <table className="reports-data-table">
+                  <thead>
+                    <tr>
+                      <th>Hora</th>
+                      <th>Motivo</th>
+                      <th>Monto</th>
+                    </tr>
+                  </thead>
 
-                <strong>L {money(payment.total)}</strong>
-              </article>
-            ))}
+                  <tbody>
+                    {entradas.map((entry) => (
+                      <tr key={entry.id}>
+                        <td>{dateTime(entry.creadoEn)}</td>
+                        <td>{entry.motivo}</td>
+                        <td className="reports-positive">+ L {money(entry.monto)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="reports-empty">No hubo entradas de caja en este periodo.</p>
+            )}
           </div>
 
-          <div className="reports-collection-total">
-            <span>Total de cobros</span>
-            <strong>L {money(report.resumen.total)}</strong>
+          <div>
+            <h3>Salidas de caja</h3>
+
+            {salidas.length ? (
+              <div className="reports-table-wrap">
+                <table className="reports-data-table">
+                  <thead>
+                    <tr>
+                      <th>Hora</th>
+                      <th>Motivo</th>
+                      <th>Monto</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {salidas.map((entry) => (
+                      <tr key={entry.id}>
+                        <td>{dateTime(entry.creadoEn)}</td>
+                        <td>{entry.motivo}</td>
+                        <td className="reports-negative">− L {money(entry.monto)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="reports-empty">No hubo salidas de caja en este periodo.</p>
+            )}
           </div>
-        </article>
+        </div>
+
+        <h3>Compras a proveedores</h3>
+
+        {compras.length ? (
+          <div className="reports-table-wrap">
+            <table className="reports-data-table">
+              <thead>
+                <tr>
+                  <th>Proveedor</th>
+                  <th>Hora</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {compras.map((purchase) => (
+                  <tr key={purchase.id}>
+                    <td>{purchase.proveedor}</td>
+                    <td>{dateTime(purchase.creadoEn)}</td>
+                    <td>L {money(purchase.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="reports-empty">No hubo compras a proveedores en este periodo.</p>
+        )}
       </section>
 
       <section className="reports-panel reports-users-performance">
@@ -458,6 +460,60 @@ function OperationalView({
           </div>
         ) : (
           <p className="reports-empty">No hay actividad de usuarios en este periodo.</p>
+        )}
+      </section>
+
+      <section className="reports-panel reports-products-panel">
+        <header className="reports-panel__header">
+          <div>
+            <h2>Todas las ventas · agrupadas por producto</h2>
+            <p>Ordenadas por total vendido</p>
+          </div>
+
+          <span className="reports-panel__badge">{report.productos.length} productos</span>
+        </header>
+
+        {report.productos.length ? (
+          <div className="reports-table-wrap">
+            <table className="reports-data-table">
+              <thead>
+                <tr>
+                  <th>Posición</th>
+                  <th>Producto</th>
+                  <th>Cantidad</th>
+                  <th>Total vendido</th>
+                  <th>Costo</th>
+                  <th>Ganancia estimada</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {report.productos.map((product, index) => (
+                  <tr key={product.productoId}>
+                    <td>
+                      <span className="reports-rank">{index + 1}</span>
+                    </td>
+
+                    <td>
+                      <strong>{product.nombre}</strong>
+                    </td>
+
+                    <td>{quantity(product.cantidad)}</td>
+
+                    <td>L {money(product.ventas)}</td>
+
+                    <td>L {money(product.costo)}</td>
+
+                    <td className={Number(product.ganancia) < 0 ? "reports-negative" : "reports-positive"}>
+                      L {money(product.ganancia)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="reports-empty">No se vendieron productos en este periodo.</p>
         )}
       </section>
 
@@ -563,7 +619,6 @@ function OperationalView({
 export function ReportesPage({ token }) {
   const today = dateText();
 
-  const [activeView, setActiveView] = useState("EXECUTIVE");
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(today);
   const [turnos, setTurnos] = useState(["A", "B", "C"]);
@@ -617,7 +672,7 @@ export function ReportesPage({ token }) {
     setMessage("");
 
     try {
-      const result = await getSalesReport(
+      const result = await getShiftReport(
         token,
         selectedFrom,
         selectedTo,
@@ -739,21 +794,15 @@ export function ReportesPage({ token }) {
     setMessage("");
 
     try {
-      const isAdministrative = activeView === "EXECUTIVE";
-      const reportType = isAdministrative ? "ADMINISTRATIVE" : "OPERATIONAL";
-      const reportLabel = isAdministrative ? "administrativo" : "operativo";
-
-      const fileName =
-        `reporte-${reportLabel}-` + `${report.periodo.desde}-a-` + `${report.periodo.hasta}.pdf`;
+      const fileName = `informe-turno-${report.periodo.desde}-a-${report.periodo.hasta}.pdf`;
 
       const result = await window.desktop.saveReportPdf({
         suggestedName: fileName,
         report,
-        reportType,
       });
 
       if (!result.canceled) {
-        setMessage("Reporte PDF guardado correctamente.");
+        setMessage("Informe PDF guardado correctamente.");
       }
     } catch (saveError) {
       setError(saveError.message || "No se pudo guardar el PDF.");
@@ -767,7 +816,7 @@ export function ReportesPage({ token }) {
       <header className="reports-dashboard__header">
         <div>
           <p className="eyebrow">Panel de reportes</p>
-          <h1>Información de ventas</h1>
+          <h1>Informe de turno</h1>
           <p>Consulta el resumen del negocio o revisa cada operación.</p>
         </div>
 
@@ -785,53 +834,9 @@ export function ReportesPage({ token }) {
             </svg>
           </span>
 
-          {savingPdf
-            ? "Guardando..."
-            : activeView === "EXECUTIVE"
-              ? "Guardar PDF administrativo"
-              : "Guardar PDF operativo"}
+          {savingPdf ? "Guardando..." : "Guardar PDF"}
         </button>
       </header>
-
-      <nav aria-label="Tipo de reporte" className="reports-view-switch">
-        <button
-          aria-selected={activeView === "EXECUTIVE"}
-          className={activeView === "EXECUTIVE" ? "is-active" : ""}
-          onClick={() => setActiveView("EXECUTIVE")}
-          role="tab"
-          type="button"
-        >
-          <span aria-hidden="true" className="reports-view-switch__icon">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 20V10M12 20V4M20 20v-7" />
-            </svg>
-          </span>
-
-          <span>
-            <strong>Vista administrativa</strong>
-            <small>Indicadores, ganancias y productos líderes</small>
-          </span>
-        </button>
-
-        <button
-          aria-selected={activeView === "OPERATIONAL"}
-          className={activeView === "OPERATIONAL" ? "is-active" : ""}
-          onClick={() => setActiveView("OPERATIONAL")}
-          role="tab"
-          type="button"
-        >
-          <span aria-hidden="true" className="reports-view-switch__icon">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </span>
-
-          <span>
-            <strong>Vista operativa</strong>
-            <small>Ventas, usuarios y productos de cada operación</small>
-          </span>
-        </button>
-      </nav>
 
       <section aria-label="Periodo del reporte" className="reports-toolbar">
         <div className="reports-quick-periods">
@@ -936,25 +941,23 @@ export function ReportesPage({ token }) {
             <div>
               <span>Periodo consultado</span>
               <strong>{periodLabel(report.periodo.desde, report.periodo.hasta)}</strong>
+              <small>{report.periodo.turnoEtiqueta}</small>
             </div>
 
             <small>{report.resumen.operaciones} ventas encontradas</small>
           </div>
 
-          {activeView === "EXECUTIVE" ? (
-            <ExecutiveView maximumHourlyTotal={maximumHourlyTotal} report={report} />
-          ) : (
-            <OperationalView
-              cancelingSaleId={cancelingSaleId}
-              filteredSales={filteredSales}
-              onCancelSale={(saleId) => { if (!cancelingSaleId) setConfirmCancelId(saleId); }}
-              report={report}
-              saleSearch={saleSearch}
-              selectedSaleId={selectedSaleId}
-              setSaleSearch={setSaleSearch}
-              setSelectedSaleId={setSelectedSaleId}
-            />
-          )}
+          <ShiftReportView
+            cancelingSaleId={cancelingSaleId}
+            filteredSales={filteredSales}
+            maximumHourlyTotal={maximumHourlyTotal}
+            onCancelSale={(saleId) => { if (!cancelingSaleId) setConfirmCancelId(saleId); }}
+            report={report}
+            saleSearch={saleSearch}
+            selectedSaleId={selectedSaleId}
+            setSaleSearch={setSaleSearch}
+            setSelectedSaleId={setSelectedSaleId}
+          />
         </>
       ) : loading ? (
         <section className="reports-loading">Preparando el reporte...</section>

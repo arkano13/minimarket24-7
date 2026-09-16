@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.js"
+    ".": "./src/index.js",
+    "./informe-turno-template": "./src/informe-turno.template.js",
+    "./shift-report-pdf": "./src/shift-report-pdf.js"
   }
 }

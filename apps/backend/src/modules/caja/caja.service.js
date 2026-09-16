@@ -710,7 +710,7 @@ function serializeShiftCompleto(shift) {
 // resto del sistema, para que el Turno C no aparezca partido al pasar
 // de un día calendario al siguiente.
 export async function listCashShiftHistory(filters, requestingUser) {
-  if (!requestingUser?.id) {
+  if (requestingUser?.id == null) {
     throw new AppError("Sesión no válida.", 401);
   }
 

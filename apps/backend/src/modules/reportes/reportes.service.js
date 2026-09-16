@@ -75,23 +75,32 @@ function localDate(
   return date;
 }
 
-function todayText() {
-  // Resta 8 horas al UTC actual: 6 por la zona horaria de Honduras más
-  // 2 por el corte del día comercial. Antes de las 2am (hora de
-  // Honduras) todavía estamos dentro del día comercial anterior.
-  const now = new Date(Date.now() - 8 * 60 * 60 * 1000);
+// Dado un instante cualquiera, ¿a qué día comercial (YYYY-MM-DD, con
+// corte a las 2am hora de Honduras) pertenece? Se exporta porque otros
+// módulos (ej. caja.service.js, al cerrar una caja) necesitan la misma
+// regla para saber a qué día pertenece un cierre que pasó justo
+// alrededor de la medianoche/2am.
+export function businessDayFor(date) {
+  // Resta 8 horas al UTC: 6 por la zona horaria de Honduras más 2 por
+  // el corte del día comercial. Antes de las 2am (hora de Honduras)
+  // todavía estamos dentro del día comercial anterior.
+  const shifted = new Date(date.getTime() - 8 * 60 * 60 * 1000);
 
-  const year = now.getUTCFullYear();
+  const year = shifted.getUTCFullYear();
 
   const month = String(
-    now.getUTCMonth() + 1,
+    shifted.getUTCMonth() + 1,
   ).padStart(2, "0");
 
   const day = String(
-    now.getUTCDate(),
+    shifted.getUTCDate(),
   ).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
+}
+
+function todayText() {
+  return businessDayFor(new Date());
 }
 
 function reportRange(
@@ -311,6 +320,74 @@ async function loadPurchases(
   };
 }
 
+async function loadCashClosures(
+  range,
+  shiftSet,
+  usuarioId,
+) {
+  // El "cuadre" real (faltante/sobrante) solo existe cuando un cajero
+  // efectivamente CIERRA su caja y cuenta el efectivo — es un dato
+  // distinto de la reconciliación estimada del panel "Cierre", que es
+  // un cálculo teórico a partir de ventas y movimientos sin importar
+  // si alguien llegó a cerrar la caja o no.
+  const closures = await prisma.turnoCaja.findMany({
+    where: {
+      estado: "CERRADO",
+
+      cerradoEn: {
+        gte: range.from,
+        lte: range.to,
+      },
+
+      ...(usuarioId ? { usuarioCierreId: usuarioId } : {}),
+    },
+
+    include: {
+      usuarioApertura: {
+        select: { id: true, nombre: true },
+      },
+
+      usuarioCierre: {
+        select: { id: true, nombre: true },
+      },
+    },
+
+    orderBy: {
+      cerradoEn: "asc",
+    },
+  });
+
+  const cuadres = closures
+    .filter((closure) => shiftSet.has(reportShift(closure.cerradoEn)))
+    .map((closure) => ({
+      id: closure.id,
+      usuarioApertura: closure.usuarioApertura,
+      usuarioCierre: closure.usuarioCierre,
+      abiertoEn: closure.abiertoEn,
+      cerradoEn: closure.cerradoEn,
+      fondoInicial: Number(closure.fondoInicial),
+      efectivoEsperado: Number(closure.efectivoEsperadoCierre),
+      efectivoContado: Number(closure.efectivoContado),
+      diferencia: Number(closure.diferencia),
+    }));
+
+  const totalDiferencia = roundMoney(
+    cuadres.reduce((sum, cuadre) => sum + cuadre.diferencia, 0),
+  );
+
+  return {
+    cuadres,
+
+    resumen: {
+      cierres: cuadres.length,
+      faltantes: cuadres.filter((cuadre) => cuadre.diferencia < 0).length,
+      sobrantes: cuadres.filter((cuadre) => cuadre.diferencia > 0).length,
+      exactos: cuadres.filter((cuadre) => cuadre.diferencia === 0).length,
+      totalDiferencia,
+    },
+  };
+}
+
 export async function getShiftReport(
   fromInput,
   toInput,
@@ -519,9 +596,10 @@ export async function getShiftReport(
         first.hora - second.hora,
     );
 
-  const [caja, compras] = await Promise.all([
+  const [caja, compras, cuadreCaja] = await Promise.all([
     loadCashMovements(range, shiftSet, usuarioId),
     loadPurchases(range, shiftSet, usuarioId),
+    loadCashClosures(range, shiftSet, usuarioId),
   ]);
 
   const efectivoVentas = roundMoney(
@@ -623,6 +701,14 @@ export async function getShiftReport(
     },
 
     compras: compras.compras,
+
+    // Cuadre real de caja: los cierres que efectivamente ocurrieron en
+    // el periodo/turno, con su faltante o sobrante ya calculado por
+    // el módulo de caja al momento del cierre (no recalculado aquí).
+    cuadreCaja: {
+      cierres: cuadreCaja.cuadres,
+      resumen: cuadreCaja.resumen,
+    },
 
     // Pendientes de conectar a datos reales: se mantienen vacíos hasta
     // que se defina el origen de créditos (fiar) e inventario para el

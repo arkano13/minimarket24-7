@@ -1309,11 +1309,14 @@ export async function listSales(search = "") {
 // Lista TODOS los créditos ("fiado") del negocio, de cualquier cajero —
 // a diferencia de "Mi actividad", que solo muestra lo propio de cada
 // usuario. Sirve para que cualquiera vea a quién se le fió y cuánto debe.
+// Una vez marcado como pagado (marcarCreditoComoPagado) ya no aparece
+// acá.
 export async function listCreditSales(search = "") {
   const term = typeof search === "string" ? search.trim() : "";
 
   const sales = await prisma.venta.findMany({
     where: {
+      creditoPagado: false,
       pagos: {
         some: {
           metodo: "CREDITO",
@@ -1335,4 +1338,38 @@ export async function listCreditSales(search = "") {
   });
 
   return sales.map(serializeSale);
+}
+
+// Saca una venta fiada de la lista de créditos pendientes. A propósito
+// NO toca inventario, totales de caja ni ningún reporte — el cobro real
+// (si el cliente efectivamente pagó) se registra aparte como una
+// entrada de caja normal cuando el cajero recibe el dinero. Esto solo
+// dice "ya no se le debe seguir esta cuenta".
+export async function marcarCreditoComoPagado(ventaId) {
+  const id = Number(ventaId);
+
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    throw new AppError("La venta no es válida.", 400);
+  }
+
+  const venta = await prisma.venta.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      pagos: { select: { metodo: true } },
+    },
+  });
+
+  if (!venta) {
+    throw new AppError("La venta no existe.", 404);
+  }
+
+  if (!venta.pagos.some((pago) => pago.metodo === "CREDITO")) {
+    throw new AppError("Esa venta no es un crédito.", 400);
+  }
+
+  await prisma.venta.update({
+    where: { id },
+    data: { creditoPagado: true },
+  });
 }

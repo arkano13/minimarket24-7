@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listCreditSales, listMyCashActivity } from "../../services/api.js";
+import { listCreditSales, markCreditAsPaid, listMyCashActivity } from "../../services/api.js";
 
 const money = (value) => new Intl.NumberFormat("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 const dateTime = (value) => new Intl.DateTimeFormat("es-HN", { timeZone: "America/Tegucigalpa", dateStyle: "short", timeStyle: "short" }).format(new Date(value));
@@ -71,6 +71,23 @@ export function MiActividad({ token, revision }) {
   const [creditsError, setCreditsError] = useState("");
   const [creditsLoading, setCreditsLoading] = useState(false);
   const [creditsRefresh, setCreditsRefresh] = useState(0);
+  const [payingCreditId, setPayingCreditId] = useState(null);
+
+  async function handleMarkCreditAsPaid(ventaId) {
+    if (payingCreditId) return;
+
+    setPayingCreditId(ventaId);
+    setCreditsError("");
+
+    try {
+      await markCreditAsPaid(token, ventaId);
+      setCreditsRefresh((value) => value + 1);
+    } catch (err) {
+      setCreditsError(err.message);
+    } finally {
+      setPayingCreditId(null);
+    }
+  }
 
   function toggleTurno(value) {
     setTurnos((current) => {
@@ -286,6 +303,17 @@ export function MiActividad({ token, revision }) {
                     <strong>L {money(venta.total)}</strong>
                   </header>
                   <p>{venta.estado === "CANCELADA" ? "Cancelada — no cuenta como deuda" : "Pendiente de cobro"}</p>
+
+                  {venta.estado !== "CANCELADA" ? (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={payingCreditId === venta.id}
+                      onClick={() => handleMarkCreditAsPaid(venta.id)}
+                    >
+                      {payingCreditId === venta.id ? "Marcando..." : "Marcar como pagado"}
+                    </button>
+                  ) : null}
                 </article>
               ))}
             </div>

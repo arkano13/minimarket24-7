@@ -433,6 +433,16 @@
   white-space: nowrap;
 }
 
+.reports-panel__badge--negative {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.reports-panel__badge--positive {
+  color: var(--success-ink);
+  background: color-mix(in srgb, var(--success-ink) 14%, transparent);
+}
+
 .reports-empty {
   margin: 0;
   padding: 30px 12px;

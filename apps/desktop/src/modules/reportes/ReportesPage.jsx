@@ -92,6 +92,7 @@ function ShiftReportView({
 
   const lideres = report.lideres ?? {};
   const cierre = report.cierre ?? {};
+  const cuadreCaja = report.cuadreCaja ?? { cierres: [], resumen: null };
   const entradas = report.caja?.entradas ?? [];
   const salidas = report.caja?.salidas ?? [];
   const compras = report.compras ?? [];
@@ -315,6 +316,67 @@ function ShiftReportView({
             ))}
           </div>
         </article>
+      </section>
+
+      <section className="reports-panel reports-cuadre-panel">
+        <header className="reports-panel__header">
+          <div>
+            <h2>Cuadre real de caja</h2>
+            <p>Faltante o sobrante de los cierres ya hechos en este periodo</p>
+          </div>
+
+          {cuadreCaja.resumen?.cierres ? (
+            <span
+              className={`reports-panel__badge ${
+                cuadreCaja.resumen.totalDiferencia < 0
+                  ? "reports-panel__badge--negative"
+                  : cuadreCaja.resumen.totalDiferencia > 0
+                    ? "reports-panel__badge--positive"
+                    : ""
+              }`}
+            >
+              {cuadreCaja.resumen.totalDiferencia === 0
+                ? "Cuadró exacto"
+                : `${cuadreCaja.resumen.totalDiferencia < 0 ? "Faltante" : "Sobrante"} de L ${money(Math.abs(cuadreCaja.resumen.totalDiferencia))}`}
+            </span>
+          ) : null}
+        </header>
+
+        {cuadreCaja.cierres?.length ? (
+          <div className="reports-table-wrap">
+            <table className="reports-data-table">
+              <thead>
+                <tr>
+                  <th>Cierre</th>
+                  <th>Cajero</th>
+                  <th>Fondo inicial</th>
+                  <th>Esperado</th>
+                  <th>Contado</th>
+                  <th>Diferencia</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {cuadreCaja.cierres.map((closure) => (
+                  <tr key={closure.id}>
+                    <td>{dateTime(closure.cerradoEn)}</td>
+                    <td>{closure.usuarioCierre?.nombre ?? "—"}</td>
+                    <td>L {money(closure.fondoInicial)}</td>
+                    <td>L {money(closure.efectivoEsperado)}</td>
+                    <td>L {money(closure.efectivoContado)}</td>
+                    <td className={closure.diferencia < 0 ? "reports-negative" : closure.diferencia > 0 ? "reports-positive" : ""}>
+                      {closure.diferencia === 0
+                        ? "Exacto"
+                        : `${closure.diferencia < 0 ? "Faltante" : "Sobrante"} · L ${money(Math.abs(closure.diferencia))}`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="reports-empty">No se cerró ninguna caja dentro de este periodo/turno — no hay cuadre que mostrar todavía.</p>
+        )}
       </section>
 
       <section className="reports-panel reports-movements-panel">

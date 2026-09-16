@@ -1,6 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/AppError.js";
+import { businessDayFor } from "../reportes/reportes.service.js";
+import { notificarCierreDeCaja } from "./informe-turno-notifier.js";
 
 const MOVEMENT_TYPES = new Set(["INGRESO", "RETIRO"]);
 const MOVEMENT_METHODS = new Set(["EFECTIVO", "TARJETA", "TRANSFERENCIA"]);
@@ -535,6 +537,68 @@ export async function createCashMovement(
   );
 }
 
+// Rotación fija para saber qué informe de turno mandar por WhatsApp al
+// cerrar caja — a propósito NO mira la hora del cierre. Cada cierre
+// consume el turno que está "en fila" y avanza el puntero al
+// siguiente, sin importar qué tan tarde/temprano se cerró. Arranca en
+// "C" porque el primer cierre del día suele ser el de la madrugada
+// (fin del Turno C de la noche anterior).
+//
+// Riesgo conocido y aceptado: si hay más de un cierre dentro de lo que
+// debería ser un mismo turno (ej. se abre/cierra caja dos veces en una
+// mañana), el segundo cierre avanza igual y queda con la etiqueta del
+// turno siguiente. Para esos casos existe la corrección manual — ver
+// getProximoTurnoInforme/setProximoTurnoInforme más abajo.
+const SIGUIENTE_TURNO = { A: "B", B: "C", C: "A" };
+
+async function obtenerYAvanzarProximoTurno(transaction) {
+  const configuracion = await transaction.configuracionSistema.upsert({
+    where: { id: 1 },
+    create: { id: 1 },
+    update: {},
+    select: { proximoTurnoInforme: true },
+  });
+
+  const turno = configuracion.proximoTurnoInforme;
+
+  await transaction.configuracionSistema.update({
+    where: { id: 1 },
+    data: { proximoTurnoInforme: SIGUIENTE_TURNO[turno] ?? "C" },
+  });
+
+  return turno;
+}
+
+// Para mostrar en el panel de admin cuál es el próximo turno esperado,
+// sin consumirlo/avanzarlo.
+export async function getProximoTurnoInforme() {
+  const configuracion = await prisma.configuracionSistema.upsert({
+    where: { id: 1 },
+    create: { id: 1 },
+    update: {},
+    select: { proximoTurnoInforme: true },
+  });
+
+  return configuracion.proximoTurnoInforme;
+}
+
+// Corrección manual (solo admin) para cuando la rotación se
+// desincroniza — ej. hubo un cierre de más y el siguiente informe
+// saldría con el turno equivocado.
+export async function setProximoTurnoInforme(turno) {
+  if (!["A", "B", "C"].includes(turno)) {
+    throw new AppError("El turno no es válido.", 400);
+  }
+
+  await prisma.configuracionSistema.upsert({
+    where: { id: 1 },
+    create: { id: 1, proximoTurnoInforme: turno },
+    update: { proximoTurnoInforme: turno },
+  });
+
+  return turno;
+}
+
 export async function closeCashShift(
   data,
   userId,
@@ -544,7 +608,7 @@ export async function closeCashShift(
     "El efectivo contado",
   );
 
-  return prisma.$transaction(
+  const result = await prisma.$transaction(
     async (transaction) => {
       const shift =
         await findOpenShift(userId, transaction);
@@ -581,9 +645,25 @@ export async function closeCashShift(
           include: SHIFT_INCLUDE,
         });
 
-      return serializeShift(closedShift, userId);
+      // Dentro de la misma transacción: si el cierre se guarda, la
+      // rotación avanza; si algo falla y se revierte el cierre, la
+      // rotación tampoco avanza.
+      const turnoInforme = await obtenerYAvanzarProximoTurno(transaction);
+
+      return { closedShift, turnoInforme };
     },
   );
+
+  // Fuera de la transacción, a propósito: el cierre ya quedó guardado
+  // en la base de datos pase lo que pase con esto. No se espera
+  // (await) para no retrasar la respuesta al cajero — el propio
+  // notificador nunca lanza, así que no hace falta un .catch() extra.
+  notificarCierreDeCaja(
+    result.turnoInforme,
+    businessDayFor(result.closedShift.cerradoEn),
+  );
+
+  return serializeShift(result.closedShift, userId);
 }
 
 
@@ -623,22 +703,82 @@ function serializeShiftCompleto(shift) {
   };
 }
 
-// Lista TODAS las cajas (de todos los usuarios) abiertas ese día — para
-// reportes/supervisión, no para el flujo de un cajero individual.
-export async function listCashShifts(dateInput) {
-  const fecha =
-    typeof dateInput === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)
-      ? dateInput
-      : new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString().slice(0, 10);
+// Historial de cierres de caja. Un cajero (rol distinto de
+// ADMINISTRADOR) solo puede ver los suyos, sin importar qué usuarioId
+// pida — un administrador puede ver los de cualquiera o de todos
+// (usuarioId vacío). Usa el mismo corte de día de negocio (2am) que el
+// resto del sistema, para que el Turno C no aparezca partido al pasar
+// de un día calendario al siguiente.
+export async function listCashShiftHistory(filters, requestingUser) {
+  if (!requestingUser?.id) {
+    throw new AppError("Sesión no válida.", 401);
+  }
 
-  const from = new Date(`${fecha}T00:00:00-06:00`);
-  const to = new Date(from.getTime() + 86_400_000);
+  const isAdmin = requestingUser.rol === "ADMINISTRADOR";
 
-  const shifts = await prisma.turnoCaja.findMany({
-    where: { abiertoEn: { gte: from, lt: to } },
-    include: SHIFT_INCLUDE,
-    orderBy: { abiertoEn: "desc" },
-  });
+  if (filters.usuarioId && !isAdmin && Number(filters.usuarioId) !== requestingUser.id) {
+    throw new AppError(
+      "Solo un administrador puede ver los cierres de otro usuario.",
+      403,
+    );
+  }
 
-  return shifts.map(serializeShiftCompleto);
+  const usuarioId = isAdmin
+    ? (filters.usuarioId ? Number(filters.usuarioId) : null)
+    : requestingUser.id;
+
+  if (filters.usuarioId && (!Number.isSafeInteger(usuarioId) || usuarioId <= 0)) {
+    throw new AppError("El usuario no es válido.", 400);
+  }
+
+  const hasta =
+    typeof filters.hasta === "string" && /^\d{4}-\d{2}-\d{2}$/.test(filters.hasta)
+      ? filters.hasta
+      : currentBusinessDate();
+
+  // Por default, últimos 7 días de historial.
+  const desde =
+    typeof filters.desde === "string" && /^\d{4}-\d{2}-\d{2}$/.test(filters.desde)
+      ? filters.desde
+      : shiftCalendarDate(hasta, -6);
+
+  const from = new Date(`${desde}T02:00:00-06:00`);
+  const to = new Date(`${shiftCalendarDate(hasta, 1)}T02:00:00-06:00`);
+
+  if (from > to) {
+    throw new AppError("La fecha inicial no puede ser posterior a la final.", 400);
+  }
+
+  const page = Number(filters.page ?? 1);
+
+  if (!Number.isSafeInteger(page) || page < 1 || page > 10000) {
+    throw new AppError("La página no es válida.", 400);
+  }
+
+  const pageSize = 20;
+
+  const where = {
+    estado: "CERRADO",
+    cerradoEn: { gte: from, lt: to },
+    ...(usuarioId ? { usuarioCierreId: usuarioId } : {}),
+  };
+
+  const [shifts, total] = await Promise.all([
+    prisma.turnoCaja.findMany({
+      where,
+      include: SHIFT_INCLUDE,
+      orderBy: { cerradoEn: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+
+    prisma.turnoCaja.count({ where }),
+  ]);
+
+  return {
+    cierres: shifts.map(serializeShiftCompleto),
+    pagina: page,
+    totalPaginas: Math.max(1, Math.ceil(total / pageSize)),
+    total,
+  };
 }

@@ -14,7 +14,7 @@ import { listSales } from "../ventas/ventas.service.js";
 import { getShiftReport } from "../reportes/reportes.service.js";
 import { listInventoryMovements } from "../inventario/inventario.service.js";
 import { listSpecialClients } from "../clientes/clientes.service.js";
-import { listCashShifts } from "../caja/caja.service.js";
+import { listCashShiftHistory } from "../caja/caja.service.js";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const MODELO = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
@@ -105,8 +105,13 @@ async function executeTool(name, args) {
         const clientes = Array.isArray(resultado) ? resultado : resultado.clientes ?? [];
         return recortarLista(clientes, ["id", "nombre", "telefono"], 20);
       }
-      case "list_cash_shifts":
-        return await listCashShifts(args.date);
+      case "list_cash_shifts": {
+        const resultado = await listCashShiftHistory(
+          { desde: args.date, hasta: args.date },
+          { id: 0, rol: "ADMINISTRADOR" },
+        );
+        return resultado.cierres;
+      }
       default:
         return { error: "Herramienta desconocida" };
     }

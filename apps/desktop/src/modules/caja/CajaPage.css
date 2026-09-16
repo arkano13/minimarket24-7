@@ -374,3 +374,105 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* --- Historial de cierres --- */
+
+.cash-history-filters {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.cash-history-filters .field {
+  max-width: 200px;
+}
+
+.cash-history-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 500;
+}
+
+.cash-history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.cash-history-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  background: var(--surface);
+}
+
+.cash-history-item header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.cash-history-item header strong {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.92rem;
+}
+
+.cash-history-item header span {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.cash-history-item__body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.cash-history-item__breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-family: var(--font-mono);
+}
+
+.cash-history-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+@media (max-width: 560px) {
+  .cash-history-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cash-history-filters .field {
+    max-width: none;
+  }
+
+  .cash-history-pagination {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+}

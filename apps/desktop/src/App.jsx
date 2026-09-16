@@ -371,7 +371,7 @@ function SystemContent({ activeModule, token, currentUser }) {
   }
 
   if (activeModule === "CAJA") {
-    return <CajaPage token={token} />;
+    return <CajaPage currentUser={currentUser} token={token} />;
   }
 
   if (activeModule === "PRODUCTOS") {

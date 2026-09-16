@@ -7,17 +7,39 @@ import { Boom } from "@hapi/boom";
 import pino from "pino";
 import { handleMessage, transcribirAudio } from "../modules/asistente/asistente.service.js";
 import { cargarHistorial, guardarMensaje } from "../modules/asistente/asistente.memory.js";
+import { getShiftReport } from "../modules/reportes/reportes.service.js";
+import { generarInformeTurnoHTML, safePdfName } from "@minisuper/shared/shift-report-pdf";
+import { renderHtmlToPdf } from "../lib/pdf-render.js";
 
 const AUTH_DIR = process.env.WHATSAPP_SESSION_DIR || "./whatsapp-session-asistente";
 const NUMERO_AUTORIZADO = process.env.WHATSAPP_NUMERO_AUTORIZADO;
 const QR_PAGE_SECRET = process.env.QR_PAGE_SECRET;
+const INFORME_INTERNO_SECRET = process.env.INFORME_INTERNO_SECRET;
+
+// Además del número autorizado del asistente, a quién más se le manda
+// el informe al cerrar caja (p.ej. el dueño). Formato JID de WhatsApp,
+// separados por coma: "50499999999@s.whatsapp.net,50488888888@s.whatsapp.net"
+const NUMEROS_INFORME_ADICIONALES = (process.env.WHATSAPP_NUMEROS_INFORME_ADICIONALES || "")
+  .split(",")
+  .map((numero) => numero.trim())
+  .filter(Boolean);
+
+const DESTINATARIOS_INFORME = [NUMERO_AUTORIZADO, ...NUMEROS_INFORME_ADICIONALES];
+
+const SHIFT_LABELS = { A: "Turno A", B: "Turno B", C: "Turno C" };
 
 if (!NUMERO_AUTORIZADO) throw new Error("Falta WHATSAPP_NUMERO_AUTORIZADO en el .env");
 
 let estadoConexion = "conectando";
 let ultimoQrDataUrl = null;
 
+// Reasignado en cada (re)conexión dentro de iniciarBot() — el handler
+// HTTP de /interno/informe-turno siempre debe usar el socket VIVO más
+// reciente, no uno de una conexión ya cerrada.
+let sock = null;
+
 const app = express();
+app.use(express.json());
 
 app.get("/pair", async (req, res) => {
   if (QR_PAGE_SECRET && req.query.clave !== QR_PAGE_SECRET) {
@@ -48,10 +70,58 @@ app.listen(process.env.PORT || 3002, () => {
   console.log(`Página de pairing en el puerto ${process.env.PORT || 3002}`);
 });
 
+// Llamada por el backend (API) justo después de cerrar una caja — ver
+// apps/backend/src/modules/caja/informe-turno-notifier.js. Nunca la
+// llama nadie más (protegida por secreto compartido), y un fallo acá
+// no afecta el cierre de caja que ya se guardó del otro lado.
+app.post("/interno/informe-turno", async (req, res) => {
+  if (!INFORME_INTERNO_SECRET || req.get("X-Interno-Secret") !== INFORME_INTERNO_SECRET) {
+    return res.status(403).json({ error: "No autorizado." });
+  }
+
+  const { turno, fecha } = req.body ?? {};
+
+  if (!["A", "B", "C"].includes(turno) || typeof fecha !== "string") {
+    return res.status(400).json({ error: "turno o fecha inválidos." });
+  }
+
+  // Responder rápido: el backend que llama no debe esperar a que
+  // Chromium renderice el PDF ni a que Baileys termine de mandarlo.
+  res.status(202).json({ recibido: true });
+
+  try {
+    if (!sock || estadoConexion !== "conectado") {
+      console.error("No se pudo enviar el informe de turno: el bot de WhatsApp no está conectado.");
+      return;
+    }
+
+    const reporte = await getShiftReport(fecha, fecha, [turno]);
+    const html = generarInformeTurnoHTML(reporte);
+    const pdf = await renderHtmlToPdf(html);
+    const fileName = safePdfName(`informe-${SHIFT_LABELS[turno]}-${fecha}`);
+    const caption = `${SHIFT_LABELS[turno]} · ${fecha} — cierre de caja registrado.`;
+
+    for (const numero of DESTINATARIOS_INFORME) {
+      try {
+        await sock.sendMessage(numero, {
+          document: pdf,
+          fileName,
+          mimetype: "application/pdf",
+          caption,
+        });
+      } catch (err) {
+        console.error(`No se pudo enviar el informe de turno a ${numero}:`, err);
+      }
+    }
+  } catch (err) {
+    console.error("Error generando/enviando el informe de turno tras un cierre de caja:", err);
+  }
+});
+
 async function iniciarBot() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
-  const sock = makeWASocket({
+  sock = makeWASocket({
     auth: state,
     logger: pino({ level: "silent" }),
   });

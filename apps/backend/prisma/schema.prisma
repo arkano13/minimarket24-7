@@ -98,9 +98,24 @@ model Usuario {
   movimientosCaja       MovimientoCaja[]
   compras               Compra[]
   bitacora  Bitacora[]
-  devoluciones           Devolucion[] 
+  devoluciones           Devolucion[]
+  sesiones               Sesion[]
 
   @@map("usuarios")
+}
+
+// La sesión vive en la base de datos, no en memoria del proceso — así
+// un reinicio del backend (cada deploy/update) no obliga a todo el
+// mundo a volver a iniciar sesión.
+model Sesion {
+  token     String   @id @db.VarChar(64)
+  usuarioId Int      @map("usuario_id")
+  creadoEn  DateTime @default(now()) @map("creado_en")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@map("sesiones")
 }
 
 model Modulo {
@@ -318,6 +333,12 @@ model Venta {
   redondeo          Decimal                @default(0) @db.Decimal(14, 2)
   total             Decimal                @db.Decimal(14, 2)
   estado            EstadoVenta            @default(COMPLETADA)
+  // Solo aplica a ventas fiadas (algún pago con método CREDITO). Marca
+  // que el cliente ya saldó la deuda — no mueve dinero ni recalcula
+  // ningún total, solo saca la venta de la lista de "créditos
+  // pendientes". El cobro real se registra aparte, como una entrada de
+  // caja normal cuando el cajero recibe el pago.
+  creditoPagado     Boolean                @default(false) @map("credito_pagado")
   creadoEn          DateTime               @default(now()) @map("creado_en")
   canceladoEn       DateTime?              @map("cancelado_en")
   usuario           Usuario                @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
@@ -525,6 +546,12 @@ model ConfiguracionSistema {
   simboloMoneda   String   @default("L") @map("simbolo_moneda") @db.VarChar(10)
   fondoInicial    Decimal  @default(500) @map("fondo_inicial") @db.Decimal(14, 2)
   mensajeReportes String?  @map("mensaje_reportes") @db.VarChar(300)
+  // Rotación fija C→A→B→C... para saber qué informe de turno enviar por
+  // WhatsApp al cerrar caja, SIN mirar la hora del cierre. Arranca en
+  // "C" porque el primer cierre del día suele ser el de la madrugada
+  // (fin del Turno C de la noche anterior). Se puede corregir a mano
+  // desde el panel de admin si se desincroniza (ver PUT /api/caja/proximo-turno-informe).
+  proximoTurnoInforme String @default("C") @map("proximo_turno_informe") @db.VarChar(1)
   creadoEn        DateTime @default(now()) @map("creado_en")
   actualizadoEn   DateTime @updatedAt @map("actualizado_en")
 

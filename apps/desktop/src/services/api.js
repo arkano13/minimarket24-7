@@ -232,6 +232,15 @@ const API_URL = `${import.meta.env?.VITE_API_URL ?? "http://127.0.0.1:3001"}/api
     });
   }
 
+  export function markCreditAsPaid(token, saleId) {
+    return request(`/ventas/creditos/${saleId}/pagado`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  }
+
   export function cancelSale(token, saleId) {
     return request(`/ventas/${saleId}/cancelar`, {
       method: "POST",
@@ -300,6 +309,18 @@ const API_URL = `${import.meta.env?.VITE_API_URL ?? "http://127.0.0.1:3001"}/api
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(data),
+    });
+  }
+
+  export function listCashShiftHistory(token, { desde, hasta, usuarioId, page = 1 } = {}, signal) {
+    const params = new URLSearchParams({ page: String(page) });
+    if (desde) params.set("desde", desde);
+    if (hasta) params.set("hasta", hasta);
+    if (usuarioId) params.set("usuarioId", String(usuarioId));
+
+    return request(`/caja/cierres?${params}`, {
+      signal,
+      headers: { Authorization: `Bearer ${token}` },
     });
   }
 

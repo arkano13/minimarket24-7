@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import "./CajaPage.css";
 import { MiActividad } from "./MiActividad.jsx";
+import { HistorialCierres } from "./HistorialCierres.jsx";
 
 import {
   closeCashShift,
@@ -82,7 +83,7 @@ function updateMoneyValue(setter, value) {
   }
 }
 
-export function CajaPage({ token }) {
+export function CajaPage({ currentUser, token }) {
   const [shift, setShift] = useState(undefined);
   const [lastClosedShift, setLastClosedShift] = useState(null);
   const [initialFund, setInitialFund] = useState("0");
@@ -581,6 +582,7 @@ export function CajaPage({ token }) {
         </>
       )}
       <MiActividad token={token} revision={shift} />
+      <HistorialCierres currentUser={currentUser} revision={shift} token={token} />
     </main>
   );
 }

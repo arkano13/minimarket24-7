@@ -115,20 +115,8 @@ function buildResumenHtml(report) {
   );
 }
 
-function buildNotaPie(report) {
-  const creditos = report?.creditos ?? [];
-  const inventario = report?.movimientosInventario ?? [];
-
-  const pendientes = [];
-
-  if (!creditos.length) pendientes.push("créditos (fiar)");
-  if (!inventario.length) pendientes.push("inventario");
-
-  const notaPendientes = pendientes.length
-    ? ` ${pendientes.join(" e ").replace(/^./, (c) => c.toUpperCase())} aún ${pendientes.length === 1 ? "no está conectado" : "no están conectados"} a datos reales.`
-    : "";
-
-  return `La ganancia es una estimación basada en los costos registrados.${notaPendientes}`;
+function buildNotaPie() {
+  return "La ganancia es una estimación basada en los costos registrados.";
 }
 
 function datosDesdeInforme(report) {
@@ -143,6 +131,8 @@ function datosDesdeInforme(report) {
   const salidas = Array.isArray(report?.caja?.salidas) ? report.caja.salidas : [];
   const compras = Array.isArray(report?.compras) ? report.compras : [];
   const cierresCaja = Array.isArray(report?.cuadreCaja?.cierres) ? report.cuadreCaja.cierres : [];
+  const creditos = Array.isArray(report?.creditos) ? report.creditos : [];
+  const movimientosInventario = Array.isArray(report?.movimientosInventario) ? report.movimientosInventario : [];
 
   const generadoTexto = `Generado: ${new Intl.DateTimeFormat("es-HN", {
     timeZone: HONDURAS_TIME_ZONE,
@@ -176,14 +166,13 @@ function datosDesdeInforme(report) {
       totalSalidas: cierre.salidas,
     },
 
-    cuadreCaja: {
+    cuadreReal: {
       items: cierresCaja.map((closure) => ({
         hora: horaCorta(closure.cerradoEn),
         cajero: closure.usuarioCierre?.nombre ?? "—",
         fondoInicial: closure.fondoInicial,
         esperado: closure.efectivoEsperado,
         contado: closure.efectivoContado,
-        diferencia: closure.diferencia,
       })),
     },
 
@@ -250,10 +239,22 @@ function datosDesdeInforme(report) {
       })),
     },
 
-    // Sin conectar todavía a datos reales — se omiten en vez de mostrar
-    // filas de ejemplo (ver renderCreditos/renderInventario).
-    creditos: { items: [] },
-    inventario: { items: [] },
+    creditos: {
+      items: creditos.map((credito) => ({
+        cliente: credito.cliente,
+        hora: horaCorta(credito.creadoEn),
+        monto: credito.monto,
+      })),
+    },
+
+    inventario: {
+      items: movimientosInventario.map((movimiento) => ({
+        producto: movimiento.producto,
+        movimiento: movimiento.movimiento,
+        cantidad: movimiento.cantidad,
+        motivo: movimiento.motivo ?? "—",
+      })),
+    },
 
     productos: products.map((product) => ({
       nombre: product.nombre,
@@ -264,7 +265,7 @@ function datosDesdeInforme(report) {
     })),
 
     resumenHtml: buildResumenHtml(report),
-    notaPie: buildNotaPie(report),
+    notaPie: buildNotaPie(),
   };
 }
 

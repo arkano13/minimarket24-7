@@ -8,6 +8,7 @@ import {
   createSale,
   listCreditSales,
   listSales,
+  marcarCreditoComoPagado,
   repriceCartForClient,
   searchSaleClients,
   searchSaleProducts,
@@ -32,6 +33,18 @@ salesRouter.get("/creditos", async (req, res, next) => {
   try {
     const ventas = await listCreditSales(req.query.buscar);
     res.json({ ventas });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Marca un crédito como saldado — lo saca de la lista de pendientes.
+// No mueve dinero ni inventario; si el cliente pagó de verdad, el
+// cobro se registra aparte como entrada de caja normal.
+salesRouter.put("/creditos/:id/pagado", async (req, res, next) => {
+  try {
+    await marcarCreditoComoPagado(req.params.id);
+    res.status(204).end();
   } catch (error) {
     next(error);
   }

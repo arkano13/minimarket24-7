@@ -118,6 +118,39 @@ app.post("/interno/informe-turno", async (req, res) => {
   }
 });
 
+// Emergencia: descarga el PDF directo por HTTP, sin pasar por WhatsApp
+// para nada — útil si la sesión de WhatsApp está caída/desincronizada
+// y necesitás el informe YA. Acepta el secreto por query (?clave=...)
+// para poder pegarlo directo en el navegador, no solo por curl.
+// Ejemplo: GET /interno/informe-turno-pdf?turno=C&fecha=2026-09-16&clave=TU_SECRETO
+app.get("/interno/informe-turno-pdf", async (req, res) => {
+  const clave = req.query.clave || req.get("X-Interno-Secret");
+
+  if (!INFORME_INTERNO_SECRET || clave !== INFORME_INTERNO_SECRET) {
+    return res.status(403).send("No autorizado.");
+  }
+
+  const { turno, fecha } = req.query;
+
+  if (!["A", "B", "C"].includes(turno) || typeof fecha !== "string") {
+    return res.status(400).send("turno o fecha inválidos.");
+  }
+
+  try {
+    const reporte = await getShiftReport(fecha, fecha, [turno]);
+    const html = generarInformeTurnoHTML(reporte);
+    const pdf = await renderHtmlToPdf(html);
+    const fileName = safePdfName(`informe-${SHIFT_LABELS[turno]}-${fecha}`);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${fileName}"`);
+    res.send(pdf);
+  } catch (err) {
+    console.error("Error generando el PDF del informe de turno (descarga directa):", err);
+    res.status(500).send("No se pudo generar el PDF.");
+  }
+});
+
 async function iniciarBot() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 

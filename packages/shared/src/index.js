@@ -19,4 +19,4 @@ export const MODOS_PRECIO = Object.freeze(["UNICO", "POR_HORARIO"]);
  */
 export function redondearAlEntero(monto) {
   return Math.round(Number(monto));
-}
+}a

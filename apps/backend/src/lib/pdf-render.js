@@ -39,7 +39,7 @@ export async function renderHtmlToPdf(html) {
   try {
     await page.setContent(html, { waitUntil: "networkidle0" });
 
-    return await page.pdf({
+    const pdf = await page.pdf({
       format: "Letter",
       printBackground: true,
       margin: {
@@ -49,6 +49,12 @@ export async function renderHtmlToPdf(html) {
         left: "13mm",
       },
     });
+
+    // Puppeteer puede devolver un Uint8Array "plano" en vez de un
+    // Buffer de Node real — Baileys (sock.sendMessage con document:)
+    // espera específicamente un Buffer, si no falla al armar el
+    // mensaje ("Cannot read properties of undefined").
+    return Buffer.from(pdf);
   } finally {
     await page.close();
   }

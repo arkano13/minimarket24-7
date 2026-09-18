@@ -1,8 +1,13 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/AppError.js";
-import { businessDayFor } from "../reportes/reportes.service.js";
+import { generarInformeTurnoHTML } from "@minisuper/shared/shift-report-pdf";
+import { businessDayFor, getShiftReport } from "../reportes/reportes.service.js";
 import { notificarCierreDeCaja } from "./informe-turno-notifier.js";
+import {
+  inferirTurnoDeCierre,
+  TOLERANCIA_CIERRE_MINUTOS,
+} from "./turno-cierre.js";
 
 const MOVEMENT_TYPES = new Set(["INGRESO", "RETIRO"]);
 const MOVEMENT_METHODS = new Set(["EFECTIVO", "TARJETA", "TRANSFERENCIA"]);
@@ -780,5 +785,118 @@ export async function listCashShiftHistory(filters, requestingUser) {
     pagina: page,
     totalPaginas: Math.max(1, Math.ceil(total / pageSize)),
     total,
+  };
+}
+
+// ---------------------------------------------------------------------
+// Informe de un cierre, SOLO para imprimir desde el historial.
+//
+// No toca el envío por WhatsApp: ese sigue usando la rotación A → B → C.
+// Aquí el turno se deduce de la hora real del cierre con ±1 hora de
+// tolerancia alrededor del fin de cada turno (ver turno-cierre.js), y
+// se usa la MISMA plantilla y el MISMO getShiftReport que el bot, para
+// que lo impreso coincida con lo que llegó por WhatsApp.
+// ---------------------------------------------------------------------
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[character]);
+}
+
+const printDateTimeFormatter = new Intl.DateTimeFormat("es-HN", {
+  timeZone: HONDURAS_TIME_ZONE,
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+});
+
+// Franja bajo el encabezado del informe con los datos del cierre.
+// Sin esto, dos cierres dentro del mismo turno imprimirían hojas
+// idénticas y no habría forma de distinguirlas.
+function bannerCierre({ cerradoEn, cajero, turno, porTolerancia }) {
+  const nota = porTolerancia
+    ? `según la hora del cierre (tolerancia ±${TOLERANCIA_CIERRE_MINUTOS} min)`
+    : "según la hora del cierre";
+
+  return `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;background:#FDF3E4;border:1px solid #E4E9E4;border-radius:8px;padding:8px 14px;margin-bottom:12px;font-size:10px;color:#14201B;">
+    <span><strong>Cierre de caja</strong> · ${escapeHtml(printDateTimeFormatter.format(cerradoEn))} · Cajero: ${escapeHtml(cajero)}</span>
+    <span>${escapeHtml(SHIFT_LABELS[turno])} <span style="color:#64748B;">(${nota})</span></span>
+  </div>`;
+}
+
+export async function getInformeCierreParaImprimir(cierreId, requestingUser) {
+  if (requestingUser?.id == null) {
+    throw new AppError("Sesión no válida.", 401);
+  }
+
+  const id = Number(cierreId);
+
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    throw new AppError("El cierre no es válido.", 400);
+  }
+
+  const cierre = await prisma.turnoCaja.findFirst({
+    where: { id, estado: "CERRADO", cerradoEn: { not: null } },
+    select: {
+      id: true,
+      cerradoEn: true,
+      usuarioCierreId: true,
+      usuarioCierre: { select: { nombre: true } },
+    },
+  });
+
+  if (!cierre) {
+    throw new AppError("No se encontró ese cierre de caja.", 404);
+  }
+
+  const isAdmin = requestingUser.rol === "ADMINISTRADOR";
+
+  if (!isAdmin && cierre.usuarioCierreId !== requestingUser.id) {
+    throw new AppError(
+      "Solo un administrador puede imprimir el cierre de otro usuario.",
+      403,
+    );
+  }
+
+  const { turno, fecha, porTolerancia } = inferirTurnoDeCierre(cierre.cerradoEn);
+
+  // Mismo cálculo que el bot de WhatsApp: todo el turno, todos los cajeros.
+  const reporte = await getShiftReport(fecha, fecha, [turno]);
+  const html = generarInformeTurnoHTML(reporte);
+
+  const banner = bannerCierre({
+    cerradoEn: cierre.cerradoEn,
+    cajero: cierre.usuarioCierre?.nombre ?? "—",
+    turno,
+    porTolerancia,
+  });
+
+  // Inserción solo para impresión: la plantilla compartida (la que usa
+  // el bot) no se modifica. Si algún día cambia el marcador, el informe
+  // se imprime igual, solo que sin la franja.
+  const marcadores = [
+    '<div class="section-title">Resumen financiero</div>',
+    '<div class="sheet">',
+  ];
+  const marcador = marcadores.find((item) => html.includes(item));
+  const htmlFinal = !marcador
+    ? html
+    : marcador === marcadores[0]
+      ? html.replace(marcador, `${banner}\n  ${marcador}`)
+      : html.replace(marcador, `${marcador}\n${banner}`);
+
+  return {
+    html: htmlFinal,
+    turno,
+    fecha,
+    cerradoEn: cierre.cerradoEn,
   };
 }

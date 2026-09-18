@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listCashShiftHistory } from "../../services/api.js";
+import { getCashShiftPrintReport, listCashShiftHistory } from "../../services/api.js";
 
 const money = (value) =>
   new Intl.NumberFormat("es-HN", {
@@ -31,6 +31,29 @@ export function HistorialCierres({ currentUser, revision, token }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [printingId, setPrintingId] = useState(null);
+  const [printError, setPrintError] = useState("");
+
+  const canPrint = Boolean(window.desktop?.printReportHtml);
+
+  async function handlePrint(cierre) {
+    if (printingId !== null) {
+      return;
+    }
+
+    setPrintingId(cierre.id);
+    setPrintError("");
+
+    try {
+      const informe = await getCashShiftPrintReport(token, cierre.id);
+
+      await window.desktop.printReportHtml({ html: informe.html });
+    } catch (requestError) {
+      setPrintError(requestError.message || "No se pudo imprimir el informe.");
+    } finally {
+      setPrintingId(null);
+    }
+  }
 
   useEffect(() => {
     setPage(1);
@@ -119,6 +142,12 @@ export function HistorialCierres({ currentUser, revision, token }) {
         </p>
       ) : null}
 
+      {printError ? (
+        <p className="form-error" role="alert">
+          {printError}
+        </p>
+      ) : null}
+
       {loading ? (
         <p className="empty-state">Cargando historial...</p>
       ) : !data || data.cierres.length === 0 ? (
@@ -161,6 +190,19 @@ export function HistorialCierres({ currentUser, revision, token }) {
                   <span className="cash-positive">+ Entradas L {money(cierre.totales.ingresos)}</span>
                   <span className="cash-negative">− Retiros L {money(cierre.totales.retiros)}</span>
                 </div>
+
+                {canPrint ? (
+                  <div className="cash-history-item__actions">
+                    <button
+                      className="secondary-button"
+                      disabled={printingId !== null}
+                      onClick={() => handlePrint(cierre)}
+                      type="button"
+                    >
+                      {printingId === cierre.id ? "Preparando..." : "Imprimir informe"}
+                    </button>
+                  </div>
+                ) : null}
               </article>
             ))}
           </div>

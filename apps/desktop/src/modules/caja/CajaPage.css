@@ -450,6 +450,12 @@
   font-family: var(--font-mono);
 }
 
+.cash-history-item__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
 .cash-history-pagination {
   display: flex;
   align-items: center;

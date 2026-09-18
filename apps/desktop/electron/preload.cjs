@@ -12,6 +12,9 @@ contextBridge.exposeInMainWorld("desktop", {
       payload,
     ),
 
+  printReportHtml: (payload) =>
+    ipcRenderer.invoke("reports:print-html", payload),
+
   printUserSales: (report) =>
     ipcRenderer.invoke("sales:print-user-sales", report),
 

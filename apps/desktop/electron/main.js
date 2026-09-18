@@ -52,6 +52,56 @@ ipcMain.handle("sales:print-user-sales", async (event, report) => {
   }
 });
 
+// Imprime un informe ya armado (HTML) con el diálogo de impresión de
+// Windows — el usuario elige impresora, copias, etc. El HTML lo genera el
+// backend con la misma plantilla que el PDF de WhatsApp, así lo impreso
+// es idéntico. No usa la térmica de recibos: el informe es tamaño carta.
+ipcMain.handle("reports:print-html", async (event, payload) => {
+  if (typeof payload?.html !== "string" || payload.html.length === 0) {
+    throw new Error("No se recibió el informe a imprimir.");
+  }
+
+  const ownerWindow = BrowserWindow.fromWebContents(event.sender);
+  const temporaryHtmlPath = path.join(
+    app.getPath("temp"),
+    `minisuper-print-${randomUUID()}.html`,
+  );
+  const printWindow = new BrowserWindow({
+    show: false,
+    parent: ownerWindow ?? undefined,
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+
+  try {
+    await writeFile(temporaryHtmlPath, payload.html, "utf8");
+    await printWindow.loadFile(temporaryHtmlPath);
+
+    return await new Promise((resolve, reject) => {
+      printWindow.webContents.print(
+        {
+          silent: false,
+          printBackground: true,
+          pageSize: "Letter",
+          // Los márgenes ya vienen definidos en el @page de la plantilla.
+          margins: { marginType: "none" },
+        },
+        (success, failureReason) => {
+          if (success) {
+            resolve({ printed: true });
+          } else if (/cancel/i.test(failureReason ?? "")) {
+            resolve({ canceled: true });
+          } else {
+            reject(new Error(failureReason || "No se pudo imprimir el informe."));
+          }
+        },
+      );
+    });
+  } finally {
+    if (!printWindow.isDestroyed()) printWindow.destroy();
+    await unlink(temporaryHtmlPath).catch(() => {});
+  }
+});
+
 // Un solo tipo de reporte: el informe de turno unificado. Reemplaza los
 // antiguos "administrativo" (ADMINISTRATIVE) y "operativo" (ventas) —
 // ya no se distingue reportType, siempre se genera el mismo documento.

@@ -9,6 +9,7 @@ import {
   closeCashShift,
   createCashMovement,
   getCurrentCashShift,
+  getInformeCierreParaImprimir,
   getProximoTurnoInforme,
   listCashShiftHistory,
   listMyCashActivity,
@@ -129,6 +130,23 @@ cashRouter.get("/cierres", async (req, res, next) => {
     );
 
     res.json(resultado);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// HTML del informe de un cierre, para imprimirlo desde el desktop. Un
+// cajero solo puede pedir el de sus propios cierres (lo valida el
+// servicio); un administrador, el de cualquiera. No afecta el envío
+// por WhatsApp.
+cashRouter.get("/cierres/:id/informe-html", async (req, res, next) => {
+  try {
+    const informe = await getInformeCierreParaImprimir(
+      req.params.id,
+      req.auth.usuario,
+    );
+
+    res.json(informe);
   } catch (error) {
     next(error);
   }

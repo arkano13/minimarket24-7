@@ -324,6 +324,12 @@ const API_URL = `${import.meta.env?.VITE_API_URL ?? "http://127.0.0.1:3001"}/api
     });
   }
 
+  export function getCashShiftPrintReport(token, cierreId) {
+    return request(`/caja/cierres/${cierreId}/informe-html`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  }
+
   export function listSpecialClients(token, search = "") {
     const query = search
       ? `?buscar=${encodeURIComponent(search)}`

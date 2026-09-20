@@ -666,6 +666,7 @@ export async function closeCashShift(
   notificarCierreDeCaja(
     result.turnoInforme,
     businessDayFor(result.closedShift.cerradoEn),
+    result.closedShift.id,
   );
 
   return serializeShift(result.closedShift, userId);
@@ -868,8 +869,12 @@ export async function getInformeCierreParaImprimir(cierreId, requestingUser) {
 
   const { turno, fecha, porTolerancia } = inferirTurnoDeCierre(cierre.cerradoEn);
 
-  // Mismo cálculo que el bot de WhatsApp: todo el turno, todos los cajeros.
-  const reporte = await getShiftReport(fecha, fecha, [turno]);
+  // Mismo cálculo que el bot de WhatsApp: el informe de ESA caja (sus
+  // ventas de apertura a cierre). El turno solo aporta la letra del
+  // encabezado.
+  const reporte = await getShiftReport(fecha, fecha, [turno], undefined, {
+    turnoCajaId: id,
+  });
   const html = generarInformeTurnoHTML(reporte);
 
   const banner = bannerCierre({

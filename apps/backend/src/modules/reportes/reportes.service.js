@@ -226,25 +226,32 @@ async function loadCashMovements(
   range,
   shiftSet,
   usuarioId,
+  caja,
 ) {
   const movements = await prisma.movimientoCaja.findMany({
-    where: {
-      creadoEn: {
-        gte: range.from,
-        lte: range.to,
-      },
+    where: caja
+      ? { turnoCajaId: caja.id }
+      : {
+          creadoEn: {
+            gte: range.from,
+            lte: range.to,
+          },
 
-      ...(usuarioId ? { usuarioId } : {}),
-    },
+          ...(usuarioId ? { usuarioId } : {}),
+        },
 
     orderBy: {
       creadoEn: "asc",
     },
   });
 
-  const filtered = movements.filter((movement) =>
-    shiftSet.has(reportShift(movement.creadoEn)),
-  );
+  // Informe por caja: todos los movimientos de esa caja, sin filtrar
+  // por reloj.
+  const filtered = caja
+    ? movements
+    : movements.filter((movement) =>
+        shiftSet.has(reportShift(movement.creadoEn)),
+      );
 
   const entradas = filtered
     .filter((movement) => movement.tipo === "INGRESO")
@@ -284,17 +291,22 @@ async function loadPurchases(
   range,
   shiftSet,
   usuarioId,
+  caja,
 ) {
+  // Las compras no están ligadas a una caja: en el informe por caja se
+  // toman las hechas mientras esa caja estuvo abierta.
   const purchases = await prisma.compra.findMany({
     where: {
       estado: "RECIBIDA",
 
-      creadoEn: {
-        gte: range.from,
-        lte: range.to,
-      },
+      creadoEn: caja
+        ? { gte: caja.abiertoEn, lte: caja.cerradoEn ?? new Date() }
+        : {
+            gte: range.from,
+            lte: range.to,
+          },
 
-      ...(usuarioId ? { usuarioId } : {}),
+      ...(!caja && usuarioId ? { usuarioId } : {}),
     },
 
     orderBy: {
@@ -302,9 +314,11 @@ async function loadPurchases(
     },
   });
 
-  const filtered = purchases
-    .filter((purchase) => shiftSet.has(reportShift(purchase.creadoEn)))
-    .map((purchase) => ({
+  const filtered = (
+    caja
+      ? purchases
+      : purchases.filter((purchase) => shiftSet.has(reportShift(purchase.creadoEn)))
+  ).map((purchase) => ({
       id: purchase.id,
       creadoEn: purchase.creadoEn,
       proveedor: purchase.proveedorNombre,
@@ -324,6 +338,7 @@ async function loadCashClosures(
   range,
   shiftSet,
   usuarioId,
+  caja,
 ) {
   // El "cuadre" real (faltante/sobrante) solo existe cuando un cajero
   // efectivamente CIERRA su caja y cuenta el efectivo — es un dato
@@ -331,16 +346,18 @@ async function loadCashClosures(
   // un cálculo teórico a partir de ventas y movimientos sin importar
   // si alguien llegó a cerrar la caja o no.
   const closures = await prisma.turnoCaja.findMany({
-    where: {
-      estado: "CERRADO",
+    where: caja
+      ? { id: caja.id, estado: "CERRADO" }
+      : {
+          estado: "CERRADO",
 
-      cerradoEn: {
-        gte: range.from,
-        lte: range.to,
-      },
+          cerradoEn: {
+            gte: range.from,
+            lte: range.to,
+          },
 
-      ...(usuarioId ? { usuarioCierreId: usuarioId } : {}),
-    },
+          ...(usuarioId ? { usuarioCierreId: usuarioId } : {}),
+        },
 
     include: {
       usuarioApertura: {
@@ -357,9 +374,11 @@ async function loadCashClosures(
     },
   });
 
-  const cuadres = closures
-    .filter((closure) => shiftSet.has(reportShift(closure.cerradoEn)))
-    .map((closure) => ({
+  const cuadres = (
+    caja
+      ? closures
+      : closures.filter((closure) => shiftSet.has(reportShift(closure.cerradoEn)))
+  ).map((closure) => ({
       id: closure.id,
       usuarioApertura: closure.usuarioApertura,
       usuarioCierre: closure.usuarioCierre,
@@ -388,11 +407,19 @@ async function loadCashClosures(
   };
 }
 
+// Sin `opciones.turnoCajaId` el informe se arma por reloj (fechas +
+// franja horaria del turno), como siempre. Con `opciones.turnoCajaId` el
+// informe es de UNA caja: sus ventas, movimientos y cuadre, desde que se
+// abrió hasta que se cerró — así coincide con lo que ve y cuenta el
+// cajero. En ese modo `fromInput`/`toInput` solo sirven de etiqueta
+// (día comercial) y `turnosInput` solo de letra del turno en el
+// encabezado; no filtran nada.
 export async function getShiftReport(
   fromInput,
   toInput,
   turnosInput,
   usuarioIdInput,
+  opciones = {},
 ) {
   const range = reportRange(
     fromInput,
@@ -402,23 +429,45 @@ export async function getShiftReport(
   const shifts = normalizeShifts(turnosInput);
   const shiftSet = new Set(shifts);
 
-  const usuarioId = usuarioIdInput ? Number(usuarioIdInput) : null;
+  let cajaTurno = null;
 
-  if (usuarioIdInput && (!Number.isSafeInteger(usuarioId) || usuarioId <= 0)) {
+  if (opciones?.turnoCajaId !== undefined && opciones?.turnoCajaId !== null) {
+    const turnoCajaId = Number(opciones.turnoCajaId);
+
+    if (!Number.isSafeInteger(turnoCajaId) || turnoCajaId <= 0) {
+      throw new AppError("La caja no es válida.", 400);
+    }
+
+    cajaTurno = await prisma.turnoCaja.findUnique({
+      where: { id: turnoCajaId },
+      select: { id: true, abiertoEn: true, cerradoEn: true },
+    });
+
+    if (!cajaTurno) {
+      throw new AppError("No se encontró esa caja.", 404);
+    }
+  }
+
+  const usuarioId =
+    !cajaTurno && usuarioIdInput ? Number(usuarioIdInput) : null;
+
+  if (!cajaTurno && usuarioIdInput && (!Number.isSafeInteger(usuarioId) || usuarioId <= 0)) {
     throw new AppError("El usuario no es válido.", 400);
   }
 
   const allSales = await prisma.venta.findMany({
-    where: {
-      estado: "COMPLETADA",
+    where: cajaTurno
+      ? { estado: "COMPLETADA", turnoCajaId: cajaTurno.id }
+      : {
+          estado: "COMPLETADA",
 
-      creadoEn: {
-        gte: range.from,
-        lte: range.to,
-      },
+          creadoEn: {
+            gte: range.from,
+            lte: range.to,
+          },
 
-      ...(usuarioId ? { usuarioId } : {}),
-    },
+          ...(usuarioId ? { usuarioId } : {}),
+        },
 
     include: {
       usuario: {
@@ -449,7 +498,9 @@ export async function getShiftReport(
   // Filtra por turno DESPUÉS de traer todo: así el resumen, los productos,
   // los pagos, las horas y el listado de ventas quedan todos consistentes
   // entre sí, reflejando solo lo que pasó en los turnos elegidos.
-  const sales = allSales.filter((sale) => shiftSet.has(reportShift(sale.creadoEn)));
+  const sales = cajaTurno
+    ? allSales
+    : allSales.filter((sale) => shiftSet.has(reportShift(sale.creadoEn)));
 
   const payments = new Map([
     [
@@ -597,9 +648,9 @@ export async function getShiftReport(
     );
 
   const [caja, compras, cuadreCaja] = await Promise.all([
-    loadCashMovements(range, shiftSet, usuarioId),
-    loadPurchases(range, shiftSet, usuarioId),
-    loadCashClosures(range, shiftSet, usuarioId),
+    loadCashMovements(range, shiftSet, usuarioId, cajaTurno),
+    loadPurchases(range, shiftSet, usuarioId, cajaTurno),
+    loadCashClosures(range, shiftSet, usuarioId, cajaTurno),
   ]);
 
   const efectivoVentas = roundMoney(
@@ -638,6 +689,14 @@ export async function getShiftReport(
       turnos: shifts,
       turnoEtiqueta: shiftLabel(shifts),
       usuarioId: usuarioId ?? null,
+      // Solo en informes por caja: horas reales de apertura y cierre.
+      caja: cajaTurno
+        ? {
+            id: cajaTurno.id,
+            abiertoEn: cajaTurno.abiertoEn,
+            cerradoEn: cajaTurno.cerradoEn,
+          }
+        : null,
     },
 
     resumen: {

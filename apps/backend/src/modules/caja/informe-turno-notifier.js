@@ -23,13 +23,15 @@ const BOT_URL = process.env.WHATSAPP_BOT_URL || "http://127.0.0.1:3002";
 const SECRET = process.env.INFORME_INTERNO_SECRET;
 const RETRASO_ENVIO_MS = 5 * 60 * 1000;
 
-export function notificarCierreDeCaja(turno, fecha) {
+// `turnoCajaId` hace que el informe sea de ESA caja (sus ventas de
+// apertura a cierre) y no de una franja de reloj.
+export function notificarCierreDeCaja(turno, fecha, turnoCajaId) {
   setTimeout(() => {
-    enviarAhora(turno, fecha);
+    enviarAhora(turno, fecha, turnoCajaId);
   }, RETRASO_ENVIO_MS);
 }
 
-async function enviarAhora(turno, fecha) {
+async function enviarAhora(turno, fecha, turnoCajaId) {
   if (!SECRET) {
     console.warn(
       "INFORME_INTERNO_SECRET no está configurado — no se notificó el " +
@@ -48,7 +50,7 @@ async function enviarAhora(turno, fecha) {
         "X-Interno-Secret": SECRET,
       },
 
-      body: JSON.stringify({ turno, fecha }),
+      body: JSON.stringify({ turno, fecha, turnoCajaId }),
 
       signal: AbortSignal.timeout(15_000),
     });

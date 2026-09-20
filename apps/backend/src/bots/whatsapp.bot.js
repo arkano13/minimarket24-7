@@ -79,10 +79,16 @@ app.post("/interno/informe-turno", async (req, res) => {
     return res.status(403).json({ error: "No autorizado." });
   }
 
-  const { turno, fecha } = req.body ?? {};
+  const { turno, fecha, turnoCajaId } = req.body ?? {};
 
   if (!["A", "B", "C"].includes(turno) || typeof fecha !== "string") {
     return res.status(400).json({ error: "turno o fecha inválidos." });
+  }
+
+  // Opcional: con el id de la caja el informe es de esa caja (apertura
+  // a cierre). Sin él, se arma por franja horaria como antes.
+  if (turnoCajaId != null && (!Number.isSafeInteger(Number(turnoCajaId)) || Number(turnoCajaId) <= 0)) {
+    return res.status(400).json({ error: "turnoCajaId inválido." });
   }
 
   // Responder rápido: el backend que llama no debe esperar a que
@@ -95,7 +101,7 @@ app.post("/interno/informe-turno", async (req, res) => {
       return;
     }
 
-    const reporte = await getShiftReport(fecha, fecha, [turno]);
+    const reporte = await getShiftReport(fecha, fecha, [turno], undefined, { turnoCajaId });
     const html = generarInformeTurnoHTML(reporte);
     const pdf = await renderHtmlToPdf(html);
     const fileName = safePdfName(`informe-${SHIFT_LABELS[turno]}-${fecha}`);
@@ -130,14 +136,18 @@ app.get("/interno/informe-turno-pdf", async (req, res) => {
     return res.status(403).send("No autorizado.");
   }
 
-  const { turno, fecha } = req.query;
+  const { turno, fecha, turnoCajaId } = req.query;
 
   if (!["A", "B", "C"].includes(turno) || typeof fecha !== "string") {
     return res.status(400).send("turno o fecha inválidos.");
   }
 
+  if (turnoCajaId != null && (!Number.isSafeInteger(Number(turnoCajaId)) || Number(turnoCajaId) <= 0)) {
+    return res.status(400).send("turnoCajaId inválido.");
+  }
+
   try {
-    const reporte = await getShiftReport(fecha, fecha, [turno]);
+    const reporte = await getShiftReport(fecha, fecha, [turno], undefined, { turnoCajaId });
     const html = generarInformeTurnoHTML(reporte);
     const pdf = await renderHtmlToPdf(html);
     const fileName = safePdfName(`informe-${SHIFT_LABELS[turno]}-${fecha}`);

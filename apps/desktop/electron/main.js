@@ -76,6 +76,14 @@ ipcMain.handle("reports:print-html", async (event, payload) => {
     await writeFile(temporaryHtmlPath, payload.html, "utf8");
     await printWindow.loadFile(temporaryHtmlPath);
 
+    // Fuerza a imprimir los colores de fondo. Sin esto, el encabezado
+    // verde (texto blanco sobre degradado) sale casi invisible y se
+    // pierden los tonos de tarjetas y barras. Solo afecta a la
+    // impresión: no se toca la plantilla que usa WhatsApp.
+    await printWindow.webContents.insertCSS(
+      "*, *::before, *::after { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }",
+    );
+
     return await new Promise((resolve, reject) => {
       printWindow.webContents.print(
         {

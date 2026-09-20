@@ -62,7 +62,47 @@ function periodoTexto(desde, hasta) {
   return `Periodo: ${rango}`;
 }
 
-function turnoHeader(turnos) {
+const cajaHoraFormatter = new Intl.DateTimeFormat("es-HN", {
+  timeZone: HONDURAS_TIME_ZONE,
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+});
+
+const cajaDiaFormatter = new Intl.DateTimeFormat("es-HN", {
+  timeZone: HONDURAS_TIME_ZONE,
+  day: "2-digit",
+  month: "short",
+});
+
+// Informe por caja: en vez del horario fijo del turno, las horas reales
+// en que se abrió y se cerró esa caja. Si cruzan de día, se agrega la
+// fecha para que no se confunda.
+function textoHoraCaja(value, incluirDia) {
+  const date = new Date(value);
+  const hora = cajaHoraFormatter.format(date);
+
+  return incluirDia ? `${cajaDiaFormatter.format(date)}, ${hora}` : hora;
+}
+
+function turnoHeader(turnos, caja) {
+  if (caja?.abiertoEn) {
+    const numero =
+      Array.isArray(turnos) && turnos.length === 1 ? turnos[0] : "Caja";
+    const cruzaDia =
+      caja.cerradoEn &&
+      cajaDiaFormatter.format(new Date(caja.abiertoEn)) !==
+        cajaDiaFormatter.format(new Date(caja.cerradoEn));
+
+    return {
+      numero,
+      horaInicio: textoHoraCaja(caja.abiertoEn, cruzaDia),
+      horaFin: caja.cerradoEn
+        ? textoHoraCaja(caja.cerradoEn, cruzaDia)
+        : "en curso",
+    };
+  }
+
   if (Array.isArray(turnos) && turnos.length === 1 && SHIFT_SCHEDULES[turnos[0]]) {
     const [inicio, fin] = SHIFT_SCHEDULES[turnos[0]];
 
@@ -115,20 +155,8 @@ function buildResumenHtml(report) {
   );
 }
 
-function buildNotaPie(report) {
-  const creditos = report?.creditos ?? [];
-  const inventario = report?.movimientosInventario ?? [];
-
-  const pendientes = [];
-
-  if (!creditos.length) pendientes.push("créditos (fiar)");
-  if (!inventario.length) pendientes.push("inventario");
-
-  const notaPendientes = pendientes.length
-    ? ` ${pendientes.join(" e ").replace(/^./, (c) => c.toUpperCase())} aún ${pendientes.length === 1 ? "no está conectado" : "no están conectados"} a datos reales.`
-    : "";
-
-  return `La ganancia es una estimación basada en los costos registrados.${notaPendientes}`;
+function buildNotaPie() {
+  return "La ganancia es una estimación basada en los costos registrados.";
 }
 
 function datosDesdeInforme(report) {
@@ -143,6 +171,8 @@ function datosDesdeInforme(report) {
   const salidas = Array.isArray(report?.caja?.salidas) ? report.caja.salidas : [];
   const compras = Array.isArray(report?.compras) ? report.compras : [];
   const cierresCaja = Array.isArray(report?.cuadreCaja?.cierres) ? report.cuadreCaja.cierres : [];
+  const creditos = Array.isArray(report?.creditos) ? report.creditos : [];
+  const movimientosInventario = Array.isArray(report?.movimientosInventario) ? report.movimientosInventario : [];
 
   const generadoTexto = `Generado: ${new Intl.DateTimeFormat("es-HN", {
     timeZone: HONDURAS_TIME_ZONE,
@@ -157,7 +187,7 @@ function datosDesdeInforme(report) {
   }).format(new Date())}`;
 
   return {
-    turno: turnoHeader(periodo.turnos),
+    turno: turnoHeader(periodo.turnos, periodo.caja),
     periodo: { texto: periodoTexto(periodo.desde, periodo.hasta) },
     generadoTexto,
 
@@ -176,14 +206,13 @@ function datosDesdeInforme(report) {
       totalSalidas: cierre.salidas,
     },
 
-    cuadreCaja: {
+    cuadreReal: {
       items: cierresCaja.map((closure) => ({
         hora: horaCorta(closure.cerradoEn),
         cajero: closure.usuarioCierre?.nombre ?? "—",
         fondoInicial: closure.fondoInicial,
         esperado: closure.efectivoEsperado,
         contado: closure.efectivoContado,
-        diferencia: closure.diferencia,
       })),
     },
 
@@ -250,10 +279,22 @@ function datosDesdeInforme(report) {
       })),
     },
 
-    // Sin conectar todavía a datos reales — se omiten en vez de mostrar
-    // filas de ejemplo (ver renderCreditos/renderInventario).
-    creditos: { items: [] },
-    inventario: { items: [] },
+    creditos: {
+      items: creditos.map((credito) => ({
+        cliente: credito.cliente,
+        hora: horaCorta(credito.creadoEn),
+        monto: credito.monto,
+      })),
+    },
+
+    inventario: {
+      items: movimientosInventario.map((movimiento) => ({
+        producto: movimiento.producto,
+        movimiento: movimiento.movimiento,
+        cantidad: movimiento.cantidad,
+        motivo: movimiento.motivo ?? "—",
+      })),
+    },
 
     productos: products.map((product) => ({
       nombre: product.nombre,
@@ -264,7 +305,7 @@ function datosDesdeInforme(report) {
     })),
 
     resumenHtml: buildResumenHtml(report),
-    notaPie: buildNotaPie(report),
+    notaPie: buildNotaPie(),
   };
 }
 

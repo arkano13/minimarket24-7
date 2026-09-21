@@ -235,7 +235,6 @@ function datosDesdeInforme(report) {
     generadoTexto,
 
     kpis: [
-      { etiqueta: "Total vendido", valor: summary.total, tipo: "dinero" },
       { etiqueta: "Cuadre total", valor: cuadre.cuadreTotal, tipo: "dinero" },
       { etiqueta: "Efectivo esperado", valor: cuadre.efectivoEsperado, tipo: "dinero" },
       { etiqueta: "Costo estimado", valor: summary.costoEstimado, tipo: "dinero" },
@@ -260,8 +259,6 @@ function datosDesdeInforme(report) {
       transferencia: cuadre.transferencia,
       totalEntradas: cuadre.entradas,
       totalSalidas: cuadre.salidas,
-      fondoInicial: cuadre.fondoInicial,
-      efectivoEsperado: cuadre.efectivoEsperado,
     },
 
     cuadreCaja: {

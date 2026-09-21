@@ -3,7 +3,7 @@
  * -------------------------------------------------------------------
  * Reemplaza los reportes "administrativo" y "ejecutivo" por uno solo.
  * Genera el HTML completo (con CSS embebido) del informe aprobado:
- *   1. KPIs (Total vendido, Cuadre total y Efectivo esperado)
+ *   1. KPIs (Cuadre total, Efectivo esperado, Costo, Ganancia y Margen)
  *   2. Ventas del turno (cobros + total vendido) + Cuadre total (todo el dinero)
  *   3. Cuadre real de caja (faltante/sobrante de los cierres ya hechos)
  *   4. Actividad por hora (barras horizontales) + Destacados
@@ -191,7 +191,6 @@ function renderVentasPanel(cobros, resumen) {
  *   Efectivo + Tarjeta + Transferencia + Entradas de caja − Salidas de caja.
  * Es el total que se compara con el libro de la caja. No incluye el fondo
  * inicial (no es dinero vendido) ni las ventas a crédito (no se cobraron).
- * Debajo se muestra el efectivo esperado en gaveta (mismo cálculo del cierre).
  */
 function renderCuadreTotal(ct) {
   const efectivo = Number(ct.efectivoVentas) || 0;
@@ -199,15 +198,7 @@ function renderCuadreTotal(ct) {
   const transferencia = Number(ct.transferencia) || 0;
   const entradas = Number(ct.totalEntradas) || 0;
   const salidas = Number(ct.totalSalidas) || 0;
-  const fondo = Number(ct.fondoInicial) || 0;
   const total = efectivo + tarjeta + transferencia + entradas - salidas;
-  const efectivoEsperado = ct.efectivoEsperado === undefined || ct.efectivoEsperado === null
-    ? fondo + efectivo + entradas - salidas
-    : Number(ct.efectivoEsperado) || 0;
-
-  const filaFondo = fondo > 0
-    ? `<div class="cierre-row"><span class="cierre-label">Fondo inicial (incluido en la gaveta)</span><span class="cierre-value">${formatMoney(fondo)}</span></div>`
-    : '';
 
   return `
     <div class="panel">
@@ -222,11 +213,6 @@ function renderCuadreTotal(ct) {
         <span class="cierre-total-label">Cuadre total</span>
         <span class="cierre-total-value">${formatMoney(total)}</span>
       </div>
-      <div class="cierre-divider" style="margin-top:8px;"></div>
-      ${filaFondo}
-      <div class="cierre-row"><span class="cierre-label">Efectivo esperado en gaveta</span><span class="cierre-value">${formatMoney(efectivoEsperado)}</span></div>
-      <div class="cierre-row"><span class="cierre-label">Tarjeta + transferencia</span><span class="cierre-value">${formatMoney(tarjeta + transferencia)}</span></div>
-      <div class="footnote" style="margin-top:6px;">Cuadre total = efectivo + tarjeta + transferencia + entradas &minus; salidas. No incluye el fondo inicial ni las ventas a cr&eacute;dito.</div>
     </div>`;
 }
 
@@ -621,7 +607,7 @@ const CSS = `
  * @param {Object} datos.periodo            { texto }
  * @param {string} datos.generadoTexto
  * @param {Array}  datos.kpis               [{ etiqueta, valor, tipo:'dinero'|'margen'|'numero' }, ...]
- *   Sugerido: Total vendido, Efectivo esperado, Ventas realizadas, Costo estimado, Ganancia estimada, Margen estimado.
+ *   Sugerido: Cuadre total, Efectivo esperado, Costo estimado, Ganancia estimada, Margen estimado.
  *   Tip: para "Efectivo esperado" usa calcularEfectivoEsperado(datos.cierre) al armar este array,
  *   así nunca se desincroniza del panel de Cierre.
  * @param {Object} datos.cierre             { efectivoVentas, totalEntradas, totalSalidas }

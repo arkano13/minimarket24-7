@@ -3,12 +3,70 @@ import { randomUUID } from "node:crypto";
 import { unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import electronUpdater from "electron-updater";
 import { generarInformeTurnoHTML, safePdfName } from "./shift-report-pdf.js";
 import { buildUserSalesReceiptHtml } from "./sale-receipt.js";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 const isDevelopment = !app.isPackaged;
+
+const { autoUpdater } = electronUpdater;
+
+const UPDATE_CHECK_DELAY_MS = 15 * 1000;
+const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
+
+// Actualización automática: revisa GitHub Releases al abrir la app y cada 30
+// minutos. Descarga la versión nueva en segundo plano y la instala sola al
+// cerrar el programa. También avisa para poder reiniciar antes, sin
+// interrumpir una venta en curso. Solo corre en la app instalada.
+function setupAutoUpdater() {
+  if (isDevelopment) {
+    return;
+  }
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on("error", (error) => {
+    console.error("[actualizador]", error?.message ?? error);
+  });
+
+  autoUpdater.on("update-downloaded", async (info) => {
+    const ownerWindow = BrowserWindow.getAllWindows()[0];
+
+    const options = {
+      type: "info",
+      title: "Actualización lista",
+      message: `La versión ${info.version} de Minimarket 24/7 está lista para instalar.`,
+      detail:
+        "Se instalará automáticamente al cerrar la aplicación. " +
+        "Si la reinicias ahora, no lo hagas en medio de una venta.",
+      buttons: ["Reiniciar ahora", "Más tarde"],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    };
+
+    const { response } = ownerWindow
+      ? await dialog.showMessageBox(ownerWindow, options)
+      : await dialog.showMessageBox(options);
+
+    if (response === 0) {
+      autoUpdater.quitAndInstall(true, true);
+    }
+  });
+
+  const checkForUpdates = () => {
+    autoUpdater.checkForUpdates().catch((error) => {
+      // Sin internet o sin release nuevo: no es un problema, se reintenta luego.
+      console.error("[actualizador]", error?.message ?? error);
+    });
+  };
+
+  setTimeout(checkForUpdates, UPDATE_CHECK_DELAY_MS);
+  setInterval(checkForUpdates, UPDATE_CHECK_INTERVAL_MS);
+}
 
 ipcMain.handle("sales:print-user-sales", async (event, report) => {
   const ownerWindow = BrowserWindow.fromWebContents(event.sender);
@@ -259,6 +317,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+  setupAutoUpdater();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

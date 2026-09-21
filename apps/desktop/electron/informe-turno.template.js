@@ -3,8 +3,8 @@
  * -------------------------------------------------------------------
  * Reemplaza los reportes "administrativo" y "ejecutivo" por uno solo.
  * Genera el HTML completo (con CSS embebido) del informe aprobado:
- *   1. KPIs (incluye Efectivo esperado junto a Total vendido)
- *   2. Distribución de cobros + Cierre (concilia efectivo esperado)
+ *   1. KPIs (Total vendido, Cuadre total y Efectivo esperado)
+ *   2. Ventas del turno (cobros + total vendido) + Cuadre total (todo el dinero)
  *   3. Cuadre real de caja (faltante/sobrante de los cierres ya hechos)
  *   4. Actividad por hora (barras horizontales) + Destacados
  *   5. Desglose de movimientos: Entradas, Salidas, Compras, Créditos, Inventario
@@ -44,8 +44,11 @@
  *   empaquétalos con la app (@font-face local) en vez de depender de
  *   Google Fonts.
  *
- * IMPORTANTE — regla de negocio del Cierre:
- *   Efectivo esperado = Efectivo por ventas + Entradas de caja − Salidas de caja.
+ * IMPORTANTE — reglas de negocio:
+ *   Cuadre total = Efectivo + Tarjeta + Transferencia + Entradas − Salidas (todo el dinero).
+ *   Total vendido = solo ventas. Efectivo esperado (gaveta) = fondo inicial + efectivo por ventas
+ *   + entradas en efectivo − salidas (lo calcula el backend).
+ *   Regla histórica del Cierre: Efectivo esperado = Efectivo por ventas + Entradas de caja − Salidas de caja.
  *   Las compras a proveedores NO se restan aquí porque normalmente no
  *   salen de la caja del turno. Si alguna vez una compra sí se paga
  *   desde la caja, regístrala como un ítem más dentro de `salidas`,
@@ -163,6 +166,67 @@ function renderCierre(cierre) {
         <span class="cierre-total-value">${formatMoney(efectivoEsperado)}</span>
       </div>
       <div class="footnote" style="margin-top:8px;">Estimación a partir de ventas y movimientos — no incluye fondo inicial ni requiere que se haya cerrado la caja.</div>
+    </div>`;
+}
+
+/**
+ * Ventas del turno: distribución de cobros + Total vendido.
+ * El total vendido cuenta SOLO ventas (no entradas ni salidas de caja).
+ */
+function renderVentasPanel(cobros, resumen) {
+  return `
+    <div class="panel">
+      <div class="section-title" style="margin-bottom:10px;">Ventas del turno</div>
+      ${cobros.map(renderCobroRow).join('')}
+      <div class="cierre-total" style="margin-top:12px;">
+        <span class="cierre-total-label">Total vendido &middot; ${formatCantidad(resumen.operaciones)} ${Number(resumen.operaciones) === 1 ? 'venta' : 'ventas'}</span>
+        <span class="cierre-total-value">${formatMoney(resumen.totalVendido)}</span>
+      </div>
+      <div class="footnote" style="margin-top:8px;">Solo cuenta ventas. No incluye entradas ni salidas de caja.</div>
+    </div>`;
+}
+
+/**
+ * Cuadre total = todo el dinero del turno:
+ *   Efectivo + Tarjeta + Transferencia + Entradas de caja − Salidas de caja.
+ * Es el total que se compara con el libro de la caja. No incluye el fondo
+ * inicial (no es dinero vendido) ni las ventas a crédito (no se cobraron).
+ * Debajo se muestra el efectivo esperado en gaveta (mismo cálculo del cierre).
+ */
+function renderCuadreTotal(ct) {
+  const efectivo = Number(ct.efectivoVentas) || 0;
+  const tarjeta = Number(ct.tarjeta) || 0;
+  const transferencia = Number(ct.transferencia) || 0;
+  const entradas = Number(ct.totalEntradas) || 0;
+  const salidas = Number(ct.totalSalidas) || 0;
+  const fondo = Number(ct.fondoInicial) || 0;
+  const total = efectivo + tarjeta + transferencia + entradas - salidas;
+  const efectivoEsperado = ct.efectivoEsperado === undefined || ct.efectivoEsperado === null
+    ? fondo + efectivo + entradas - salidas
+    : Number(ct.efectivoEsperado) || 0;
+
+  const filaFondo = fondo > 0
+    ? `<div class="cierre-row"><span class="cierre-label">Fondo inicial (incluido en la gaveta)</span><span class="cierre-value">${formatMoney(fondo)}</span></div>`
+    : '';
+
+  return `
+    <div class="panel">
+      <div class="section-title" style="margin-bottom:2px;">Cuadre total</div>
+      <div class="cierre-row"><span class="cierre-label">Efectivo por ventas</span><span class="cierre-value">${formatMoney(efectivo)}</span></div>
+      <div class="cierre-row"><span class="cierre-label">+ Tarjeta</span><span class="cierre-value">${formatMoney(tarjeta)}</span></div>
+      <div class="cierre-row"><span class="cierre-label">+ Transferencia</span><span class="cierre-value">${formatMoney(transferencia)}</span></div>
+      <div class="cierre-divider"></div>
+      <div class="cierre-row"><span class="cierre-label">+ Entradas de caja</span><span class="cierre-value">${formatMoney(entradas)}</span></div>
+      <div class="cierre-row"><span class="cierre-label">&minus; Salidas de caja</span><span class="cierre-value neg">&minus; ${formatMoney(salidas)}</span></div>
+      <div class="cierre-total">
+        <span class="cierre-total-label">Cuadre total</span>
+        <span class="cierre-total-value">${formatMoney(total)}</span>
+      </div>
+      <div class="cierre-divider" style="margin-top:8px;"></div>
+      ${filaFondo}
+      <div class="cierre-row"><span class="cierre-label">Efectivo esperado en gaveta</span><span class="cierre-value">${formatMoney(efectivoEsperado)}</span></div>
+      <div class="cierre-row"><span class="cierre-label">Tarjeta + transferencia</span><span class="cierre-value">${formatMoney(tarjeta + transferencia)}</span></div>
+      <div class="footnote" style="margin-top:6px;">Cuadre total = efectivo + tarjeta + transferencia + entradas &minus; salidas. No incluye el fondo inicial ni las ventas a cr&eacute;dito.</div>
     </div>`;
 }
 
@@ -620,11 +684,13 @@ export function generarInformeTurnoHTML(datos) {
   </div>
 
   <div class="row-2col">
-    <div class="panel">
+    ${datos.cuadreTotal && datos.resumenVentas
+      ? renderVentasPanel(cobros, datos.resumenVentas) + renderCuadreTotal(datos.cuadreTotal)
+      : `<div class="panel">
       <div class="section-title" style="margin-bottom:10px;">Distribuci&oacute;n de cobros</div>
       ${cobros.map(renderCobroRow).join('')}
     </div>
-    ${renderCierre(cierre)}
+    ${renderCierre(cierre)}`}
   </div>
 
   ${renderCuadreCaja(cuadreCaja)}

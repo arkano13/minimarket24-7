@@ -281,6 +281,15 @@ async function loadCashMovements(
       entradas.reduce((sum, entry) => sum + entry.monto, 0),
     ),
 
+    // Solo las entradas EN EFECTIVO suman al efectivo de la gaveta; las de
+    // tarjeta/transferencia cuentan para el cuadre total pero no para el
+    // efectivo esperado.
+    totalEntradasEfectivo: roundMoney(
+      entradas
+        .filter((entry) => entry.metodo === "EFECTIVO")
+        .reduce((sum, entry) => sum + entry.monto, 0),
+    ),
+
     totalSalidas: roundMoney(
       salidas.reduce((sum, entry) => sum + entry.monto, 0),
     ),
@@ -440,7 +449,7 @@ export async function getShiftReport(
 
     cajaTurno = await prisma.turnoCaja.findUnique({
       where: { id: turnoCajaId },
-      select: { id: true, abiertoEn: true, cerradoEn: true },
+      select: { id: true, abiertoEn: true, cerradoEn: true, fondoInicial: true },
     });
 
     if (!cajaTurno) {
@@ -657,8 +666,38 @@ export async function getShiftReport(
     payments.get("EFECTIVO")?.total ?? 0,
   );
 
+  const tarjetaVentas = roundMoney(
+    payments.get("TARJETA")?.total ?? 0,
+  );
+
+  const transferenciaVentas = roundMoney(
+    payments.get("TRANSFERENCIA")?.total ?? 0,
+  );
+
+  // Fondo inicial: solo existe en informes por caja (una caja = un fondo).
+  // En informes por reloj hay varias cajas y no se suma.
+  const fondoInicial = cajaTurno
+    ? roundMoney(Number(cajaTurno.fondoInicial ?? 0))
+    : 0;
+
+  // Efectivo que debe haber en la gaveta. Misma fórmula que el cierre de
+  // caja: fondo inicial + efectivo de ventas + entradas EN EFECTIVO − salidas.
   const efectivoEsperado = roundMoney(
-    efectivoVentas + caja.totalEntradas - caja.totalSalidas,
+    fondoInicial +
+      efectivoVentas +
+      caja.totalEntradasEfectivo -
+      caja.totalSalidas,
+  );
+
+  // Cuadre total: todo el dinero recibido en el turno (efectivo, tarjeta y
+  // transferencia) más las entradas de caja, menos las salidas. No incluye
+  // el fondo inicial (no es dinero vendido) ni las ventas a crédito.
+  const cuadreTotal = roundMoney(
+    efectivoVentas +
+      tarjetaVentas +
+      transferenciaVentas +
+      caja.totalEntradas -
+      caja.totalSalidas,
   );
 
   const gananciaEstimada = roundMoney(total - totalCost);
@@ -706,6 +745,8 @@ export async function getShiftReport(
 
       efectivoEsperado,
 
+      cuadreTotal,
+
       costoEstimado:
         roundMoney(totalCost),
 
@@ -737,10 +778,15 @@ export async function getShiftReport(
     ),
 
     cierre: {
+      fondoInicial,
       efectivoVentas,
+      tarjetaVentas,
+      transferenciaVentas,
       entradas: caja.totalEntradas,
+      entradasEfectivo: caja.totalEntradasEfectivo,
       salidas: caja.totalSalidas,
       efectivoEsperado,
+      cuadreTotal,
     },
 
     lideres: {

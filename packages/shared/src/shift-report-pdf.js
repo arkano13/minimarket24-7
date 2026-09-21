@@ -72,6 +72,46 @@ function turnoHeader(turnos) {
   return { numero: (turnos ?? []).join("+") || "Completo", horaInicio: "Día completo", horaFin: "" };
 }
 
+function redondear(valor) {
+  return Math.round((Number(valor) || 0) * 100) / 100;
+}
+
+// Montos del cuadre a partir del informe. Usa los campos nuevos del backend
+// y, si el informe viene de una versión anterior, los calcula con lo que haya.
+function montosCuadre(report) {
+  const cierre = report?.cierre ?? {};
+  const summary = report?.resumen ?? {};
+  const payments = Array.isArray(report?.pagos) ? report.pagos : [];
+  const pago = (metodo) => Number(payments.find((item) => item.metodo === metodo)?.total ?? 0) || 0;
+
+  const efectivoVentas = Number(cierre.efectivoVentas ?? pago("EFECTIVO")) || 0;
+  const tarjeta = Number(cierre.tarjetaVentas ?? pago("TARJETA")) || 0;
+  const transferencia = Number(cierre.transferenciaVentas ?? pago("TRANSFERENCIA")) || 0;
+  const entradas = Number(cierre.entradas) || 0;
+  const entradasEfectivo = Number(cierre.entradasEfectivo ?? cierre.entradas) || 0;
+  const salidas = Number(cierre.salidas) || 0;
+  const fondoInicial = Number(cierre.fondoInicial) || 0;
+
+  const efectivoEsperado =
+    cierre.efectivoEsperado ?? summary.efectivoEsperado ??
+    fondoInicial + efectivoVentas + entradasEfectivo - salidas;
+
+  const cuadreTotal =
+    cierre.cuadreTotal ?? summary.cuadreTotal ??
+    efectivoVentas + tarjeta + transferencia + entradas - salidas;
+
+  return {
+    efectivoVentas: redondear(efectivoVentas),
+    tarjeta: redondear(tarjeta),
+    transferencia: redondear(transferencia),
+    entradas: redondear(entradas),
+    salidas: redondear(salidas),
+    fondoInicial: redondear(fondoInicial),
+    efectivoEsperado: redondear(efectivoEsperado),
+    cuadreTotal: redondear(cuadreTotal),
+  };
+}
+
 function buildResumenHtml(report) {
   const summary = report?.resumen ?? {};
   const products = report?.productos ?? [];
@@ -79,6 +119,7 @@ function buildResumenHtml(report) {
   const leaders = report?.lideres ?? {};
 
   const operations = Number(summary.operaciones ?? 0);
+  const cuadre = montosCuadre(report);
 
   if (operations === 0) {
     return "No se registraron ventas durante el periodo seleccionado.";
@@ -110,7 +151,8 @@ function buildResumenHtml(report) {
     `El método con mayor participación fue ${PAYMENT_LABELS[mainPayment?.metodo] ?? "sin información"}. ` +
     leaderSentence +
     profitSentence +
-    `Tras entradas y salidas de caja, el efectivo esperado en caja es de ${formatMoney(report?.cierre?.efectivoEsperado)} ` +
+    `El cuadre total del turno (efectivo + tarjeta + transferencia + entradas − salidas) es de ${formatMoney(cuadre.cuadreTotal)}, ` +
+    `de los cuales ${formatMoney(cuadre.efectivoEsperado)} corresponden al efectivo esperado en caja ` +
     `(las compras a proveedores no se descuentan de caja salvo que se registren como salida).`
   );
 }
@@ -123,6 +165,7 @@ function datosDesdeInforme(report) {
   const periodo = report?.periodo ?? {};
   const summary = report?.resumen ?? {};
   const cierre = report?.cierre ?? {};
+  const cuadre = montosCuadre(report);
   const leaders = report?.lideres ?? {};
   const products = Array.isArray(report?.productos) ? report.productos : [];
   const payments = Array.isArray(report?.pagos) ? report.pagos : [];
@@ -153,8 +196,8 @@ function datosDesdeInforme(report) {
 
     kpis: [
       { etiqueta: "Total vendido", valor: summary.total, tipo: "dinero" },
-      { etiqueta: "Efectivo esperado", valor: summary.efectivoEsperado, tipo: "dinero" },
-      { etiqueta: "Ventas realizadas", valor: summary.operaciones, tipo: "numero" },
+      { etiqueta: "Cuadre total", valor: cuadre.cuadreTotal, tipo: "dinero" },
+      { etiqueta: "Efectivo esperado", valor: cuadre.efectivoEsperado, tipo: "dinero" },
       { etiqueta: "Costo estimado", valor: summary.costoEstimado, tipo: "dinero" },
       { etiqueta: "Ganancia estimada", valor: summary.gananciaEstimada, tipo: "dinero" },
       { etiqueta: "Margen estimado", valor: summary.margenEstimado, tipo: "margen" },
@@ -164,6 +207,21 @@ function datosDesdeInforme(report) {
       efectivoVentas: cierre.efectivoVentas,
       totalEntradas: cierre.entradas,
       totalSalidas: cierre.salidas,
+    },
+
+    resumenVentas: {
+      operaciones: summary.operaciones,
+      totalVendido: summary.total,
+    },
+
+    cuadreTotal: {
+      efectivoVentas: cuadre.efectivoVentas,
+      tarjeta: cuadre.tarjeta,
+      transferencia: cuadre.transferencia,
+      totalEntradas: cuadre.entradas,
+      totalSalidas: cuadre.salidas,
+      fondoInicial: cuadre.fondoInicial,
+      efectivoEsperado: cuadre.efectivoEsperado,
     },
 
     cuadreReal: {

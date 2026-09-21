@@ -10,11 +10,21 @@ import { cargarHistorial, guardarMensaje } from "../modules/asistente/asistente.
 import { getShiftReport } from "../modules/reportes/reportes.service.js";
 import { generarInformeTurnoHTML, safePdfName } from "@minisuper/shared/shift-report-pdf";
 import { renderHtmlToPdf } from "../lib/pdf-render.js";
+import {
+  borrarSesionesSignal,
+  crearAlmacenMensajes,
+  crearCacheReintentos,
+  listarSesionesSignal,
+} from "../lib/whatsapp-session.js";
 
 const AUTH_DIR = process.env.WHATSAPP_SESSION_DIR || "./whatsapp-session-asistente";
 const NUMERO_AUTORIZADO = process.env.WHATSAPP_NUMERO_AUTORIZADO;
 const QR_PAGE_SECRET = process.env.QR_PAGE_SECRET;
 const INFORME_INTERNO_SECRET = process.env.INFORME_INTERNO_SECRET;
+
+// Nivel de log de Baileys. "warn" muestra los errores de cifrado ("Bad MAC",
+// "No session"...) que antes quedaban ocultos. Para ver más: "info" o "debug".
+const LOG_LEVEL = process.env.WHATSAPP_LOG_LEVEL || "warn";
 
 // Además del número autorizado del asistente, a quién más se le manda
 // el informe al cerrar caja (p.ej. el dueño). Formato JID de WhatsApp,
@@ -32,6 +42,11 @@ if (!NUMERO_AUTORIZADO) throw new Error("Falta WHATSAPP_NUMERO_AUTORIZADO en el 
 
 let estadoConexion = "conectando";
 let ultimoQrDataUrl = null;
+
+// Últimos mensajes enviados: Baileys los necesita para reenviarlos cuando el
+// teléfono que los recibe no logra descifrarlos ("Esperando mensaje").
+const mensajesEnviados = crearAlmacenMensajes(150);
+const cacheReintentos = crearCacheReintentos();
 
 // Reasignado en cada (re)conexión dentro de iniciarBot() — el handler
 // HTTP de /interno/informe-turno siempre debe usar el socket VIVO más
@@ -109,7 +124,7 @@ app.post("/interno/informe-turno", async (req, res) => {
 
     for (const numero of DESTINATARIOS_INFORME) {
       try {
-        await sock.sendMessage(numero, {
+        await enviar(numero, {
           document: pdf,
           fileName,
           mimetype: "application/pdf",
@@ -161,12 +176,94 @@ app.get("/interno/informe-turno-pdf", async (req, res) => {
   }
 });
 
+// Todo envío pasa por aquí para guardar el mensaje y poder reenviarlo si el
+// destinatario lo pide.
+async function enviar(jid, contenido) {
+  const enviado = await sock.sendMessage(jid, contenido);
+
+  if (enviado?.key?.id && enviado.message) {
+    mensajesEnviados.guardar(enviado.key.id, enviado.message);
+  }
+
+  return enviado;
+}
+
+function claveInternaValida(req) {
+  const clave = req.query.clave || req.get("X-Interno-Secret");
+
+  return Boolean(INFORME_INTERNO_SECRET) && clave === INFORME_INTERNO_SECRET;
+}
+
+// Diagnóstico sin necesidad de ver los logs de Railway.
+// GET /interno/estado?clave=TU_SECRETO
+app.get("/interno/estado", async (req, res) => {
+  if (!claveInternaValida(req)) {
+    return res.status(403).json({ error: "No autorizado." });
+  }
+
+  res.json({
+    conexion: estadoConexion,
+    sesionesDeCifrado: (await listarSesionesSignal(AUTH_DIR)).length,
+    mensajesGuardadosParaReenvio: mensajesEnviados.size,
+    destinatariosDeInformes: DESTINATARIOS_INFORME.length,
+  });
+});
+
+// Repara "Esperando mensaje": borra las sesiones de cifrado (NO desvincula el
+// número, conserva creds.json) para que se negocien de nuevo en el próximo
+// envío. Solo por POST y con el secreto en el encabezado X-Interno-Secret.
+app.post("/interno/reset-sesiones", async (req, res) => {
+  if (req.get("X-Interno-Secret") !== INFORME_INTERNO_SECRET || !INFORME_INTERNO_SECRET) {
+    return res.status(403).json({ error: "No autorizado." });
+  }
+
+  try {
+    const borradas = await borrarSesionesSignal(AUTH_DIR);
+    console.log(`Sesiones de cifrado borradas: ${borradas}. Se renegocian en el próximo envío.`);
+
+    res.json({ borradas });
+  } catch (err) {
+    console.error("Error borrando las sesiones de cifrado:", err);
+    res.status(500).json({ error: "No se pudieron borrar las sesiones." });
+  }
+});
+
+// Manda un mensaje corto a todos los destinatarios de informes para comprobar
+// que llegan legibles, sin esperar a un cierre de caja.
+app.post("/interno/prueba-envio", async (req, res) => {
+  if (req.get("X-Interno-Secret") !== INFORME_INTERNO_SECRET || !INFORME_INTERNO_SECRET) {
+    return res.status(403).json({ error: "No autorizado." });
+  }
+
+  if (!sock || estadoConexion !== "conectado") {
+    return res.status(503).json({ error: "El bot de WhatsApp no está conectado." });
+  }
+
+  const resultados = [];
+
+  for (const [indice, numero] of DESTINATARIOS_INFORME.entries()) {
+    try {
+      await enviar(numero, { text: "Prueba del bot de informes de Minimarket 24/7. Si lees esto, el envío funciona." });
+      resultados.push({ destinatario: indice + 1, enviado: true });
+    } catch (err) {
+      console.error(`No se pudo enviar la prueba al destinatario ${indice + 1}:`, err);
+      resultados.push({ destinatario: indice + 1, enviado: false });
+    }
+  }
+
+  res.json({ resultados });
+});
+
 async function iniciarBot() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
   sock = makeWASocket({
     auth: state,
-    logger: pino({ level: "silent" }),
+    logger: pino({ level: LOG_LEVEL }),
+    // Sin getMessage, Baileys no puede reenviar un mensaje que el teléfono
+    // del destinatario no descifró, y ese mensaje queda en "Esperando mensaje".
+    getMessage: async (key) => mensajesEnviados.obtener(key.id),
+    msgRetryCounterCache: cacheReintentos,
   });
 
   sock.ev.on("creds.update", saveCreds);
@@ -182,6 +279,20 @@ async function iniciarBot() {
 
     if (connection === "close") {
       const motivo = new Boom(lastDisconnect?.error)?.output?.statusCode;
+
+      // Otra instancia abrió esta misma sesión (por ejemplo el bot corriendo
+      // también en otra PC o en otro servicio de Railway). Reconectar haría
+      // que las dos se echen una a la otra sin parar y se dañe el cifrado,
+      // que es lo que produce "Esperando mensaje".
+      if (motivo === DisconnectReason.connectionReplaced) {
+        estadoConexion = "reemplazada";
+        console.error(
+          "Conexión reemplazada: otra instancia está usando esta misma sesión de WhatsApp. " +
+            "No se reconecta. Apagá la otra instancia y reiniciá este servicio.",
+        );
+        return;
+      }
+
       const debeReconectar = motivo !== DisconnectReason.loggedOut;
 
       estadoConexion = "conectando";
@@ -222,12 +333,12 @@ async function iniciarBot() {
         texto = await transcribirAudio(base64Audio, mimeType);
 
         if (!texto) {
-          await sock.sendMessage(remitente, { text: "No pude entender el audio, ¿podrías escribirlo o intentar de nuevo?" });
+          await enviar(remitente, { text: "No pude entender el audio, ¿podrías escribirlo o intentar de nuevo?" });
           return;
         }
       } catch (err) {
         console.error("Error transcribiendo audio:", err);
-        await sock.sendMessage(remitente, { text: "Tuve un problema procesando el audio, intenta escribiendo tu pregunta." });
+        await enviar(remitente, { text: "Tuve un problema procesando el audio, intenta escribiendo tu pregunta." });
         return;
       }
     }
@@ -242,10 +353,10 @@ async function iniciarBot() {
       const respuesta = await handleMessage(historial);
       await guardarMensaje("WHATSAPP", remitente, "assistant", respuesta);
 
-      await sock.sendMessage(remitente, { text: respuesta });
+      await enviar(remitente, { text: respuesta });
     } catch (err) {
       console.error("Error en bot de asistente (WhatsApp):", err);
-      await sock.sendMessage(remitente, { text: "Tuve un problema procesando tu consulta." });
+      await enviar(remitente, { text: "Tuve un problema procesando tu consulta." });
     }
   });
 }

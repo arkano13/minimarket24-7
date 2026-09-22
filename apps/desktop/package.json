@@ -1,6 +1,6 @@
 {
   "name": "@minisuper/desktop",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Sistema de punto de venta e inventario para Minimarket 24/7.",
   "author": "Minimarket 24/7",
   "private": true,

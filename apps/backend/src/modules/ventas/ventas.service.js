@@ -4,6 +4,7 @@ import { prisma } from "../../lib/prisma.js";
 
 import { AppError } from "../../utils/AppError.js";
 import { registrarBitacora } from "../bitacora/bitacora.service.js";
+import { validateSaleNumbers } from "../../lib/decimal-range.js";
 
 const PAYMENT_METHODS = new Set(["EFECTIVO", "TARJETA", "TRANSFERENCIA", "CREDITO"]);
 
@@ -1086,6 +1087,8 @@ export async function createSale(data, userId) {
     // CREDITO ("fiado"): el producto sale de inventario pero no entra
     // dinero a la caja. No pide efectivo recibido ni aplica recargo de
     // tarjeta; el pago queda registrado con monto = total, sin efectivo.
+
+    validateSaleNumbers({ details, total, grandTotal, received, change });
 
     const sale = await transaction.venta.create({
       data: {

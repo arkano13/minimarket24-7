@@ -26,6 +26,9 @@ async function getBrowser() {
       browser.on("disconnected", () => {
         browserPromise = null;
       });
+    }, () => {
+      // Un arranque fallido no debe impedir todos los reintentos de la cola.
+      browserPromise = null;
     });
   }
 

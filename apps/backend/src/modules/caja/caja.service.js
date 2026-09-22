@@ -655,18 +655,13 @@ export async function closeCashShift(
       // rotación tampoco avanza.
       const turnoInforme = await obtenerYAvanzarProximoTurno(transaction);
 
+      await notificarCierreDeCaja(
+        turnoInforme, businessDayFor(closedShift.cerradoEn), closedShift.id,
+        transaction, closedShift.cerradoEn,
+      );
+
       return { closedShift, turnoInforme };
     },
-  );
-
-  // Fuera de la transacción, a propósito: el cierre ya quedó guardado
-  // en la base de datos pase lo que pase con esto. No se espera
-  // (await) para no retrasar la respuesta al cajero — el propio
-  // notificador nunca lanza, así que no hace falta un .catch() extra.
-  notificarCierreDeCaja(
-    result.turnoInforme,
-    businessDayFor(result.closedShift.cerradoEn),
-    result.closedShift.id,
   );
 
   return serializeShift(result.closedShift, userId);

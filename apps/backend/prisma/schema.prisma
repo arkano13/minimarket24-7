@@ -392,6 +392,7 @@ model PrecioEspecialCliente {
 }
 
 model TurnoCaja {
+  informePendiente      InformePendiente?
   id                     Int              @id @default(autoincrement())
   usuarioAperturaId      Int              @map("usuario_apertura_id")
   usuarioCierreId        Int?             @map("usuario_cierre_id")
@@ -412,6 +413,38 @@ model TurnoCaja {
   @@index([usuarioAperturaId])
   @@index([usuarioCierreId])
   @@map("turnos_caja")
+}
+
+// Cola persistente, creada junto con el cierre de caja.
+model InformePendiente {
+  turnoCajaId    Int       @id @map("turno_caja_id")
+  turno          String    @db.VarChar(1)
+  fecha          String    @db.VarChar(10)
+  proximoIntento DateTime  @map("proximo_intento")
+  intentos       Int       @default(0)
+  bloqueoToken   String?   @map("bloqueo_token")
+  bloqueoHasta   DateTime? @map("bloqueo_hasta")
+  enviadoEn      DateTime? @map("enviado_en")
+  ultimoError    String?   @map("ultimo_error")
+  destinatarios  String[]  @default([])
+  turnoCaja      TurnoCaja @relation(fields: [turnoCajaId], references: [id], onDelete: Restrict)
+  entregas       InformeEntrega[]
+
+  @@index([enviadoEn, proximoIntento])
+  @@map("informes_pendientes")
+}
+
+model InformeEntrega {
+  turnoCajaId  Int       @map("turno_caja_id")
+  destinatario String
+  bloqueoToken String?   @map("bloqueo_token")
+  bloqueoHasta DateTime? @map("bloqueo_hasta")
+  enviadoEn    DateTime? @map("enviado_en")
+  mensajeId    String?   @map("mensaje_id")
+  informe      InformePendiente @relation(fields: [turnoCajaId], references: [turnoCajaId], onDelete: Cascade)
+
+  @@id([turnoCajaId, destinatario])
+  @@map("informes_entregas")
 }
 
 model MovimientoCaja {

@@ -1,71 +1,73 @@
-// apps/backend/src/modules/caja/informe-turno-notifier.js
-//
-// El backend (API) y el bot de WhatsApp corren como procesos separados
-// (`npm run start` vs `npm run bot:whatsapp`). Este módulo es el único
-// punto de contacto entre los dos: una petición HTTP, disparada 5
-// minutos después de cerrar una caja (para dar tiempo a corregir un
-// cierre hecho por error antes de que salga el informe), para que el
-// bot genere y envíe el informe de turno correspondiente.
-//
-// Principio importante: esto NUNCA debe afectar el cierre de caja en
-// sí. Si el bot está caído, tarda, o responde con error, se registra
-// en consola y el cajero sigue su flujo normal — el cierre ya quedó
-// guardado en la base de datos antes de llegar aquí.
-//
-// Limitación conocida: el retraso se hace con setTimeout en memoria del
-// proceso del backend. Si el backend se reinicia (deploy/crash) dentro
-// de esos 5 minutos, ese envío pendiente se pierde — no hay una cola
-// persistente detrás. Para el volumen de un minimarket esto es
-// aceptable; si en algún momento importa que nunca se pierda un envío,
-// hay que pasar esto a una tabla en la base de datos en vez de un timer.
+import { randomUUID } from "node:crypto";
+import { prisma } from "../../lib/prisma.js";
 
-const BOT_URL = process.env.WHATSAPP_BOT_URL || "http://127.0.0.1:3002";
-const SECRET = process.env.INFORME_INTERNO_SECRET;
-const RETRASO_ENVIO_MS = 5 * 60 * 1000;
+const LEASE_MS = 10 * 60_000;
 
-// `turnoCajaId` hace que el informe sea de ESA caja (sus ventas de
-// apertura a cierre) y no de una franja de reloj.
-export function notificarCierreDeCaja(turno, fecha, turnoCajaId) {
-  setTimeout(() => {
-    enviarAhora(turno, fecha, turnoCajaId);
-  }, RETRASO_ENVIO_MS);
+export async function notificarCierreDeCaja(turno, fecha, turnoCajaId, transaction, cerradoEn = new Date()) {
+  // Mismo commit que el cierre: no queda un cierre sin aviso pendiente.
+  await transaction.informePendiente.create({
+    data: { turnoCajaId, turno, fecha, proximoIntento: new Date(cerradoEn.getTime() + 5 * 60_000) },
+  });
 }
 
-async function enviarAhora(turno, fecha, turnoCajaId) {
-  if (!SECRET) {
-    console.warn(
-      "INFORME_INTERNO_SECRET no está configurado — no se notificó el " +
-        "cierre de caja al bot de WhatsApp (el informe no se envió).",
-    );
-
-    return;
-  }
-
-  try {
-    const response = await fetch(`${BOT_URL}/interno/informe-turno`, {
-      method: "POST",
-
-      headers: {
-        "Content-Type": "application/json",
-        "X-Interno-Secret": SECRET,
-      },
-
-      body: JSON.stringify({ turno, fecha, turnoCajaId }),
-
-      signal: AbortSignal.timeout(15_000),
+export async function procesarInformesPendientes({
+  db = prisma, fetchImpl = fetch, now = () => new Date(),
+  url = process.env.WHATSAPP_BOT_URL || (process.env.NODE_ENV === "production" || process.env.RAILWAY_ENVIRONMENT_ID ? "" : "http://127.0.0.1:3002"),
+  secret = process.env.INFORME_INTERNO_SECRET,
+} = {}) {
+  if (!url || !secret) return;
+  const jobs = await db.informePendiente.findMany({
+    where: { enviadoEn: null, proximoIntento: { lte: now() }, OR: [{ bloqueoHasta: null }, { bloqueoHasta: { lte: now() } }] },
+    orderBy: { proximoIntento: "asc" }, take: 5,
+  });
+  for (const job of jobs) {
+    const token = randomUUID();
+    const claim = await db.informePendiente.updateMany({
+      where: { turnoCajaId: job.turnoCajaId, enviadoEn: null, proximoIntento: { lte: now() }, OR: [{ bloqueoHasta: null }, { bloqueoHasta: { lte: now() } }] },
+      data: { bloqueoToken: token, bloqueoHasta: new Date(now().getTime() + LEASE_MS), intentos: { increment: 1 } },
     });
-
-    if (!response.ok) {
-      console.error(
-        `El bot de WhatsApp respondió ${response.status} al notificar ` +
-          `el cierre de caja (turno ${turno}, ${fecha}).`,
-      );
+    if (!claim.count) continue;
+    try {
+      const response = await fetchImpl(`${url.replace(/\/+$/, "")}/interno/informe-turno`, {
+        method: "POST", headers: { "Content-Type": "application/json", "X-Interno-Secret": secret },
+        body: JSON.stringify({ turno: job.turno, fecha: job.fecha, turnoCajaId: job.turnoCajaId }),
+        signal: AbortSignal.timeout(90_000),
+      });
+      // Un 202 antiguo NO confirma el envío.
+      if (response.status !== 200 || (await response.json()).enviado !== true) {
+        throw new Error(`Bot sin confirmación de envío (HTTP ${response.status}).`);
+      }
+      await db.informePendiente.updateMany({
+        where: { turnoCajaId: job.turnoCajaId, bloqueoToken: token },
+        data: { enviadoEn: now(), bloqueoToken: null, bloqueoHasta: null, ultimoError: null },
+      });
+    } catch (error) {
+      const detail = `${error.message}${error.cause?.code ? ` (${error.cause.code})` : ""}`.slice(0, 500);
+      const delay = Math.min(60 * 60_000, 30_000 * 2 ** Math.min(job.intentos, 7));
+      await db.informePendiente.updateMany({
+        where: { turnoCajaId: job.turnoCajaId, bloqueoToken: token },
+        data: { bloqueoToken: null, bloqueoHasta: null, ultimoError: detail, proximoIntento: new Date(now().getTime() + delay) },
+      });
+      console.error(`Informe de caja #${job.turnoCajaId} pendiente; se reintentará: ${detail}`);
     }
-  } catch (error) {
-    console.error(
-      `No se pudo notificar el cierre de caja al bot de WhatsApp ` +
-        `(turno ${turno}, ${fecha}):`,
-      error.message,
-    );
   }
+}
+
+export function iniciarColaInformes() {
+  let busy = false;
+  let stopped = false;
+  if (!process.env.INFORME_INTERNO_SECRET || (!process.env.WHATSAPP_BOT_URL && (process.env.NODE_ENV === "production" || process.env.RAILWAY_ENVIRONMENT_ID))) {
+    console.warn("Informes pendientes: configura WHATSAPP_BOT_URL e INFORME_INTERNO_SECRET. Los cierres se conservarán en la cola.");
+  }
+  const tick = async () => {
+    if (busy || stopped) return;
+    busy = true;
+    try { await procesarInformesPendientes(); }
+    catch (error) { console.error("Error procesando la cola de informes:", error.message); }
+    finally { busy = false; }
+  };
+  const timer = setInterval(tick, 15_000);
+  timer.unref();
+  void tick();
+  return () => { stopped = true; clearInterval(timer); };
 }

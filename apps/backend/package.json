@@ -15,7 +15,9 @@
     "prisma:format": "prisma format",
     "bot:telegram": "node --watch src/bots/telegram.bot.js",
     "bot:test": "node --watch src/bots/test-console.js",
-    "bot:whatsapp": "node --watch src/bots/whatsapp.bot.js"
+    "bot:whatsapp": "node src/bots/whatsapp.bot.js",
+    "bot:whatsapp:dev": "node --watch src/bots/whatsapp.bot.js",
+    "prisma:deploy": "prisma migrate deploy"
   },
   "dependencies": {
     "@google/genai": "^2.21.0",

@@ -5,6 +5,9 @@ import qrcode from "qrcode";
 import { makeWASocket, useMultiFileAuthState, downloadMediaMessage, DisconnectReason } from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
 import pino from "pino";
+import { prisma } from "../lib/prisma.js";
+import { createReconnectController } from "../lib/reconnect-controller.js";
+import { entregarInforme } from "../modules/caja/informe-entrega.js";
 import { handleMessage, transcribirAudio } from "../modules/asistente/asistente.service.js";
 import { cargarHistorial, guardarMensaje } from "../modules/asistente/asistente.memory.js";
 import { getShiftReport } from "../modules/reportes/reportes.service.js";
@@ -52,6 +55,9 @@ const cacheReintentos = crearCacheReintentos();
 // HTTP de /interno/informe-turno siempre debe usar el socket VIVO más
 // reciente, no uno de una conexión ya cerrada.
 let sock = null;
+const reconexion = createReconnectController(iniciarBot, {
+  onError: (error) => console.error("No se pudo iniciar WhatsApp; se reintentará:", error.message),
+});
 
 const app = express();
 app.use(express.json());
@@ -100,42 +106,36 @@ app.post("/interno/informe-turno", async (req, res) => {
     return res.status(400).json({ error: "turno o fecha inválidos." });
   }
 
-  // Opcional: con el id de la caja el informe es de esa caja (apertura
-  // a cierre). Sin él, se arma por franja horaria como antes.
+  // La cola identifica cada envío por cierre para conservar sus entregas.
   if (turnoCajaId != null && (!Number.isSafeInteger(Number(turnoCajaId)) || Number(turnoCajaId) <= 0)) {
     return res.status(400).json({ error: "turnoCajaId inválido." });
   }
 
-  // Responder rápido: el backend que llama no debe esperar a que
-  // Chromium renderice el PDF ni a que Baileys termine de mandarlo.
-  res.status(202).json({ recibido: true });
+  if (turnoCajaId == null) {
+    return res.status(400).json({ error: "El envío requiere turnoCajaId para evitar duplicados." });
+  }
 
   try {
     if (!sock || estadoConexion !== "conectado") {
-      console.error("No se pudo enviar el informe de turno: el bot de WhatsApp no está conectado.");
-      return;
+      return res.status(503).json({ error: "El bot de WhatsApp no está conectado; el informe sigue pendiente." });
     }
 
-    const reporte = await getShiftReport(fecha, fecha, [turno], undefined, { turnoCajaId });
-    const html = generarInformeTurnoHTML(reporte);
-    const pdf = await renderHtmlToPdf(html);
-    const fileName = safePdfName(`informe-${SHIFT_LABELS[turno]}-${fecha}`);
-    const caption = `${SHIFT_LABELS[turno]} · ${fecha} — cierre de caja registrado.`;
-
-    for (const numero of DESTINATARIOS_INFORME) {
-      try {
-        await enviar(numero, {
-          document: pdf,
-          fileName,
-          mimetype: "application/pdf",
-          caption,
-        });
-      } catch (err) {
-        console.error(`No se pudo enviar el informe de turno a ${numero}:`, err);
-      }
-    }
+    const result = await entregarInforme({
+      db: prisma, turnoCajaId: Number(turnoCajaId), destinatarios: DESTINATARIOS_INFORME, enviar,
+      crearDocumento: async (job) => {
+        const reporte = await getShiftReport(job.fecha, job.fecha, [job.turno], undefined, { turnoCajaId: job.turnoCajaId });
+        const pdf = await renderHtmlToPdf(generarInformeTurnoHTML(reporte));
+        return {
+          document: pdf, mimetype: "application/pdf",
+          fileName: safePdfName(`informe-${SHIFT_LABELS[job.turno]}-${job.fecha}`),
+          caption: `${SHIFT_LABELS[job.turno]} · ${job.fecha} — cierre #${job.turnoCajaId}`,
+        };
+      },
+    });
+    res.json(result);
   } catch (err) {
     console.error("Error generando/enviando el informe de turno tras un cierre de caja:", err);
+    res.status(err.status ?? 500).json({ error: "No se confirmó el envío completo; el informe sigue pendiente." });
   }
 });
 
@@ -179,6 +179,7 @@ app.get("/interno/informe-turno-pdf", async (req, res) => {
 // Todo envío pasa por aquí para guardar el mensaje y poder reenviarlo si el
 // destinatario lo pide.
 async function enviar(jid, contenido) {
+  if (!sock || estadoConexion !== "conectado") throw new Error("WhatsApp no está conectado.");
   const enviado = await sock.sendMessage(jid, contenido);
 
   if (enviado?.key?.id && enviado.message) {
@@ -257,7 +258,7 @@ app.post("/interno/prueba-envio", async (req, res) => {
 async function iniciarBot() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
-  sock = makeWASocket({
+  const currentSocket = makeWASocket({
     auth: state,
     logger: pino({ level: LOG_LEVEL }),
     // Sin getMessage, Baileys no puede reenviar un mensaje que el teléfono
@@ -265,26 +266,42 @@ async function iniciarBot() {
     getMessage: async (key) => mensajesEnviados.obtener(key.id),
     msgRetryCounterCache: cacheReintentos,
   });
+  sock = currentSocket;
 
-  sock.ev.on("creds.update", saveCreds);
+  currentSocket.ev.on("creds.update", () => {
+    if (sock === currentSocket) void saveCreds().catch((error) => console.error("No se guardaron las credenciales de WhatsApp:", error.message));
+  });
 
-  sock.ev.on("connection.update", async (update) => {
+  currentSocket.ev.on("connection.update", (update) => {
+    void manejarConexion(update).catch((error) => console.error("Error de conexión WhatsApp:", error.message));
+  });
+  async function manejarConexion(update) {
+    if (sock !== currentSocket) return;
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
       estadoConexion = "esperando_qr";
-      ultimoQrDataUrl = await qrcode.toDataURL(qr);
+      const dataUrl = await qrcode.toDataURL(qr);
+      if (sock !== currentSocket) return;
+      ultimoQrDataUrl = dataUrl;
       console.log("QR generado. Visitá /pair para escanearlo.");
     }
 
     if (connection === "close") {
-      const motivo = new Boom(lastDisconnect?.error)?.output?.statusCode;
+      const motivo = lastDisconnect?.error?.output?.statusCode ?? new Boom(lastDisconnect?.error).output.statusCode;
+      console.error("WhatsApp desconectado:", { codigo: motivo, motivo: lastDisconnect?.error?.message ?? "Sin detalle" });
+      sock = null;
+      ultimoQrDataUrl = null;
+      currentSocket.ev.removeAllListeners("connection.update");
+      currentSocket.ev.removeAllListeners("messages.upsert");
+      currentSocket.ev.removeAllListeners("creds.update");
 
       // Otra instancia abrió esta misma sesión (por ejemplo el bot corriendo
       // también en otra PC o en otro servicio de Railway). Reconectar haría
       // que las dos se echen una a la otra sin parar y se dañe el cifrado,
       // que es lo que produce "Esperando mensaje".
       if (motivo === DisconnectReason.connectionReplaced) {
+        reconexion.stop();
         estadoConexion = "reemplazada";
         console.error(
           "Conexión reemplazada: otra instancia está usando esta misma sesión de WhatsApp. " +
@@ -295,23 +312,29 @@ async function iniciarBot() {
 
       const debeReconectar = motivo !== DisconnectReason.loggedOut;
 
-      estadoConexion = "conectando";
-      console.log(
-        "Conexión cerrada.",
-        debeReconectar ? "Reconectando..." : "Sesión cerrada, borra la carpeta de sesión y vuelve a escanear.",
-      );
-
-      if (debeReconectar) iniciarBot();
+      estadoConexion = debeReconectar ? "conectando" : "desvinculado";
+      if (debeReconectar) {
+        const delay = reconexion.retry();
+        console.log(`Reintento de WhatsApp programado${delay ? ` en ${delay / 1000}s` : ""}.`);
+      } else {
+        reconexion.stop();
+        console.error("Sesión desvinculada: requiere una nueva vinculación. No se borran credenciales automáticamente.");
+      }
     } else if (connection === "open") {
       estadoConexion = "conectado";
+      reconexion.connected();
       ultimoQrDataUrl = null;
       console.log("Bot de WhatsApp del asistente conectado.");
     }
-  });
+  }
 
-  sock.ev.on("messages.upsert", async ({ messages }) => {
+  currentSocket.ev.on("messages.upsert", (event) => {
+    void manejarMensajes(event).catch((error) => console.error("Error procesando mensaje WhatsApp:", error.message));
+  });
+  async function manejarMensajes({ messages }) {
+    if (sock !== currentSocket) return;
     const msg = messages[0];
-    if (!msg.message || msg.key.fromMe) return;
+    if (!msg?.message || msg.key.fromMe) return;
     if (msg.key.remoteJid === "status@broadcast") return;
     if (msg.key.remoteJid?.endsWith("@g.us")) return;
 
@@ -358,7 +381,7 @@ async function iniciarBot() {
       console.error("Error en bot de asistente (WhatsApp):", err);
       await enviar(remitente, { text: "Tuve un problema procesando tu consulta." });
     }
-  });
+  }
 }
 
-iniciarBot();
+void reconexion.start();

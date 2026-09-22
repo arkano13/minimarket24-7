@@ -66,7 +66,7 @@ export function iniciarColaInformes() {
     catch (error) { console.error("Error procesando la cola de informes:", error.message); }
     finally { busy = false; }
   };
-  const timer = setInterval(tick, 15_000);
+const timer = setInterval(tick, 10 * 60_000); // cada 2 minutos, para bajar el costo
   timer.unref();
   void tick();
   return () => { stopped = true; clearInterval(timer); };

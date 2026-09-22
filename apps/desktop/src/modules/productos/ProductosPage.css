@@ -207,21 +207,156 @@
   font-size: 0.84rem;
 }
 
+/* --- Tarjeta destacada de presentaciones --- */
+
+.presentations-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--gold);
+  border-left: 5px solid var(--gold);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+  background: var(--gold-tint);
+  box-shadow: var(--shadow-sm);
+}
+
+.presentations-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.presentations-card__header .eyebrow {
+  margin: 0 0 2px;
+}
+
+.presentations-card__header h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.presentations-card__badge {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 500;
+  border: 1px solid var(--border-strong);
+}
+
+.presentations-card .presentations-field__hint {
+  color: var(--ink-soft);
+}
+
+.presentation-list__principal {
+  background: var(--accent-tint) !important;
+  border-color: var(--accent) !important;
+}
+
+.presentation-list__principal em {
+  margin-left: 6px;
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.presentation-list__principal .presentation-list__actions small {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.presentation-list__editing {
+  border-color: var(--gold) !important;
+  box-shadow: 0 0 0 3px var(--gold-tint);
+}
+
+.presentation-editor {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  background: var(--surface);
+}
+
+.presentation-editor__title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.presentation-editor__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.presentation-editor__preview {
+  color: var(--accent);
+  font-size: 0.8rem;
+}
+
+.presentation-editor__shared {
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  background: var(--warning-tint);
+  color: var(--warning);
+  font-size: 0.8rem;
+}
+
+.presentation-editor .form-actions {
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .presentation-editor__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* --- Producto compuesto (familias / componentes) --- */
 
 .composite-product {
   display: grid;
   gap: 12px;
-  margin: 0;
-  border: 0;
-  padding: 0;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
 }
 
-.composite-product legend {
-  padding: 0;
+.composite-product[open] {
+  border-style: solid;
+}
+
+.composite-product summary {
   color: var(--ink-soft);
-  font-size: 0.88rem;
+  font-size: 0.86rem;
   font-weight: 500;
+  cursor: pointer;
+}
+
+.composite-product summary em {
+  color: var(--accent);
+  font-style: normal;
+}
+
+.composite-product[open] summary {
+  margin-bottom: 12px;
+}
+
+.composite-product > * + * {
+  margin-top: 12px;
 }
 
 .composite-toggle {

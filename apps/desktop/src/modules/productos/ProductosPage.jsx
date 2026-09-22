@@ -31,13 +31,41 @@ const EMPTY_FORM = {
   descripcion: "",
 };
 
+// Presentaciones: la cantidad se escribe en la unidad en que se vende el
+// producto (unidades, libras, litros). Al guardar se convierte a la unidad
+// de inventario multiplicando por el factor de la presentación principal.
 const EMPTY_PRESENTATION_FORM = {
   nombre: "",
-  tipoVenta: "PAQUETE",
-  factorInventario: "",
+  cantidad: "",
   precio: "",
   codigoBarra: "",
 };
+
+// Factor de la presentación principal según cómo se vende el producto.
+// Debe coincidir con TIPOS_VENTA de productos.service.js.
+const BASE_FACTORS = {
+  UNIDAD: 1,
+  PAQUETE: 1,
+  CAJA: 1,
+  PESO: 454,
+  VOLUMEN: 1000,
+};
+
+const BASE_UNIT_LABELS = {
+  UNIDAD: "unidades",
+  PAQUETE: "paquetes",
+  CAJA: "cajas",
+  PESO: "lb",
+  VOLUMEN: "L",
+};
+
+function presentationTypeFor(baseType) {
+  if (baseType === "PESO" || baseType === "VOLUMEN") {
+    return baseType;
+  }
+
+  return "PAQUETE";
+}
 
 const TYPE_LABELS = {
   UNIDAD: "Unidad",
@@ -80,11 +108,14 @@ export function ProductosPage({ token, onBack }) {
   // --- Presentaciones adicionales (six-pack, caja, paquete, etc.) ---
   const [presentations, setPresentations] = useState([]);
   const [loadingPresentations, setLoadingPresentations] = useState(false);
-  const [showPresentationForm, setShowPresentationForm] = useState(false);
   const [presentationForm, setPresentationForm] = useState(EMPTY_PRESENTATION_FORM);
   const [editingPresentationId, setEditingPresentationId] = useState(null);
   const [savingPresentation, setSavingPresentation] = useState(false);
   const [presentationError, setPresentationError] = useState("");
+  // Mientras el producto no existe, las presentaciones se arman en esta
+  // lista local y se guardan justo después de crear el producto.
+  const [draftPresentations, setDraftPresentations] = useState([]);
+  const [showCompositeSection, setShowCompositeSection] = useState(false);
 
   const totalPages = Math.max(1, Math.ceil(totalProducts / perPage));
 
@@ -268,18 +299,41 @@ export function ProductosPage({ token, onBack }) {
         );
       }
 
+      const failedPresentations = [];
+
+      if (!editingProductId && draftPresentations.length > 0) {
+        for (const draft of draftPresentations) {
+          try {
+            await addPresentation(token, productId, toPresentationPayload(draft));
+          } catch (requestError) {
+            failedPresentations.push(`${draft.nombre}: ${requestError.message}`);
+          }
+        }
+      }
+
+      const savedDrafts = draftPresentations.length - failedPresentations.length;
+
       await loadProducts(1);
       setForm(EMPTY_FORM);
       setShowForm(false);
       setEditingProductId(null);
       setIsComposite(false);
       setComponents([]);
+      setShowCompositeSection(false);
       resetPresentationState();
+
+      if (failedPresentations.length > 0) {
+        setError(
+          `El producto se guardó, pero estas presentaciones no: ${failedPresentations.join(" · ")}. Edita el producto para agregarlas.`,
+        );
+      }
 
       setSuccess(
         editingProductId
           ? "Producto actualizado correctamente."
-          : "Producto registrado correctamente.",
+          : savedDrafts > 0
+            ? `Producto registrado con ${savedDrafts} presentación(es) adicional(es).`
+            : "Producto registrado correctamente.",
       );
     } catch (requestError) {
       setError(requestError.message);
@@ -289,7 +343,10 @@ export function ProductosPage({ token, onBack }) {
   }
 
   function closeForm() {
-    const hasUnsavedChanges = JSON.stringify(form) !== JSON.stringify(formSnapshot);
+    const hasUnsavedChanges =
+      JSON.stringify(form) !== JSON.stringify(formSnapshot) ||
+      draftPresentations.length > 0 ||
+      JSON.stringify(presentationForm) !== JSON.stringify(EMPTY_PRESENTATION_FORM);
 
     if (hasUnsavedChanges) {
       setShowUnsavedConfirm(true);
@@ -311,12 +368,13 @@ export function ProductosPage({ token, onBack }) {
     setComponents([]);
     setComponentSearch("");
     setComponentResults([]);
+    setShowCompositeSection(false);
     resetPresentationState();
   }
 
   function resetPresentationState() {
     setPresentations([]);
-    setShowPresentationForm(false);
+    setDraftPresentations([]);
     setPresentationForm(EMPTY_PRESENTATION_FORM);
     setEditingPresentationId(null);
     setPresentationError("");
@@ -341,37 +399,100 @@ export function ProductosPage({ token, onBack }) {
     setPresentationForm((current) => ({ ...current, [name]: value }));
   }
 
-  function startAddingPresentation() {
-    setPresentationForm(EMPTY_PRESENTATION_FORM);
-    setEditingPresentationId(null);
-    setPresentationError("");
-    setShowPresentationForm(true);
+  // Convierte la cantidad escrita (6 unidades, 5 lb, 2 L) al factor de
+  // inventario que espera el backend (6, 2270 g, 2000 ml).
+  function toPresentationPayload(draft) {
+    const factor = Math.round(Number(draft.cantidad) * principalFactor * 1000) / 1000;
+
+    return {
+      nombre: draft.nombre.trim(),
+      tipoVenta: presentationTypeFor(form.tipoVenta),
+      factorInventario: factor,
+      precio: draft.precio,
+      codigoBarra: draft.codigoBarra.trim(),
+    };
   }
 
-  function startEditingPresentation(presentation) {
+  function validatePresentationForm() {
+    const name = presentationForm.nombre.trim();
+
+    if (!name) {
+      return "Escribe el nombre de la presentación (ej. Six-pack, Cajetilla).";
+    }
+
+    if (!isEditingSavedPresentation && !(Number(presentationForm.cantidad) > 0)) {
+      return `Escribe cuántas ${baseUnitLabel} trae la presentación.`;
+    }
+
+    if (!(Number(presentationForm.precio) > 0)) {
+      return "Escribe un precio de venta válido.";
+    }
+
+    const others = extraPresentations.filter((item) => item.id !== editingPresentationId);
+
+    if (
+      name.toLowerCase() === principalName.toLowerCase() ||
+      others.some((item) => item.nombre.toLowerCase() === name.toLowerCase())
+    ) {
+      return "Ya existe una presentación con ese nombre en este producto.";
+    }
+
+    // Repetir el código de la unidad u otra presentación de ESTE producto
+    // está permitido (ej. "Café" y "Café servido en vaso"). Si el código es
+    // de otro producto, lo rechaza el backend.
+
+    return "";
+  }
+
+  function startEditingPresentation(item) {
     setPresentationForm({
-      nombre: presentation.nombre,
-      tipoVenta: presentation.tipo,
-      factorInventario: String(presentation.factorInventario),
-      precio: String(presentation.precio),
-      codigoBarra: presentation.codigoBarra ?? "",
+      nombre: item.nombre,
+      cantidad: String(item.cantidad),
+      precio: String(item.precio),
+      codigoBarra: item.codigoBarra ?? "",
     });
 
-    setEditingPresentationId(presentation.id);
+    setEditingPresentationId(item.id);
     setPresentationError("");
-    setShowPresentationForm(true);
   }
 
   function cancelPresentationForm() {
-    setShowPresentationForm(false);
     setPresentationForm(EMPTY_PRESENTATION_FORM);
     setEditingPresentationId(null);
     setPresentationError("");
   }
 
-  async function handleSavePresentation(event) {
-    event.preventDefault();
+  async function handleSavePresentation() {
     setPresentationError("");
+
+    const validationError = validatePresentationForm();
+
+    if (validationError) {
+      setPresentationError(validationError);
+      return;
+    }
+
+    // Producto todavía sin guardar: solo se arma la lista local.
+    if (!editingProductId) {
+      const draft = {
+        nombre: presentationForm.nombre.trim(),
+        cantidad: presentationForm.cantidad,
+        precio: presentationForm.precio,
+        codigoBarra: presentationForm.codigoBarra.trim(),
+      };
+
+      setDraftPresentations((current) =>
+        editingPresentationId
+          ? current.map((item) =>
+              item.localId === editingPresentationId ? { ...item, ...draft } : item,
+            )
+          : [...current, { localId: `draft-${Date.now()}`, ...draft }],
+      );
+
+      cancelPresentationForm();
+      return;
+    }
+
     setSavingPresentation(true);
 
     try {
@@ -380,12 +501,12 @@ export function ProductosPage({ token, onBack }) {
         // de ventas ya registradas con ese factor). Solo nombre, precio y
         // código de barras.
         await updatePresentation(token, editingProductId, editingPresentationId, {
-          nombre: presentationForm.nombre,
+          nombre: presentationForm.nombre.trim(),
           precio: presentationForm.precio,
-          codigoBarra: presentationForm.codigoBarra,
+          codigoBarra: presentationForm.codigoBarra.trim(),
         });
       } else {
-        await addPresentation(token, editingProductId, presentationForm);
+        await addPresentation(token, editingProductId, toPresentationPayload(presentationForm));
       }
 
       await loadPresentations(editingProductId);
@@ -397,14 +518,47 @@ export function ProductosPage({ token, onBack }) {
     }
   }
 
-  async function handleRemovePresentation(presentationId) {
+  async function handleRemovePresentation(item) {
     setPresentationError("");
 
+    if (!editingProductId) {
+      setDraftPresentations((current) => current.filter((draft) => draft.localId !== item.id));
+
+      if (editingPresentationId === item.id) {
+        cancelPresentationForm();
+      }
+
+      return;
+    }
+
+    if (!window.confirm(`¿Quitar la presentación "${item.nombre}"? Ya no aparecerá en ventas ni compras.`)) {
+      return;
+    }
+
     try {
-      await removePresentation(token, editingProductId, presentationId);
+      await removePresentation(token, editingProductId, item.id);
+
+      if (editingPresentationId === item.id) {
+        cancelPresentationForm();
+      }
+
       await loadPresentations(editingProductId);
     } catch (requestError) {
       setPresentationError(requestError.message);
+    }
+  }
+
+  // Enter dentro del editor de presentaciones NO debe enviar el formulario
+  // del producto (el lector de códigos manda Enter al final del escaneo).
+  function handlePresentationKeyDown(event) {
+    if (event.key !== "Enter" || event.target.tagName !== "INPUT") {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (event.target.name !== "codigoBarra") {
+      handleSavePresentation();
     }
   }
 
@@ -463,6 +617,7 @@ export function ProductosPage({ token, onBack }) {
 
       if (existingComponents.componentes.length > 0) {
         setIsComposite(true);
+        setShowCompositeSection(true);
         setComponents(
           existingComponents.componentes.map((item) => ({
             productoId: item.producto.id,
@@ -473,6 +628,7 @@ export function ProductosPage({ token, onBack }) {
         );
       } else {
         setIsComposite(false);
+        setShowCompositeSection(false);
         setComponents([]);
       }
     } catch (requestError) {
@@ -483,6 +639,52 @@ export function ProductosPage({ token, onBack }) {
 
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
+
+  const principalPresentation = presentations.find((item) => item.esPrincipal) ?? null;
+
+  const principalFactor =
+    principalPresentation?.factorInventario || BASE_FACTORS[form.tipoVenta] || 1;
+
+  const principalName =
+    principalPresentation?.nombre ?? TYPE_LABELS[form.tipoVenta] ?? "Unidad";
+
+  const baseUnitLabel = BASE_UNIT_LABELS[form.tipoVenta] ?? "unidades";
+
+  const isEditingSavedPresentation = Boolean(editingProductId && editingPresentationId);
+
+  // Lista unificada: presentaciones guardadas (al editar) o el borrador
+  // local (al crear). La cantidad siempre en unidades de venta.
+  const extraPresentations = editingProductId
+    ? presentations
+        .filter((item) => !item.esPrincipal)
+        .map((item) => ({
+          id: item.id,
+          nombre: item.nombre,
+          cantidad: Number(item.factorInventario) / principalFactor,
+          precio: Number(item.precio),
+          codigoBarra: item.codigoBarra,
+        }))
+    : draftPresentations.map((item) => ({
+        id: item.localId,
+        nombre: item.nombre,
+        cantidad: Number(item.cantidad),
+        precio: Number(item.precio),
+        codigoBarra: item.codigoBarra,
+      }));
+
+  const typedBarcode = presentationForm.codigoBarra.trim();
+
+  const sharedBarcodeWith = typedBarcode
+    ? [
+        ...(typedBarcode === form.codigoBarra.trim() ? [principalName] : []),
+        ...extraPresentations
+          .filter((item) => item.id !== editingPresentationId && item.codigoBarra === typedBarcode)
+          .map((item) => item.nombre),
+      ]
+    : [];
+
+  const previewQuantity = Number(presentationForm.cantidad);
+  const previewPrice = Number(presentationForm.precio);
 
   const stockLabel =
     form.tipoVenta === "PESO"
@@ -528,6 +730,7 @@ export function ProductosPage({ token, onBack }) {
               setComponents([]);
               setComponentSearch("");
               setComponentResults([]);
+              setShowCompositeSection(false);
               resetPresentationState();
             }
           }}
@@ -802,181 +1005,239 @@ export function ProductosPage({ token, onBack }) {
               </label>
             </div>
 
-            {editingProductId ? (
-              <fieldset className="presentations-field">
-                <legend>Otras formas de venta de este mismo producto</legend>
+            <section className="presentations-card" onKeyDown={handlePresentationKeyDown}>
+              <header className="presentations-card__header">
+                <div>
+                  <p className="eyebrow">Formas de venta</p>
 
-                <p className="presentations-field__hint">
-                  Ej. "Coca 1.1L": la unidad ya está arriba. Aquí agregas six-pack,
-                  caja, etc. — todas descuentan del mismo inventario, cada una con
-                  su propio precio.
+                  <h3>Presentaciones de este producto</h3>
+                </div>
+
+                <span className="presentations-card__badge">
+                  {extraPresentations.length + 1} en total
+                </span>
+              </header>
+
+              <p className="presentations-field__hint">
+                Todas descuentan del mismo inventario ({baseUnitLabel}). Ej. cigarro:
+                la unidad es el cigarro suelto; aquí agregas Cajetilla = 20 y Cartón = 200.
+                En Compras eliges la presentación en que llegó la mercadería y el sistema
+                la convierte a {baseUnitLabel}. Si es el mismo producto con otro precio
+                (caliente, servido en vaso), usa equivale a 1; puede llevar el mismo código.
+              </p>
+
+              {presentationError ? (
+                <p className="form-error" role="alert">
+                  {presentationError}
+                </p>
+              ) : null}
+
+              {loadingPresentations ? (
+                <small>Cargando presentaciones...</small>
+              ) : (
+                <ul className="presentation-list">
+                  <li className="presentation-list__principal">
+                    <span className="presentation-list__name">
+                      <strong>
+                        {principalName} <em>principal</em>
+                      </strong>
+
+                      <small>
+                        1 {form.tipoVenta === "PESO" ? "lb" : form.tipoVenta === "VOLUMEN" ? "L" : "und"}
+                        {" · "}
+                        {form.codigoBarra.trim() || "sin código"}
+                      </small>
+                    </span>
+
+                    <span className="presentation-list__price">
+                      {Number(form.precio) > 0 ? `L ${Number(form.precio).toFixed(2)}` : "—"}
+                    </span>
+
+                    <div className="presentation-list__actions">
+                      <small>Se edita arriba</small>
+                    </div>
+                  </li>
+
+                  {extraPresentations.map((item) => (
+                    <li
+                      className={
+                        editingPresentationId === item.id ? "presentation-list__editing" : undefined
+                      }
+                      key={item.id}
+                    >
+                      <span className="presentation-list__name">
+                        <strong>{item.nombre}</strong>
+
+                        <small>
+                          Equivale a {formatNumber(item.cantidad)} {baseUnitLabel}
+                          {" · "}
+                          {item.codigoBarra || "sin código"}
+                          {item.cantidad > 0
+                            ? ` · L ${(item.precio / item.cantidad).toFixed(2)} c/u`
+                            : ""}
+                        </small>
+                      </span>
+
+                      <span className="presentation-list__price">
+                        L {item.precio.toFixed(2)}
+                      </span>
+
+                      <div className="presentation-list__actions">
+                        <button
+                          className="text-button"
+                          onClick={() => startEditingPresentation(item)}
+                          type="button"
+                        >
+                          Editar
+                        </button>
+
+                        <button
+                          aria-label={`Quitar ${item.nombre}`}
+                          className="text-button presentation-list__remove"
+                          onClick={() => handleRemovePresentation(item)}
+                          type="button"
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <div className="presentation-editor">
+                <p className="presentation-editor__title">
+                  {editingPresentationId
+                    ? `Editando: ${presentationForm.nombre || "presentación"}`
+                    : "Agregar presentación"}
                 </p>
 
-                {presentationError ? (
-                  <p className="form-error" role="alert">
-                    {presentationError}
-                  </p>
+                <div className="presentation-editor__grid">
+                  <label className="field">
+                    <span>Nombre *</span>
+
+                    <input
+                      name="nombre"
+                      onChange={updatePresentationField}
+                      placeholder="Ejemplo: Six-pack, Cajetilla"
+                      value={presentationForm.nombre}
+                    />
+                  </label>
+
+                  <label className="field">
+                    <span>Equivale a ({baseUnitLabel}) *</span>
+
+                    <input
+                      disabled={isEditingSavedPresentation}
+                      min="0.001"
+                      name="cantidad"
+                      onChange={updatePresentationField}
+                      placeholder={form.tipoVenta === "PESO" ? "Ejemplo: 5" : "Ejemplo: 6"}
+                      step="0.001"
+                      type="number"
+                      value={presentationForm.cantidad}
+                    />
+
+                    {isEditingSavedPresentation ? (
+                      <small>No se puede cambiar una vez creada. Quítala y crea otra.</small>
+                    ) : null}
+                  </label>
+
+                  <label className="field">
+                    <span>Precio de venta *</span>
+
+                    <input
+                      min="0.01"
+                      name="precio"
+                      onChange={updatePresentationField}
+                      placeholder="0.00"
+                      step="0.01"
+                      type="number"
+                      value={presentationForm.precio}
+                    />
+                  </label>
+
+                  <label className="field">
+                    <span>Código de barras</span>
+
+                    <input
+                      name="codigoBarra"
+                      onChange={updatePresentationField}
+                      placeholder="Escanea o escribe el código"
+                      value={presentationForm.codigoBarra}
+                    />
+                  </label>
+                </div>
+
+                {sharedBarcodeWith.length > 0 ? (
+                  <small className="presentation-editor__shared">
+                    Comparte código con: {sharedBarcodeWith.join(", ")}. Al escanearlo, la
+                    cajera verá las opciones y elegirá cuál vender.
+                  </small>
                 ) : null}
 
-                {loadingPresentations ? (
-                  <small>Cargando presentaciones...</small>
-                ) : presentations.filter((item) => !item.esPrincipal).length > 0 ? (
-                  <ul className="presentation-list">
-                    {presentations
-                      .filter((item) => !item.esPrincipal)
-                      .map((item) => (
-                        <li key={item.id}>
-                          <span className="presentation-list__name">
-                            <strong>{item.nombre}</strong>
-                            <small>
-                              {TYPE_LABELS[item.tipo] ?? item.tipo} · equivale a{" "}
-                              {formatNumber(item.factorInventario)} unidad(es) base
-                            </small>
-                          </span>
+                {previewQuantity > 0 && presentationForm.nombre.trim() ? (
+                  <small className="presentation-editor__preview">
+                    Al vender 1 {presentationForm.nombre.trim()} se descuentan{" "}
+                    {formatNumber(previewQuantity)} {baseUnitLabel} del inventario
+                    {previewPrice > 0
+                      ? ` · sale a L ${(previewPrice / previewQuantity).toFixed(2)} por ${
+                          form.tipoVenta === "PESO" ? "lb" : form.tipoVenta === "VOLUMEN" ? "L" : "unidad"
+                        }`
+                      : ""}
+                    .
+                  </small>
+                ) : null}
 
-                          <span className="presentation-list__price">
-                            L {item.precio.toFixed(2)}
-                          </span>
-
-                          <div className="presentation-list__actions">
-                            <button
-                              className="text-button"
-                              onClick={() => startEditingPresentation(item)}
-                              type="button"
-                            >
-                              Editar
-                            </button>
-
-                            <button
-                              aria-label={`Quitar ${item.nombre}`}
-                              className="text-button presentation-list__remove"
-                              onClick={() => handleRemovePresentation(item.id)}
-                              type="button"
-                            >
-                              Quitar
-                            </button>
-                          </div>
-                        </li>
-                      ))}
-                  </ul>
-                ) : (
-                  <p className="empty-state empty-state--compact">
-                    Este producto solo se vende en su forma principal.
-                  </p>
-                )}
-
-                {showPresentationForm ? (
-                  <div className="composite-editor">
-                    <div className="form-row">
-                      <label className="field">
-                        <span>Nombre *</span>
-
-                        <input
-                          name="nombre"
-                          onChange={updatePresentationField}
-                          placeholder="Ejemplo: Six-pack"
-                          value={presentationForm.nombre}
-                        />
-                      </label>
-
-                      <label className="field">
-                        <span>Tipo *</span>
-
-                        <select
-                          disabled={Boolean(editingPresentationId)}
-                          name="tipoVenta"
-                          onChange={updatePresentationField}
-                          value={presentationForm.tipoVenta}
-                        >
-                          {Object.entries(TYPE_LABELS).map(([value, label]) => (
-                            <option key={value} value={value}>
-                              {label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-
-                    <div className="form-row">
-                      <label className="field">
-                        <span>Equivale a (unidades base) *</span>
-
-                        <input
-                          disabled={Boolean(editingPresentationId)}
-                          min="0.001"
-                          name="factorInventario"
-                          onChange={updatePresentationField}
-                          placeholder="Ejemplo: 6"
-                          step="0.001"
-                          type="number"
-                          value={presentationForm.factorInventario}
-                        />
-
-                        {editingPresentationId ? (
-                          <small>No se puede cambiar una vez creada.</small>
-                        ) : null}
-                      </label>
-
-                      <label className="field">
-                        <span>Precio de venta *</span>
-
-                        <input
-                          min="0.01"
-                          name="precio"
-                          onChange={updatePresentationField}
-                          placeholder="0.00"
-                          step="0.01"
-                          type="number"
-                          value={presentationForm.precio}
-                        />
-                      </label>
-                    </div>
-
-                    <label className="field">
-                      <span>Código de barras</span>
-
-                      <input
-                        name="codigoBarra"
-                        onChange={updatePresentationField}
-                        placeholder="Escanea o escribe el código"
-                        value={presentationForm.codigoBarra}
-                      />
-                    </label>
-
-                    <div className="form-actions">
-                      <button
-                        className="secondary-button"
-                        onClick={cancelPresentationForm}
-                        type="button"
-                      >
-                        Cancelar
-                      </button>
-
-                      <button
-                        className="primary-button"
-                        disabled={savingPresentation}
-                        onClick={handleSavePresentation}
-                        type="button"
-                      >
-                        {savingPresentation ? "Guardando..." : "Guardar presentación"}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button className="text-button" onClick={startAddingPresentation} type="button">
-                    + Agregar presentación
+                <div className="form-actions">
+                  <button
+                    className="secondary-button"
+                    onClick={cancelPresentationForm}
+                    type="button"
+                  >
+                    {editingPresentationId ? "Cancelar edición" : "Limpiar"}
                   </button>
-                )}
-              </fieldset>
-            ) : (
-              <p className="presentations-field__hint">
-                Guarda el producto primero para poder agregar otras formas de venta
-                (six-pack, caja, etc.).
-              </p>
-            )}
 
-            <fieldset className="composite-product">
-              <legend>¿Este producto reparte su venta entre otros?</legend>
+                  <button
+                    className="primary-button"
+                    disabled={savingPresentation}
+                    onClick={handleSavePresentation}
+                    type="button"
+                  >
+                    {savingPresentation
+                      ? "Guardando..."
+                      : editingPresentationId
+                        ? "Guardar presentación"
+                        : editingProductId
+                          ? "Agregar presentación"
+                          : "Agregar a la lista"}
+                  </button>
+                </div>
+
+                {!editingProductId ? (
+                  <small className="presentation-editor__preview">
+                    Las presentaciones de la lista se guardan junto con el producto al
+                    pulsar "Guardar producto".
+                  </small>
+                ) : null}
+              </div>
+            </section>
+
+            <details
+              className="composite-product"
+              onToggle={(event) => setShowCompositeSection(event.currentTarget.open)}
+              open={showCompositeSection}
+            >
+              <summary>
+                Opción avanzada: producto compuesto
+                {isComposite ? <em> · activo</em> : null}
+              </summary>
+
+              <p className="presentations-field__hint">
+                Úsalo solo para mezclas de productos distintos (ej. Saco de pollo mixto:
+                pierna + pechuga). Para six-pack, cajetilla o caja del mismo producto,
+                usa Presentaciones.
+              </p>
 
               <label className="composite-toggle">
                 <input
@@ -1088,7 +1349,7 @@ export function ProductosPage({ token, onBack }) {
                   ) : null}
                 </div>
               ) : null}
-            </fieldset>
+            </details>
 
             <details className="optional-fields">
               <summary>Datos opcionales</summary>
@@ -1191,8 +1452,11 @@ export function ProductosPage({ token, onBack }) {
 
                       {product.presentaciones?.length > 1 ? (
                         <small className="presentation-count">
-                          {" "}
-                          +{product.presentaciones.length - 1} presentación(es)
+                          +{" "}
+                          {product.presentaciones
+                            .filter((item) => !item.esPrincipal)
+                            .map((item) => item.nombre)
+                            .join(" · ")}
                         </small>
                       ) : null}
                     </td>

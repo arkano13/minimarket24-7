@@ -3,24 +3,52 @@ import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/AppError.js";
 import { registrarBitacora } from "../bitacora/bitacora.service.js";
 
-// Un código de barras debe ser único... salvo que el producto sea
-// COMPUESTO: ahí sí se le permite repetir el código de otro producto (ej.
-// "Barcena Caguama" y "Barcena Caguama + Envase" son físicamente el mismo
-// código, uno es el otro con un agregado). No aplica al crear un producto
-// nuevo porque recién ahí nunca es compuesto todavía (eso se define
-// después, con setProductComponents).
-async function assertBarcodeAvailable(transaction, codigo, esCompuesto) {
+// Reglas del código de barras:
+// - Entre productos DISTINTOS debe ser único...
+// - ...salvo que el producto sea COMPUESTO: ahí sí se le permite repetir el
+//   código de otro producto (ej. "Barcena Caguama" y "Barcena Caguama +
+//   Envase" son físicamente el mismo código).
+// - Dentro del MISMO producto, sus presentaciones sí pueden compartir código
+//   entre ellas y con la presentación principal (ej. "Café" y "Café servido
+//   en vaso"). Al escanear, Ventas y Compras muestran la lista y la cajera
+//   elige, nunca se agrega uno solo automáticamente.
+// - Solo cuentan los códigos de presentaciones y productos ACTIVOS: una
+//   presentación quitada libera su código.
+async function assertBarcodeAvailable(transaction, codigo, esCompuesto, productoId = null) {
   if (!codigo || esCompuesto) {
     return;
   }
 
   const existing = await transaction.codigoBarraProducto.findFirst({
-    where: { codigo, activo: true },
-    select: { id: true },
+    where: {
+      codigo,
+      activo: true,
+
+      presentacion: {
+        activo: true,
+
+        producto: {
+          activo: true,
+          ...(productoId ? { id: { not: productoId } } : {}),
+        },
+      },
+    },
+
+    select: {
+      presentacion: {
+        select: {
+          nombre: true,
+          producto: { select: { nombre: true } },
+        },
+      },
+    },
   });
 
   if (existing) {
-    throw new AppError("Ese código de barras ya pertenece a otro producto.", 409);
+    throw new AppError(
+      `Ese código de barras ya pertenece a otro producto: ${existing.presentacion.producto.nombre} (${existing.presentacion.nombre}).`,
+      409,
+    );
   }
 }
 
@@ -484,7 +512,7 @@ export async function updateProduct(productIdInput, data, userId) {
         where: { presentacionId: principal.id },
       });
 
-      await assertBarcodeAvailable(transaction, barcode, currentProduct.esCompuesto);
+      await assertBarcodeAvailable(transaction, barcode, currentProduct.esCompuesto, productId);
 
       await transaction.presentacionProducto.update({
         where: { id: principal.id },
@@ -639,7 +667,7 @@ export async function addPresentation(productIdInput, data, userId) {
         throw new AppError("Ya existe una presentación con ese nombre en este producto.", 409);
       }
 
-      await assertBarcodeAvailable(transaction, barcode, parentProduct.esCompuesto);
+      await assertBarcodeAvailable(transaction, barcode, parentProduct.esCompuesto, productId);
 
       await transaction.presentacionProducto.create({
         data: {
@@ -727,7 +755,7 @@ export async function updatePresentation(productIdInput, presentationIdInput, da
         where: { presentacionId: presentationId },
       });
 
-      await assertBarcodeAvailable(transaction, barcode, presentation.producto.esCompuesto);
+      await assertBarcodeAvailable(transaction, barcode, presentation.producto.esCompuesto, productId);
 
       await transaction.presentacionProducto.update({
         where: { id: presentationId },

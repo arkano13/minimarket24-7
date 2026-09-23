@@ -1,4 +1,5 @@
 import { createPairingRouter } from "./pairing.routes.js";
+import { describeDisconnect } from "../lib/whatsapp-disconnect.js";
 // apps/backend/src/bots/whatsapp.bot.js
 import "dotenv/config";
 import express from "express";
@@ -240,7 +241,9 @@ app.post("/interno/prueba-envio", async (req, res) => {
 
 async function iniciarBot() {
   pairingReady = false;
+  let conexionAbierta = false;
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+  const sesionGuardada = Boolean(state.creds.registered);
 
   const currentSocket = makeWASocket({
     auth: state,
@@ -278,8 +281,11 @@ async function iniciarBot() {
 
     if (connection === "close") {
       const motivo = lastDisconnect?.error?.output?.statusCode ?? new Boom(lastDisconnect?.error).output.statusCode;
-      console.error("WhatsApp desconectado:", { codigo: motivo, motivo: lastDisconnect?.error?.message ?? "Sin detalle" });
-      ultimaDesconexion = { codigo: motivo, fecha: new Date().toISOString() };
+      ultimaDesconexion = describeDisconnect({
+        error: lastDisconnect?.error, code: motivo,
+        registered: sesionGuardada, opened: conexionAbierta,
+      });
+      console.error("WhatsApp desconectado:", JSON.stringify(ultimaDesconexion));
       pairingReady = false;
       sock = null;
       ultimoQrDataUrl = null;
@@ -312,6 +318,7 @@ async function iniciarBot() {
         console.error("Sesión desvinculada: requiere una nueva vinculación. No se borran credenciales automáticamente.");
       }
     } else if (connection === "open") {
+      conexionAbierta = true;
       estadoConexion = "conectado";
       pairingReady = false;
       ultimaDesconexion = null;

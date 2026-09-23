@@ -59,7 +59,12 @@
   let polling = null;
   let working = false;
   function detail(data) {
-    return data.ultimaDesconexion ? ' Última desconexión: ' + data.ultimaDesconexion.codigo + ' (' + data.ultimaDesconexion.fecha + ').' : '';
+    const last = data.ultimaDesconexion;
+    if (!last) return '';
+    const fields = Object.entries(last.detalles || {}).map(([key, value]) => key + '=' + value).join(', ');
+    return ' Última desconexión: ' + last.codigo + ' (' + last.fecha + ').' +
+      (last.etapa ? ' Etapa: ' + last.etapa + '.' : '') +
+      (fields ? ' Detalles: ' + fields + '.' : '');
   }
   const initialKey = new URLSearchParams(location.search).get('clave');
   if (initialKey) { secret.value = initialKey; history.replaceState(null, '', location.pathname); }

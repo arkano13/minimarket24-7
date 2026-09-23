@@ -50,7 +50,12 @@ export function createPairingRouter({ getState, secret, now = Date.now, waitMs =
     if (["desvinculado", "reemplazada"].includes(state.status)) return res.status(409).json({ ...describe(state), error: describe(state).mensaje });
     if (state.status === "conectado" || state.socket?.authState.creds.registered) return res.status(409).json({ error: "El bot ya está vinculado. No se reemplazará su sesión desde esta página." });
     if (!describe(state).listo) return res.status(503).json({ ...describe(state), error: "No se pudo establecer la conexión con WhatsApp en 20 segundos. Consulta el estado: allí se muestra el último código de desconexión." });
-    if (cached?.socket === state.socket && cached.phone === phone && now() - cached.at < 60_000) return res.json({ codigo: cached.code });
+    // El código forma parte del estado criptográfico hasta completar o cerrar
+    // esta conexión. Generar otro sobre el mismo socket invalida el anterior.
+    if (cached?.socket === state.socket) {
+      if (cached.phone === phone) return res.json({ codigo: cached.code });
+      return res.status(409).json({ error: "Ya hay una vinculación pendiente en esta conexión. Usa el código mostrado o reinicia con una sesión nueva." });
+    }
     if (busy || now() - lastRequest < 60_000) {
       res.set("Retry-After", "60");
       return res.status(429).json({ error: "Espera un minuto antes de solicitar otro código." });
@@ -61,7 +66,7 @@ export function createPairingRouter({ getState, secret, now = Date.now, waitMs =
     try {
       const code = await state.socket.requestPairingCode(phone);
       if (getState().socket !== state.socket) return res.status(409).json({ error: "La conexión cambió. Consulta el estado y solicita un código nuevo." });
-      cached = { socket: state.socket, phone, code, at: now() };
+      cached = { socket: state.socket, phone, code };
       res.json({ codigo: code });
     } catch {
       res.status(502).json({ error: "WhatsApp no pudo generar el código. Espera un minuto e intenta nuevamente." });

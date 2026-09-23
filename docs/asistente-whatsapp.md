@@ -90,6 +90,18 @@ No hay migraciones ni dependencias nuevas. Los informes permanecen en PostgreSQL
 
 Un 401 sigue significando que WhatsApp rechazó la sesión. La separación evita que fallos de Gemini, PDF o Prisma derriben el socket, pero no convierte en válida una sesión que WhatsApp ya cerró. Conservar `codigo`, `etapa` y `detalles` del diagnóstico.
 
+## Recuperar una sesión rechazada con 401
+
+Este procedimiento solo aplica cuando `/pair` ya muestra una desconexión 401. Es el paso final, después de desplegar y validar los dos servicios:
+
+1. Detener temporalmente el gateway para que ningún proceso escriba credenciales mientras se recupera la sesión.
+2. En el teléfono o tablet que conserva la cuenta principal, abrir **WhatsApp > Dispositivos vinculados** y cerrar las sesiones antiguas del bot. No cerrar la cuenta principal.
+3. Cambiar únicamente en el gateway `WHATSAPP_SESSION_DIR` a una ruta nueva que nunca se haya usado, por ejemplo `/data/whatsapp-session-v2`. Esto deja aisladas las credenciales rechazadas sin borrar el volumen.
+4. Volver a desplegar el gateway, abrir `/pair` y solicitar un único código para el número emisor, sin `+`, espacios ni guiones.
+5. Introducir ese código en **Vincular con número de teléfono** y luego consultar el estado. No generar otro código durante ese intento.
+
+La página conserva el mismo código durante toda la conexión. Para comenzar otro intento debe iniciarse un socket nuevo con una carpeta de sesión limpia. Si una sesión completamente nueva también termina en `401` y `location=lla`, guardar ese diagnóstico: el rechazo ya ocurre en los servidores de WhatsApp durante la vinculación y no se corrige con más reintentos sobre el mismo socket.
+
 ## Verificación
 
 Las pruebas cubren sesión, QR tardíos, reconexión, cola de envíos, API interna, asistente remoto, documentos e informes persistentes. Usan dobles locales: no vinculan teléfonos ni envían mensajes reales.

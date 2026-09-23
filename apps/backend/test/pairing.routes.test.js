@@ -38,7 +38,7 @@ test('sin secreto configurado falla cerrado', async (t) => {
   assert.equal((await s.post()).status, 503);
   assert.equal(s.calls(), 0);
 });
-test('número internacional, código cacheado y límite de solicitudes', async (t) => {
+test('número internacional y un solo código durante toda la conexión', async (t) => {
   const s = await setup(t);
   assert.equal((await s.post({ numero: '+504 12345678' })).status, 400);
   assert.equal((await s.post({ numero: '123' })).status, 400);
@@ -46,8 +46,11 @@ test('número internacional, código cacheado y límite de solicitudes', async (
   assert.deepEqual(await response.json(), { codigo: 'ABCD1234' });
   assert.equal((await s.post()).status, 200);
   assert.equal(s.calls(), 1);
-  assert.equal((await s.post({ numero: '50487654321' })).status, 429);
+  assert.equal((await s.post({ numero: '50487654321' })).status, 409);
   s.advance();
+  assert.equal((await s.post()).status, 200);
+  assert.equal(s.calls(), 1);
+  s.state.socket = { ...s.state.socket };
   assert.equal((await s.post()).status, 200);
   assert.equal(s.calls(), 2);
 });

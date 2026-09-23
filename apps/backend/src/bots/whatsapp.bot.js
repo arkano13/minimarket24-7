@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import qrcode from "qrcode";
-import { makeWASocket, useMultiFileAuthState, downloadMediaMessage, BufferJSON } from "@whiskeysockets/baileys";
+import { makeWASocket, useMultiFileAuthState, downloadMediaMessage, BufferJSON, Browsers } from "@whiskeysockets/baileys";
 import path from "node:path";
 import pino from "pino";
 import { crearAlmacenPersistente } from "../lib/whatsapp-message-store.js";
@@ -45,6 +45,15 @@ const connection = createWhatsAppConnection({
   makeSocket: makeWASocket,
   toQr: value => qrcode.toDataURL(value),
   socketOptions: {
+    // La vinculación por teléfono valida con más rigor la identidad anunciada.
+    // Usar una identidad canónica evita códigos que WhatsApp rechaza después.
+    browser: Browsers.macOS("Desktop"),
+    printQRInTerminal: false,
+    connectTimeoutMs: 120_000,
+    defaultQueryTimeoutMs: undefined,
+    markOnlineOnConnect: false,
+    syncFullHistory: false,
+    shouldSyncHistoryMessage: () => false,
     qrTimeout: 120_000,
     logger: pino({ level: LOG_LEVEL }),
     getMessage: async key => mensajesEnviados.obtener(key.id),

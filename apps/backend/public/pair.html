@@ -15,6 +15,7 @@
     input, button { width: 100%; min-height: 46px; padding: 12px; font: inherit; border: 1px solid #87998e; border-radius: 8px; }
     button { margin-top: 12px; background: #166344; color: white; cursor: pointer; }
     button:disabled { opacity: .55; cursor: wait; }
+    #reset { background: #9a3412; }
     #status { overflow-wrap: anywhere; }
     #code { display: block; font: 700 32px/1.6 monospace; text-align: center; letter-spacing: 4px; overflow-wrap: anywhere; }
     img { display: block; width: 100%; max-width: 280px; margin: 16px auto; }
@@ -35,6 +36,7 @@
     <small>Solo números, sin +, espacios ni guiones.</small>
     <button id="generate" type="submit">Obtener código</button>
     <button id="check" type="button">Consultar conexión</button>
+    <button id="reset" type="button" hidden>Empezar sesión nueva</button>
   </form>
   <p id="status" role="status" aria-live="polite">Introduce la clave y el número emisor para comenzar.</p>
   <section id="result" hidden>
@@ -57,6 +59,7 @@
   const qr = document.getElementById('qr');
   const generate = document.getElementById('generate');
   const check = document.getElementById('check');
+  const reset = document.getElementById('reset');
   let polling = null;
   let working = false;
   function detail(data) {
@@ -81,13 +84,14 @@
   }
   async function run(action) {
     working = true;
-    generate.disabled = check.disabled = true;
+    generate.disabled = check.disabled = reset.disabled = true;
     try { await action(); }
     catch (error) { status.textContent = error.name === 'TimeoutError' ? 'La solicitud tardó demasiado. Consulta la conexión antes de reintentar.' : error.message; }
-    finally { working = false; generate.disabled = check.disabled = false; }
+    finally { working = false; generate.disabled = check.disabled = reset.disabled = false; }
   }
   function showState(data) {
     status.textContent = data.mensaje + detail(data);
+    reset.hidden = data.estado !== 'desvinculado';
     qr.hidden = !data.qr;
     if (data.qr) qr.src = data.qr; else qr.removeAttribute('src');
     if (data.conectado || !data.listo) { result.hidden = true; code.textContent = ''; }
@@ -126,6 +130,17 @@
     watchState();
     showState(data);
   }));
+  reset.addEventListener('click', () => {
+    if (!confirm('WhatsApp ya cerró la sesión del bot. ¿Empezar una sesión nueva para vincular otra vez?')) return;
+    void run(async () => {
+      const data = await request('/nueva-sesion', { method: 'POST', body: '{}' });
+      reset.hidden = true;
+      result.hidden = true;
+      code.textContent = '';
+      status.textContent = data.mensaje;
+      watchState();
+    });
+  });
   secret.addEventListener('input', () => { clearInterval(polling); polling = null; result.hidden = true; qr.hidden = true; code.textContent = ''; qr.removeAttribute('src'); });
 </script>
 </body>

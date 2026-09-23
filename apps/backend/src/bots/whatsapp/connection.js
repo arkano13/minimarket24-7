@@ -9,6 +9,7 @@ export function createWhatsAppConnection({ loadAuth, makeSocket, toQr, socketOpt
   let ready = false;
   let lastDisconnect = null;
   let stopped = false;
+  let resetting = false;
   let detach = () => {};
   let credentials = Promise.resolve();
   let incoming = Promise.resolve();
@@ -93,6 +94,36 @@ export function createWhatsAppConnection({ loadAuth, makeSocket, toQr, socketOpt
   return {
     getState: () => ({ socket, status, qr, ready, lastDisconnect }),
     start: () => reconnect.start(),
+    // Empieza una sesión nueva SOLO si WhatsApp ya cerró la actual (401).
+    // prepare() aparta los archivos de la sesión muerta antes de reconectar;
+    // loadAuth() los lee de nuevo y arranca sin credenciales (listo para
+    // vincular por código o QR).
+    async reset(prepare) {
+      if (status !== 'desvinculado') {
+        const error = new Error('Solo se puede empezar una sesión nueva cuando WhatsApp cerró la sesión (401).');
+        error.code = 'NO_DESVINCULADO';
+        throw error;
+      }
+      if (resetting || stopped) return;
+      resetting = true;
+      try {
+        await credentials;
+        detach();
+        detach = () => {};
+        const current = socket;
+        socket = null;
+        current?.end?.(new Error('Sesión nueva'));
+        await prepare();
+        lastDisconnect = null;
+        qr = null;
+        ready = false;
+        status = 'conectando';
+        reconnect.resume();
+        void reconnect.start();
+      } finally {
+        resetting = false;
+      }
+    },
     async stop() {
       stopped = true;
       reconnect.stop();

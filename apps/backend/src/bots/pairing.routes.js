@@ -1,8 +1,10 @@
-import { Router } from "express";
+import { Router, json } from "express";
 import { fileURLToPath } from "node:url";
 
-export function createPairingRouter({ getState, secret, now = Date.now, waitMs = 20_000 }) {
+export function createPairingRouter({ getState, secret, resetSession = null, now = Date.now, waitMs = 20_000 }) {
   const router = Router();
+  // Sin esto req.body llega vacío y /codigo nunca recibe el número.
+  router.use(json({ limit: "10kb" }));
   let busy = false;
   let lastRequest = -Infinity;
   let cached = null;
@@ -13,7 +15,7 @@ export function createPairingRouter({ getState, secret, now = Date.now, waitMs =
     const listo = !terminal && !conectado && !registered && Boolean(state.socket && (state.ready || state.qr) && state.socket.ws?.isOpen !== false);
     let mensaje = "El bot está intentando conectar con WhatsApp. Esta página actualizará el estado.";
     if (conectado) mensaje = "WhatsApp conectado correctamente. No necesitas otro código.";
-    else if (state.status === "desvinculado") mensaje = "WhatsApp cerró la sesión. No se resolverá esperando ni pidiendo otro código. Revisa la causa de desconexión antes de volver a vincular.";
+    else if (state.status === "desvinculado") mensaje = "WhatsApp cerró la sesión. No se resolverá esperando ni pidiendo otro código: pulsa «Empezar sesión nueva» y luego solicita el código.";
     else if (state.status === "reemplazada") mensaje = "Otra conexión reemplazó a este bot. Detén la otra instancia que usa la misma sesión antes de reiniciar este servicio.";
     else if (registered) mensaje = "Hay una sesión guardada y se está reconectando. No se puede generar un código para reemplazarla.";
     else if (listo) mensaje = "Listo para vincular. Puedes solicitar el código.";
@@ -34,6 +36,24 @@ export function createPairingRouter({ getState, secret, now = Date.now, waitMs =
   router.get("/estado", (req, res) => {
     const state = { ...getState() };
     res.json(describe(state));
+  });
+  // Solo funciona si WhatsApp ya cerró la sesión (401): no hay nada que
+  // perder. Aparta la sesión muerta y el bot queda listo para un código nuevo.
+  router.post("/nueva-sesion", async (req, res) => {
+    if (!resetSession) return res.status(503).json({ error: "Este servicio no permite empezar una sesión nueva desde la página." });
+    const state = { ...getState() };
+    if (state.status !== "desvinculado") {
+      return res.status(409).json({ ...describe(state), error: "Solo se puede empezar una sesión nueva cuando WhatsApp cerró la sesión." });
+    }
+    try {
+      await resetSession();
+      cached = null;
+      lastRequest = -Infinity;
+      res.json({ ...describe({ ...getState() }), mensaje: "Sesión nueva iniciada. Espera unos segundos y solicita el código." });
+    } catch (error) {
+      console.error("No se pudo empezar una sesión nueva:", error.message);
+      res.status(500).json({ error: "No se pudo empezar una sesión nueva. Revisa los logs del asistente." });
+    }
   });
   router.post("/codigo", async (req, res) => {
     const phone = typeof req.body?.numero === "string" ? req.body.numero.trim() : "";

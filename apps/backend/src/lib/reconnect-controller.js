@@ -39,5 +39,12 @@ export function createReconnectController(connect, {
       if (timer !== null) cancel(timer);
       timer = null;
     },
+    // Vuelve a habilitar los arranques después de stop(). Solo se usa al
+    // empezar una sesión nueva tras un 401 (WhatsApp cerró la sesión).
+    resume() {
+      stopped = false;
+      attempts = 0;
+      pending = false;
+    },
   };
 }

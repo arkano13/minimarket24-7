@@ -5,7 +5,7 @@ import { makeWASocket, useMultiFileAuthState, downloadMediaMessage, BufferJSON, 
 import path from "node:path";
 import pino from "pino";
 import { crearAlmacenPersistente } from "../lib/whatsapp-message-store.js";
-import { crearCacheReintentos } from "../lib/whatsapp-session.js";
+import { archivarSesion, crearCacheReintentos } from "../lib/whatsapp-session.js";
 import { createPairingRouter } from "./pairing.routes.js";
 import { createWhatsAppConnection } from "./whatsapp/connection.js";
 import { createSendQueue } from "./whatsapp/send-queue.js";
@@ -67,7 +67,14 @@ const assistant = createAssistantHandler({
   downloadMediaMessage, backendUrl: MINIMARKET_API_URL, secret: INFORME_INTERNO_SECRET,
 });
 const app = express();
-app.use("/pair", createPairingRouter({ secret: QR_PAGE_SECRET, getState: connection.getState }));
+app.use("/pair", createPairingRouter({
+  secret: QR_PAGE_SECRET,
+  getState: connection.getState,
+  resetSession: () => connection.reset(async () => {
+    const { movidos, destino } = await archivarSesion(AUTH_DIR);
+    console.log(`Sesión desvinculada apartada: ${movidos} archivo(s) en ${destino}`);
+  }),
+}));
 app.use("/interno", createGatewayRouter({
   secret: INFORME_INTERNO_SECRET, authDir: AUTH_DIR, store: mensajesEnviados,
   getState: connection.getState, enviar: queue.enviar,

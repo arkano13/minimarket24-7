@@ -2,7 +2,7 @@
 // Utilidades para que los mensajes que manda el bot de WhatsApp se puedan
 // descifrar en el teléfono que los recibe (evita el aviso "Esperando
 // mensaje. Esto puede tomar tiempo") y para reparar las sesiones de cifrado.
-import { readdir, unlink } from "node:fs/promises";
+import { mkdir, readdir, rename, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 
 // Guarda en memoria los últimos mensajes que el bot envió. Baileys los pide
@@ -82,4 +82,33 @@ export async function borrarSesionesSignal(carpeta) {
   );
 
   return sesiones.length;
+}
+
+// Archivos que NO son de la sesión de WhatsApp y se quedan donde están.
+const CONSERVAR_AL_ARCHIVAR = new Set(["mensajes-reenvio.json", "mensajes-reenvio.json.tmp"]);
+
+// Aparta la sesión que WhatsApp ya invalidó (401) a una subcarpeta
+// "desvinculadas/<fecha>" en vez de borrarla, por si hace falta revisarla.
+// Deja la carpeta sin creds.json para que el bot arranque listo para vincular.
+// Devuelve cuántos archivos movió y a dónde.
+export async function archivarSesion(carpeta, fecha = new Date()) {
+  const archivos = await readdir(carpeta).catch(() => []);
+  const destino = path.join(carpeta, "desvinculadas", fecha.toISOString().replace(/[:.]/g, "-"));
+  let movidos = 0;
+
+  for (const nombre of archivos) {
+    if (CONSERVAR_AL_ARCHIVAR.has(nombre)) continue;
+
+    const origen = path.join(carpeta, nombre);
+    const info = await stat(origen).catch(() => null);
+
+    if (!info?.isFile()) continue;
+
+    if (movidos === 0) await mkdir(destino, { recursive: true });
+
+    await rename(origen, path.join(destino, nombre));
+    movidos++;
+  }
+
+  return { movidos, destino };
 }

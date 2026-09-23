@@ -1,8 +1,11 @@
+import { createPairingRouter } from "./pairing.routes.js";
 // apps/backend/src/bots/whatsapp.bot.js
 import "dotenv/config";
 import express from "express";
 import qrcode from "qrcode";
-import { makeWASocket, useMultiFileAuthState, downloadMediaMessage, DisconnectReason } from "@whiskeysockets/baileys";
+import { makeWASocket, useMultiFileAuthState, downloadMediaMessage, DisconnectReason, BufferJSON } from "@whiskeysockets/baileys";
+import path from "node:path";
+import { crearAlmacenPersistente } from "../lib/whatsapp-message-store.js";
 import { Boom } from "@hapi/boom";
 import pino from "pino";
 import { prisma } from "../lib/prisma.js";
@@ -14,8 +17,6 @@ import { getShiftReport } from "../modules/reportes/reportes.service.js";
 import { generarInformeTurnoHTML, safePdfName } from "@minisuper/shared/shift-report-pdf";
 import { renderHtmlToPdf } from "../lib/pdf-render.js";
 import {
-  borrarSesionesSignal,
-  crearAlmacenMensajes,
   crearCacheReintentos,
   listarSesionesSignal,
 } from "../lib/whatsapp-session.js";
@@ -48,7 +49,16 @@ let ultimoQrDataUrl = null;
 
 // Últimos mensajes enviados: Baileys los necesita para reenviarlos cuando el
 // teléfono que los recibe no logra descifrarlos ("Esperando mensaje").
-const mensajesEnviados = crearAlmacenMensajes(150);
+const mensajesEnviados = await crearAlmacenPersistente(AUTH_DIR, {
+  replacer: BufferJSON.replacer, reviver: BufferJSON.reviver,
+});
+console.log("Carpeta de sesión y reenvíos:", path.resolve(AUTH_DIR));
+if (process.env.RAILWAY_VOLUME_MOUNT_PATH) {
+  const relative = path.relative(path.resolve(process.env.RAILWAY_VOLUME_MOUNT_PATH), path.resolve(AUTH_DIR));
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    console.error("WHATSAPP_SESSION_DIR está fuera del volumen. Las sesiones y reenvíos pueden perderse al redesplegar.");
+  }
+}
 const cacheReintentos = crearCacheReintentos();
 
 // Reasignado en cada (re)conexión dentro de iniciarBot() — el handler
@@ -62,30 +72,10 @@ const reconexion = createReconnectController(iniciarBot, {
 const app = express();
 app.use(express.json());
 
-app.get("/pair", async (req, res) => {
-  if (QR_PAGE_SECRET && req.query.clave !== QR_PAGE_SECRET) {
-    return res.status(403).send("No autorizado.");
-  }
-
-  if (estadoConexion === "conectado") {
-    return res.send(`<h1>Ya conectado</h1><p>El bot de WhatsApp del asistente ya está vinculado.</p>`);
-  }
-
-  if (!ultimoQrDataUrl) {
-    return res.send(`<meta http-equiv="refresh" content="3"><p>Generando QR, esperá unos segundos...</p>`);
-  }
-
-  res.send(`
-    <html>
-      <head><meta http-equiv="refresh" content="20"></head>
-      <body style="display:flex;flex-direction:column;align-items:center;font-family:sans-serif;padding-top:40px;">
-        <h1>Escaneá con WhatsApp</h1>
-        <p>Dispositivos vinculados → Vincular dispositivo</p>
-        <img src="${ultimoQrDataUrl}" width="300" height="300" />
-      </body>
-    </html>
-  `);
-});
+app.use("/pair", createPairingRouter({
+  secret: QR_PAGE_SECRET,
+  getState: () => ({ socket: sock, status: estadoConexion, qr: ultimoQrDataUrl }),
+}));
 
 app.listen(process.env.PORT || 3002, () => {
   console.log(`Página de pairing en el puerto ${process.env.PORT || 3002}`);
@@ -183,7 +173,7 @@ async function enviar(jid, contenido) {
   const enviado = await sock.sendMessage(jid, contenido);
 
   if (enviado?.key?.id && enviado.message) {
-    mensajesEnviados.guardar(enviado.key.id, enviado.message);
+    await mensajesEnviados.guardar(enviado.key.id, enviado.message);
   }
 
   return enviado;
@@ -210,23 +200,14 @@ app.get("/interno/estado", async (req, res) => {
   });
 });
 
-// Repara "Esperando mensaje": borra las sesiones de cifrado (NO desvincula el
-// número, conserva creds.json) para que se negocien de nuevo en el próximo
-// envío. Solo por POST y con el secreto en el encabezado X-Interno-Secret.
+// Compatibilidad con enlaces antiguos: no eliminar claves mientras el socket
+// puede estar leyéndolas/escribiéndolas. La recuperación requiere detener el bot.
 app.post("/interno/reset-sesiones", async (req, res) => {
   if (req.get("X-Interno-Secret") !== INFORME_INTERNO_SECRET || !INFORME_INTERNO_SECRET) {
     return res.status(403).json({ error: "No autorizado." });
   }
 
-  try {
-    const borradas = await borrarSesionesSignal(AUTH_DIR);
-    console.log(`Sesiones de cifrado borradas: ${borradas}. Se renegocian en el próximo envío.`);
-
-    res.json({ borradas });
-  } catch (err) {
-    console.error("Error borrando las sesiones de cifrado:", err);
-    res.status(500).json({ error: "No se pudieron borrar las sesiones." });
-  }
+  res.status(409).json({ error: "El borrado de sesiones en caliente está deshabilitado. Detén el bot antes de una recuperación de vinculación." });
 });
 
 // Manda un mensaje corto a todos los destinatarios de informes para comprobar
@@ -260,6 +241,10 @@ async function iniciarBot() {
 
   const currentSocket = makeWASocket({
     auth: state,
+    // Da más margen antes de que el cliente rote referencias QR y cierre
+    // la conexión por agotarlas. No modifica la caducidad fijada por WhatsApp
+    // para los códigos de vinculación por teléfono.
+    qrTimeout: 120_000,
     logger: pino({ level: LOG_LEVEL }),
     // Sin getMessage, Baileys no puede reenviar un mensaje que el teléfono
     // del destinatario no descifró, y ese mensaje queda en "Esperando mensaje".

@@ -9,12 +9,13 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "test": "node --experimental-test-module-mocks --test",
-    "test:coverage": "node --experimental-test-module-mocks --experimental-test-coverage --test",
+    "test": "node --experimental-test-module-mocks --test test",
+    "test:coverage": "node --experimental-test-module-mocks --experimental-test-coverage --test test",
     "prisma:generate": "prisma generate",
     "prisma:format": "prisma format",
     "bot:telegram": "node --watch src/bots/telegram.bot.js",
     "bot:test": "node --watch src/bots/test-console.js",
+    "gateway:whatsapp": "node src/bots/whatsapp.bot.js",
     "bot:whatsapp": "node src/bots/whatsapp.bot.js",
     "bot:whatsapp:dev": "node --watch src/bots/whatsapp.bot.js",
     "prisma:deploy": "prisma migrate deploy"

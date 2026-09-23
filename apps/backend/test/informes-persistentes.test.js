@@ -39,35 +39,35 @@ function database() {
   return { db, job, deliveries };
 }
 const now = () => new Date("2026-09-22T12:00:00Z");
-const options = { url: "http://bot:8080/", secret: "test-only", now };
+const options = { now, destinatarios: ["a"], crearDocumento: async () => ({}) };
 
 test("el cierre guarda el reporte a cinco minutos usando la transacción recibida", async () => {
   const { db, job } = database();
   await notificarCierreDeCaja("B", "2026-09-22", 1, db, now());
   assert.equal(job.proximoIntento.getTime() - now().getTime(), 300_000);
   let requests = 0;
-  await procesarInformesPendientes({ ...options, db, fetchImpl: async () => { requests++; } });
+  await procesarInformesPendientes({ ...options, db, enviar: async () => { requests++; } });
   assert.equal(requests, 0);
 });
 
 test("fallo de red persiste reintento, otro worker lo recupera y confirma", async () => {
   const { db, job } = database();
-  await procesarInformesPendientes({ ...options, db, fetchImpl: async () => { throw new Error("sin red"); } });
+  await procesarInformesPendientes({ ...options, db, enviar: async () => { throw new Error("sin red"); } });
   assert.equal(job.enviadoEn, null);
   assert.equal(job.intentos, 1);
   assert.equal(job.proximoIntento.getTime() - now().getTime(), 30_000);
   assert.equal(job.bloqueoHasta, null);
   await procesarInformesPendientes({ ...options, now: () => new Date(now().getTime() + 31_000), db,
-    fetchImpl: async (url) => { assert.equal(url, "http://bot:8080/interno/informe-turno"); return { status: 200, json: async () => ({ enviado: true }) }; },
+    enviar: async () => ({ key: { id: "confirmado" } }),
   });
   assert.ok(job.enviadoEn);
 });
 
-test("un 202 no marca enviado y dos workers solo despachan una vez", async () => {
+test("una respuesta sin ID no marca enviado y dos workers solo despachan una vez", async () => {
   const { db, job } = database();
   let calls = 0;
-  const fetchImpl = async () => { calls++; await new Promise(setImmediate); return { status: 202 }; };
-  await Promise.all([procesarInformesPendientes({ ...options, db, fetchImpl }), procesarInformesPendientes({ ...options, db, fetchImpl })]);
+  const enviar = async () => { calls++; await new Promise(setImmediate); return {}; };
+  await Promise.all([procesarInformesPendientes({ ...options, db, enviar }), procesarInformesPendientes({ ...options, db, enviar })]);
   assert.equal(calls, 1);
   assert.equal(job.enviadoEn, null);
 });
@@ -76,10 +76,10 @@ test("reinicio recupera un bloqueo vencido pero respeta uno vigente", async () =
   const { db, job } = database();
   let calls = 0;
   job.bloqueoHasta = new Date(now().getTime() + 1000);
-  const fetchImpl = async () => { calls++; return { status: 200, json: async () => ({ enviado: true }) }; };
-  await procesarInformesPendientes({ ...options, db, fetchImpl });
+  const enviar = async () => { calls++; return { key: { id: "confirmado" } }; };
+  await procesarInformesPendientes({ ...options, db, enviar });
   assert.equal(calls, 0);
-  await procesarInformesPendientes({ ...options, db, fetchImpl, now: () => new Date(now().getTime() + 1001) });
+  await procesarInformesPendientes({ ...options, db, enviar, now: () => new Date(now().getTime() + 1001) });
   assert.equal(calls, 1);
 });
 

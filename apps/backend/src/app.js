@@ -30,6 +30,8 @@ import { configuracionRouter } from "./modules/configuracion/configuracion.route
 import { usuariosRouter } from "./modules/usuarios/usuarios.routes.js";
 
 import { bitacoraRouter } from "./modules/bitacora/bitacora.routes.js";
+import { whatsappAssistantRouter } from "./modules/asistente/asistente-whatsapp.routes.js";
+import { internalReportRouter } from "./modules/caja/informe-interno.routes.js";
   
 
 const allowedOrigins = new Set([
@@ -41,6 +43,11 @@ const allowedOrigins = new Set([
 export const app = express();
 
 app.disable("x-powered-by");
+
+// El gateway puede enviar audio base64. Esta ruta tiene su propio límite y
+// permanece fuera de la API pública.
+app.use("/interno/whatsapp", whatsappAssistantRouter);
+app.use("/interno", internalReportRouter);
 
 app.use(
   cors({

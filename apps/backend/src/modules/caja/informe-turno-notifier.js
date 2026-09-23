@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "../../lib/prisma.js";
+import { entregarInforme } from "./informe-entrega.js";
+import { crearDocumentoInforme } from "./informe-documento.js";
+import { enviarPorWhatsApp } from "./whatsapp-gateway.client.js";
 
 const LEASE_MS = 10 * 60_000;
 
@@ -11,11 +14,15 @@ export async function notificarCierreDeCaja(turno, fecha, turnoCajaId, transacti
 }
 
 export async function procesarInformesPendientes({
-  db = prisma, fetchImpl = fetch, now = () => new Date(),
-  url = process.env.WHATSAPP_BOT_URL || (process.env.NODE_ENV === "production" || process.env.RAILWAY_ENVIRONMENT_ID ? "" : "http://127.0.0.1:3002"),
-  secret = process.env.INFORME_INTERNO_SECRET,
+  db = prisma, now = () => new Date(),
+  crearDocumento = crearDocumentoInforme,
+  enviar = enviarPorWhatsApp,
+  destinatarios = [
+    process.env.WHATSAPP_NUMERO_AUTORIZADO,
+    ...(process.env.WHATSAPP_NUMEROS_INFORME_ADICIONALES || "").split(",").map(value => value.trim()),
+  ].filter(Boolean),
 } = {}) {
-  if (!url || !secret) return;
+  if (enviar === enviarPorWhatsApp && (!process.env.WHATSAPP_BOT_URL || !process.env.INFORME_INTERNO_SECRET)) return;
   const jobs = await db.informePendiente.findMany({
     where: { enviadoEn: null, proximoIntento: { lte: now() }, OR: [{ bloqueoHasta: null }, { bloqueoHasta: { lte: now() } }] },
     orderBy: { proximoIntento: "asc" }, take: 5,
@@ -28,15 +35,9 @@ export async function procesarInformesPendientes({
     });
     if (!claim.count) continue;
     try {
-      const response = await fetchImpl(`${url.replace(/\/+$/, "")}/interno/informe-turno`, {
-        method: "POST", headers: { "Content-Type": "application/json", "X-Interno-Secret": secret },
-        body: JSON.stringify({ turno: job.turno, fecha: job.fecha, turnoCajaId: job.turnoCajaId }),
-        signal: AbortSignal.timeout(90_000),
+      await entregarInforme({
+        db, turnoCajaId: job.turnoCajaId, destinatarios, crearDocumento, enviar, now,
       });
-      // Un 202 antiguo NO confirma el envío.
-      if (response.status !== 200 || (await response.json()).enviado !== true) {
-        throw new Error(`Bot sin confirmación de envío (HTTP ${response.status}).`);
-      }
       await db.informePendiente.updateMany({
         where: { turnoCajaId: job.turnoCajaId, bloqueoToken: token },
         data: { enviadoEn: now(), bloqueoToken: null, bloqueoHasta: null, ultimoError: null },
@@ -66,7 +67,7 @@ export function iniciarColaInformes() {
     catch (error) { console.error("Error procesando la cola de informes:", error.message); }
     finally { busy = false; }
   };
-const timer = setInterval(tick, 10 * 60_000); // cada 2 minutos, para bajar el costo
+  const timer = setInterval(tick, 2 * 60_000);
   timer.unref();
   void tick();
   return () => { stopped = true; clearInterval(timer); };

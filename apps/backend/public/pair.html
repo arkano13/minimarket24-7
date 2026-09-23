@@ -56,6 +56,11 @@
   const qr = document.getElementById('qr');
   const generate = document.getElementById('generate');
   const check = document.getElementById('check');
+  let polling = null;
+  let working = false;
+  function detail(data) {
+    return data.ultimaDesconexion ? ' Última desconexión: ' + data.ultimaDesconexion.codigo + ' (' + data.ultimaDesconexion.fecha + ').' : '';
+  }
   const initialKey = new URLSearchParams(location.search).get('clave');
   if (initialKey) { secret.value = initialKey; history.replaceState(null, '', location.pathname); }
   const base = location.pathname.replace(/\/$/, '');
@@ -65,21 +70,45 @@
       headers: { 'Content-Type': 'application/json', 'X-Pair-Secret': secret.value },
     });
     const body = await response.json();
-    if (!response.ok) throw new Error(body.error || 'No se pudo completar la solicitud.');
+    if (!response.ok) throw new Error((body.error || 'No se pudo completar la solicitud.') + detail(body));
     return body;
   }
   async function run(action) {
+    working = true;
     generate.disabled = check.disabled = true;
     try { await action(); }
     catch (error) { status.textContent = error.name === 'TimeoutError' ? 'La solicitud tardó demasiado. Consulta la conexión antes de reintentar.' : error.message; }
-    finally { generate.disabled = check.disabled = false; }
+    finally { working = false; generate.disabled = check.disabled = false; }
+  }
+  function showState(data) {
+    status.textContent = data.mensaje + detail(data);
+    qr.hidden = !data.qr;
+    if (data.qr) qr.src = data.qr; else qr.removeAttribute('src');
+    if (data.conectado || !data.listo) { result.hidden = true; code.textContent = ''; }
+    if (data.conectado || ['desvinculado', 'reemplazada'].includes(data.estado)) { clearInterval(polling); polling = null; }
+  }
+  function watchState() {
+    if (polling) return;
+    polling = setInterval(async () => {
+      if (working || !secret.value || document.hidden) return;
+      working = true;
+      try {
+        const data = await request('/estado');
+        if (!result.hidden && data.listo) return;
+        showState(data);
+      } catch (error) {
+        status.textContent = error.message;
+        clearInterval(polling); polling = null;
+      } finally { working = false; }
+    }, 4000);
   }
   document.getElementById('pair-form').addEventListener('submit', (event) => {
     event.preventDefault();
     void run(async () => {
       result.hidden = true;
       code.textContent = '';
-      status.textContent = 'Solicitando el código a WhatsApp…';
+      status.textContent = 'Conectando y solicitando el código a WhatsApp…';
+      watchState();
       const data = await request('/codigo', { method: 'POST', body: JSON.stringify({ numero: phone.value.trim() }) });
       code.textContent = data.codigo.match(/.{1,4}/g).join('-');
       result.hidden = false;
@@ -88,12 +117,10 @@
   });
   check.addEventListener('click', () => void run(async () => {
     const data = await request('/estado');
-    status.textContent = data.conectado ? 'WhatsApp conectado correctamente.' : data.listo ? 'Listo para vincular. Puedes solicitar el código.' : 'Estado: ' + data.estado + '. Espera y vuelve a consultar.';
-    qr.hidden = !data.qr;
-    if (data.qr) qr.src = data.qr; else qr.removeAttribute('src');
-    if (data.conectado || !data.listo) { result.hidden = true; code.textContent = ''; }
+    watchState();
+    showState(data);
   }));
-  secret.addEventListener('input', () => { result.hidden = true; qr.hidden = true; code.textContent = ''; qr.removeAttribute('src'); });
+  secret.addEventListener('input', () => { clearInterval(polling); polling = null; result.hidden = true; qr.hidden = true; code.textContent = ''; qr.removeAttribute('src'); });
 </script>
 </body>
 </html>

@@ -12,7 +12,7 @@ async function setup(t, secret = "test-key") {
   } };
   const app = express();
   app.use(express.json());
-  app.use('/pair', createPairingRouter({ getState: () => state, secret, now: () => clock }));
+  app.use('/pair', createPairingRouter({ getState: () => state, secret, now: () => clock, waitMs: 0 }));
   const server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}/pair`;
@@ -63,6 +63,25 @@ test('un cambio de socket descarta el código anterior', async (t) => {
   const s = await setup(t);
   s.state.socket.requestPairingCode = async () => { s.state.socket = null; return 'ABCD1234'; };
   assert.equal((await s.post()).status, 409);
+});
+
+test('el código funciona tras el evento connecting aunque no exista imagen QR', async (t) => {
+  const s = await setup(t);
+  s.state.qr = null;
+  s.state.ready = true;
+  assert.equal((await s.post()).status, 200);
+});
+
+test('desvinculado muestra la causa y no recomienda esperar', async (t) => {
+  const s = await setup(t);
+  s.state.socket = null;
+  s.state.status = 'desvinculado';
+  s.state.lastDisconnect = { codigo: 401, fecha: '2026-09-22T12:00:00Z' };
+  const response = await s.post();
+  assert.equal(response.status, 409);
+  const data = await response.json();
+  assert.match(data.error, /No se resolverá esperando/);
+  assert.equal(data.ultimaDesconexion.codigo, 401);
 });
 test('errores de WhatsApp no exponen credenciales y se pueden reintentar', async (t) => {
   const s = await setup(t);

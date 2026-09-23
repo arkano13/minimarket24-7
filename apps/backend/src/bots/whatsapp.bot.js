@@ -46,6 +46,8 @@ if (!NUMERO_AUTORIZADO) throw new Error("Falta WHATSAPP_NUMERO_AUTORIZADO en el 
 
 let estadoConexion = "conectando";
 let ultimoQrDataUrl = null;
+let pairingReady = false;
+let ultimaDesconexion = null;
 
 // Últimos mensajes enviados: Baileys los necesita para reenviarlos cuando el
 // teléfono que los recibe no logra descifrarlos ("Esperando mensaje").
@@ -74,7 +76,7 @@ app.use(express.json());
 
 app.use("/pair", createPairingRouter({
   secret: QR_PAGE_SECRET,
-  getState: () => ({ socket: sock, status: estadoConexion, qr: ultimoQrDataUrl }),
+  getState: () => ({ socket: sock, status: estadoConexion, qr: ultimoQrDataUrl, ready: pairingReady, lastDisconnect: ultimaDesconexion }),
 }));
 
 app.listen(process.env.PORT || 3002, () => {
@@ -237,6 +239,7 @@ app.post("/interno/prueba-envio", async (req, res) => {
 });
 
 async function iniciarBot() {
+  pairingReady = false;
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
   const currentSocket = makeWASocket({
@@ -263,6 +266,7 @@ async function iniciarBot() {
   async function manejarConexion(update) {
     if (sock !== currentSocket) return;
     const { connection, lastDisconnect, qr } = update;
+    if (connection === "connecting" || qr) pairingReady = true;
 
     if (qr) {
       estadoConexion = "esperando_qr";
@@ -275,6 +279,8 @@ async function iniciarBot() {
     if (connection === "close") {
       const motivo = lastDisconnect?.error?.output?.statusCode ?? new Boom(lastDisconnect?.error).output.statusCode;
       console.error("WhatsApp desconectado:", { codigo: motivo, motivo: lastDisconnect?.error?.message ?? "Sin detalle" });
+      ultimaDesconexion = { codigo: motivo, fecha: new Date().toISOString() };
+      pairingReady = false;
       sock = null;
       ultimoQrDataUrl = null;
       currentSocket.ev.removeAllListeners("connection.update");
@@ -307,6 +313,8 @@ async function iniciarBot() {
       }
     } else if (connection === "open") {
       estadoConexion = "conectado";
+      pairingReady = false;
+      ultimaDesconexion = null;
       reconexion.connected();
       ultimoQrDataUrl = null;
       console.log("Bot de WhatsApp del asistente conectado.");

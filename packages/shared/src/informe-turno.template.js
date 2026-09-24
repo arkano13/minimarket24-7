@@ -171,7 +171,7 @@ function renderVentasPanel(cobros, resumen) {
         <span class="cierre-total-label">Total vendido &middot; ${formatCantidad(resumen.operaciones)} ${Number(resumen.operaciones) === 1 ? 'venta' : 'ventas'}</span>
         <span class="cierre-total-value">${formatMoney(resumen.totalVendido)}</span>
       </div>
-      <div class="footnote" style="margin-top:8px;">Solo cuenta ventas. No incluye entradas ni salidas de caja.</div>
+      <div class="footnote" style="margin-top:8px;">Solo cuenta ventas (incluye las fiadas). No incluye entradas ni salidas de caja.</div>
     </div>`;
 }
 
@@ -322,7 +322,10 @@ function renderCreditos(creditos) {
     etiquetaEjemplo: creditos.etiquetaEjemplo,
     columnas: [
       { header: 'Cliente', render: r => `<span class="product-name">${escapeHtml(r.cliente)}</span>` },
+      { header: 'Venta', render: r => escapeHtml(r.venta ?? '\u2014') },
       { header: 'Hora', render: r => escapeHtml(r.hora) },
+      { header: 'Cajero', render: r => escapeHtml(r.cajero ?? '\u2014') },
+      { header: 'Estado', render: r => `<span class="${r.estado === 'Pagado' ? 'type-ingreso' : 'type-retiro'}">${escapeHtml(r.estado ?? 'Pendiente')}</span>` },
       { header: 'Monto', num: true, render: r => formatMoney(r.monto) },
     ],
     filas: creditos.items,

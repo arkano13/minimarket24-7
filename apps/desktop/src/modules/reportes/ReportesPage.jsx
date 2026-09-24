@@ -7,6 +7,7 @@ const PAYMENT_LABELS = {
   EFECTIVO: "Efectivo",
   TARJETA: "Tarjeta",
   TRANSFERENCIA: "Transferencia",
+  CREDITO: "Crédito (fiado)",
 };
 
 function dateText(date = new Date()) {

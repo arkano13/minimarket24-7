@@ -6,6 +6,7 @@ const PAYMENT_LABELS = {
   EFECTIVO: "Efectivo",
   TARJETA: "Tarjeta",
   TRANSFERENCIA: "Transferencia",
+  CREDITO: "Crédito (fiado)",
 };
 
 const SHIFT_SCHEDULES = {
@@ -149,12 +150,25 @@ function buildResumenHtml(report) {
     `por un total de ${formatMoney(summary.total)}, con ${totalUnits.toLocaleString("es-HN", { maximumFractionDigits: 3 })} unidades vendidas ` +
     `en ${products.length} ${products.length === 1 ? "producto distinto" : "productos distintos"}. ` +
     `El método con mayor participación fue ${PAYMENT_LABELS[mainPayment?.metodo] ?? "sin información"}. ` +
+    creditSentence(report) +
     leaderSentence +
     profitSentence +
     `El cuadre total del turno (efectivo + tarjeta + transferencia + entradas − salidas) es de ${formatMoney(cuadre.cuadreTotal)}, ` +
     `de los cuales ${formatMoney(cuadre.efectivoEsperado)} corresponden al efectivo esperado en caja ` +
     `(las compras a proveedores no se descuentan de caja salvo que se registren como salida).`
   );
+}
+
+function creditSentence(report) {
+  const creditos = Array.isArray(report?.creditos) ? report.creditos : [];
+  const total = creditos.reduce((sum, credito) => sum + Number(credito.monto ?? 0), 0);
+
+  if (total <= 0) {
+    return "";
+  }
+
+  return `Se vendieron ${formatMoney(total)} a crédito (${creditos.length} ${creditos.length === 1 ? "venta" : "ventas"}); ` +
+    "ese monto está en el total vendido pero no en el cuadre ni en la caja. ";
 }
 
 function buildNotaPie() {
@@ -261,6 +275,8 @@ function datosDesdeInforme(report) {
       monto: payment.total,
       porcentaje: Math.round(Number(payment.porcentaje ?? 0)),
       operaciones: payment.operaciones,
+      // La barra de crédito va en dorado para distinguirla del dinero cobrado.
+      dorado: payment.metodo === "CREDITO",
     })),
 
     horas: hours.map((hour) => ({
@@ -297,7 +313,10 @@ function datosDesdeInforme(report) {
     creditos: {
       items: creditos.map((credito) => ({
         cliente: credito.cliente,
+        venta: credito.ventaId ? `#${credito.ventaId}` : "—",
         hora: horaCorta(credito.creadoEn),
+        cajero: credito.cajero ?? "—",
+        estado: credito.pagado ? "Pagado" : "Pendiente",
         monto: credito.monto,
       })),
     },

@@ -503,6 +503,10 @@
   background: var(--ink-soft);
 }
 
+.reports-payment--credito .reports-payment__track i {
+  background: var(--warning);
+}
+
 .reports-payment small {
   display: block;
   margin-top: 5px;

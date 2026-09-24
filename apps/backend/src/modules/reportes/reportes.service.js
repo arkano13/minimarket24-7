@@ -492,6 +492,12 @@ export async function getShiftReport(
         },
       },
 
+      clienteEspecial: {
+        select: {
+          nombre: true,
+        },
+      },
+
       detalles: {
         orderBy: {
           id: "asc",
@@ -534,6 +540,17 @@ export async function getShiftReport(
       "TRANSFERENCIA",
       {
         metodo: "TRANSFERENCIA",
+        operaciones: 0,
+        total: 0,
+      },
+    ],
+
+    // Ventas fiadas: cuentan en "Total vendido" pero NO en el cuadre ni en
+    // el efectivo esperado, porque ese dinero no entró todavía.
+    [
+      "CREDITO",
+      {
+        metodo: "CREDITO",
         operaciones: 0,
         total: 0,
       },
@@ -815,10 +832,39 @@ export async function getShiftReport(
       resumen: cuadreCaja.resumen,
     },
 
-    // Pendientes de conectar a datos reales: se mantienen vacíos hasta
-    // que se defina el origen de créditos (fiar) e inventario para el
-    // informe de turno.
-    creditos: [],
+    // Ventas a crédito (fiadas) del periodo: a quién, cuándo y cuánto.
+    // Explican la diferencia entre "Total vendido" y "Cuadre total".
+    creditos: sales
+      .flatMap((sale) => {
+        const monto = sale.pagos
+          .filter((payment) => payment.metodo === "CREDITO")
+          .reduce((sum, payment) => sum + Number(payment.monto), 0);
+
+        if (monto <= 0) {
+          return [];
+        }
+
+        return [
+          {
+            ventaId: sale.id,
+            cliente:
+              sale.clienteNombre?.trim() ||
+              sale.clienteEspecial?.nombre ||
+              "Sin nombre",
+            creadoEn: sale.creadoEn,
+            monto: roundMoney(monto),
+            totalVenta: roundMoney(Number(sale.total)),
+            cajero: sale.usuario?.nombre ?? null,
+            pagado: Boolean(sale.creditoPagado),
+          },
+        ];
+      })
+      .sort(
+        (first, second) =>
+          new Date(first.creadoEn) - new Date(second.creadoEn),
+      ),
+
+    // Pendiente de conectar a datos reales.
     movimientosInventario: [],
 
     ventas: sales.map((sale) => {

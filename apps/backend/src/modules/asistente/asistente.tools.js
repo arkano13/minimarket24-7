@@ -63,12 +63,17 @@ export const tools = [
   },
   {
     name: "get_sales_report",
-    description: "Resumen de ventas completadas en un rango de fechas. Incluye: total general, desglose por método de pago (efectivo/tarjeta/transferencia), desglose por hora del día, y desglose COMPLETO POR PRODUCTO con cantidad vendida, monto y ganancia de cada uno. Úsala también para preguntas sobre cuánto se vendió de un producto o tipo de producto específico en un rango de fechas — filtrá vos mismo el resultado según lo que te pidan (ej: solo los productos de cerveza) en vez de decir que no tenés esa información.",
+    description: "Resumen de ventas completadas de uno o varios días comerciales, opcionalmente de turnos específicos (A, B o C). Es el MISMO cálculo del informe de turno que llega por WhatsApp. Incluye: total vendido, cuadre total, efectivo esperado, desglose por método de pago (efectivo/tarjeta/transferencia/crédito), ventas a crédito con cliente, desglose por hora y desglose COMPLETO POR PRODUCTO con cantidad, monto y ganancia. Úsala para '¿cuánto se vendió en el turno C?', '¿cuánto se vendió ayer?' o de un producto en un rango — filtrá vos mismo los productos según lo que te pidan.",
     parameters: {
       type: Type.OBJECT,
       properties: {
-        from: { type: Type.STRING, description: "YYYY-MM-DD" },
-        to: { type: Type.STRING, description: "YYYY-MM-DD, opcional (default = from)" },
+        from: { type: Type.STRING, description: "Día comercial inicial YYYY-MM-DD" },
+        to: { type: Type.STRING, description: "Día comercial final YYYY-MM-DD, opcional (default = from)" },
+        turnos: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description: "Turnos a incluir: 'A', 'B' y/o 'C'. Vacío u omitido = día completo (A, B y C).",
+        },
       },
       required: ["from"],
     },
@@ -91,7 +96,7 @@ export const tools = [
   },
   {
     name: "list_cash_shifts",
-    description: "Lista todos los turnos de caja de un día (por defecto hoy), con totales y diferencias",
+    description: "Lista los cierres de caja de un día comercial (por defecto hoy): turno (A, B o C), hora de apertura y cierre en hora de Honduras, cajero, ventas, efectivo, tarjeta, transferencia, entradas, salidas, efectivo esperado, contado y diferencia (faltante/sobrante).",
     parameters: {
       type: Type.OBJECT,
       properties: { date: { type: Type.STRING, description: "YYYY-MM-DD, opcional" } },

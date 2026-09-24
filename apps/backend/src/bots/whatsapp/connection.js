@@ -1,8 +1,14 @@
 import { createReconnectController } from '../../lib/reconnect-controller.js';
 import { describeDisconnect } from '../../lib/whatsapp-disconnect.js';
 
+// getVersion: devuelve la versión de WhatsApp Web a anunciar (igual que el
+// HotelBot con fetchLatestWaWebVersion). Con la versión por defecto de
+// Baileys, WhatsApp rechaza la vinculación al final con un 401.
+// onLoggedOut: si se pasa, al recibir 401 (sesión cerrada) se aparta la
+// sesión y se vuelve a conectar solo, listo para un código nuevo, igual que
+// el HotelBot. Sin él, el 401 detiene la conexión.
 export function createWhatsAppConnection({ loadAuth, makeSocket, toQr, socketOptions = {},
-  onMessage, logger = console, reconnectOptions = {} }) {
+  onMessage, logger = console, reconnectOptions = {}, getVersion = null, onLoggedOut = null }) {
   let socket = null;
   let status = 'conectando';
   let qr = null;
@@ -26,7 +32,13 @@ export function createWhatsAppConnection({ loadAuth, makeSocket, toQr, socketOpt
     const registered = Boolean(state.creds.registered);
     let opened = false;
     let qrVersion = 0;
-    const current = makeSocket({ ...socketOptions, auth: state });
+    let version = null;
+    if (getVersion) {
+      try { version = await getVersion(); }
+      catch (error) { logger.error('No se pudo obtener la versión de WhatsApp Web, se usa la de Baileys:', error.message); }
+      if (stopped) return;
+    }
+    const current = makeSocket({ ...socketOptions, ...(version ? { version } : {}), auth: state });
     socket = current;
     status = 'conectando';
     ready = false;
@@ -48,6 +60,18 @@ export function createWhatsAppConnection({ loadAuth, makeSocket, toQr, socketOpt
         ready = false;
         qr = null;
         status = code === 401 ? 'desvinculado' : code === 440 ? 'reemplazada' : 'conectando';
+        if (code === 401 && onLoggedOut) {
+          // Igual que el HotelBot: sesión cerrada -> apartar y empezar limpia.
+          void credentials
+            .then(() => onLoggedOut())
+            .catch(error => logger.error('No se pudo apartar la sesión cerrada:', error.message))
+            .then(() => {
+              if (stopped) return;
+              status = 'conectando';
+              reconnect.retry();
+            });
+          return;
+        }
         if (code === 401 || code === 440) reconnect.stop();
         else reconnect.retry();
         return;
@@ -112,7 +136,7 @@ export function createWhatsAppConnection({ loadAuth, makeSocket, toQr, socketOpt
         detach = () => {};
         const current = socket;
         socket = null;
-        current?.end?.(new Error('Sesión nueva'));
+        current?.end?.(undefined);
         await prepare();
         lastDisconnect = null;
         qr = null;
@@ -133,7 +157,9 @@ export function createWhatsAppConnection({ loadAuth, makeSocket, toQr, socketOpt
       status = 'detenido';
       ready = false;
       qr = null;
-      current?.end(new Error('Servicio detenido'));
+      // end(undefined) = cierre normal. Así WhatsApp no lo toma como un
+      // conflicto de sesión en cada redeploy (lo mismo hace el HotelBot).
+      current?.end(undefined);
       await credentials;
     },
   };

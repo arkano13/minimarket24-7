@@ -1,96 +1,119 @@
-import { Router, json } from "express";
-import { fileURLToPath } from "node:url";
+import { Router } from "express";
 
-export function createPairingRouter({ getState, secret, resetSession = null, now = Date.now, waitMs = 20_000 }) {
-  const router = Router();
-  // Sin esto req.body llega vacío y /codigo nunca recibe el número.
-  router.use(json({ limit: "10kb" }));
-  let busy = false;
-  let lastRequest = -Infinity;
-  let cached = null;
-  function describe(state) {
-    const conectado = state.status === "conectado";
-    const registered = Boolean(state.socket?.authState?.creds?.registered);
-    const terminal = ["desvinculado", "reemplazada"].includes(state.status);
-    const listo = !terminal && !conectado && !registered && Boolean(state.socket && (state.ready || state.qr) && state.socket.ws?.isOpen !== false);
-    let mensaje = "El bot está intentando conectar con WhatsApp. Esta página actualizará el estado.";
-    if (conectado) mensaje = "WhatsApp conectado correctamente. No necesitas otro código.";
-    else if (state.status === "desvinculado") mensaje = "WhatsApp cerró la sesión. No se resolverá esperando ni pidiendo otro código: pulsa «Empezar sesión nueva» y luego solicita el código.";
-    else if (state.status === "reemplazada") mensaje = "Otra conexión reemplazó a este bot. Detén la otra instancia que usa la misma sesión antes de reiniciar este servicio.";
-    else if (registered) mensaje = "Hay una sesión guardada y se está reconectando. No se puede generar un código para reemplazarla.";
-    else if (listo) mensaje = "Listo para vincular. Puedes solicitar el código.";
-    return { conectado, estado: state.status, listo, mensaje, ultimaDesconexion: state.lastDisconnect ?? null, qr: state.qr };
+// Vinculación de WhatsApp igual que en el HotelBot:
+//   GET /pair               -> formulario para escribir el número
+//   GET /pair?telefono=504… -> muestra el código de vinculación
+//   GET /qr                 -> QR para escanear (se refresca solo)
+// Sin clave, igual que el HotelBot.
+
+function pagina(contenido, refrescarSegundos = null) {
+  const refresh = refrescarSegundos ? `<meta http-equiv="refresh" content="${refrescarSegundos}">` : "";
+
+  return `<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="referrer" content="no-referrer">
+    ${refresh}
+    <title>Vincular WhatsApp · Minimarket</title>
+  </head>
+  <body style="font-family: sans-serif; text-align: center; padding: 40px;">
+    ${contenido}
+  </body>
+</html>`;
+}
+
+export async function solicitarCodigoVinculacion(getState, telefono) {
+  const { socket, status } = getState();
+
+  if (status === "conectado") {
+    throw new Error("WhatsApp ya está conectado. No necesitas otro código.");
   }
+
+  if (!socket) {
+    throw new Error("El cliente de WhatsApp no está listo todavía. Espera unos segundos e intenta de nuevo.");
+  }
+
+  const numeroLimpio = String(telefono ?? "").replace(/\D/g, "");
+
+  if (!numeroLimpio) {
+    throw new Error("Manda el número en formato internacional, sin +, ej: 50499999999");
+  }
+
+  return socket.requestPairingCode(numeroLimpio);
+}
+
+export function createPairingRouter({ getState }) {
+  const router = Router();
+
   router.use((req, res, next) => {
     res.set("Cache-Control", "no-store");
-    res.set("Referrer-Policy", "no-referrer");
-    res.set("X-Content-Type-Options", "nosniff");
     next();
   });
-  router.get("/", (req, res) => res.sendFile(fileURLToPath(new URL("../../public/pair.html", import.meta.url))));
-  router.use((req, res, next) => {
-    if (!secret) return res.status(503).json({ error: "Configura QR_PAGE_SECRET en el asistente para habilitar la vinculación." });
-    if (req.get("X-Pair-Secret") !== secret) return res.status(403).json({ error: "La clave de vinculación no es correcta." });
-    next();
-  });
-  router.get("/estado", (req, res) => {
-    const state = { ...getState() };
-    res.json(describe(state));
-  });
-  // Solo funciona si WhatsApp ya cerró la sesión (401): no hay nada que
-  // perder. Aparta la sesión muerta y el bot queda listo para un código nuevo.
-  router.post("/nueva-sesion", async (req, res) => {
-    if (!resetSession) return res.status(503).json({ error: "Este servicio no permite empezar una sesión nueva desde la página." });
-    const state = { ...getState() };
-    if (state.status !== "desvinculado") {
-      return res.status(409).json({ ...describe(state), error: "Solo se puede empezar una sesión nueva cuando WhatsApp cerró la sesión." });
+
+  router.get("/qr", (req, res) => {
+    const { qr, status } = getState();
+
+    if (status === "conectado") {
+      return res.send(pagina(`
+        <h2>WhatsApp ya está conectado</h2>
+        <p>No necesitas escanear nada.</p>
+      `));
     }
+
+    if (!qr) {
+      return res.send(pagina(`
+        <h2>No hay código QR disponible en este momento</h2>
+        <p>Esto pasa si WhatsApp ya está conectado, o si el servidor apenas está arrancando.
+        Esta página se recarga sola cada 5 segundos.</p>
+      `, 5));
+    }
+
+    // state.qr ya viene como imagen (data URL) desde whatsapp.bot.js.
+    res.send(pagina(`
+      <h2>Escanea este código con WhatsApp</h2>
+      <p>Configuración → Dispositivos vinculados → Vincular un dispositivo</p>
+      <img src="${qr}" width="320" height="320" alt="QR de WhatsApp" />
+      <p style="color: #888; font-size: 13px;">El código vence cada 20-30 segundos — esta página se refresca sola cada 15 segundos para que siempre veas uno vigente. Escanéalo apenas la veas, no la dejes abierta esperando.</p>
+    `, 15));
+  });
+
+  router.get("/pair", async (req, res) => {
+    const telefono = String(req.query.telefono ?? "").replace(/\D/g, "");
+
+    if (!telefono) {
+      return res.send(pagina(`
+        <h2>Vincular por código</h2>
+        <p>Escribe el número de WhatsApp que va a usar el bot, en formato internacional, sin "+" ni espacios.</p>
+        <form method="get" action="/pair">
+          <input name="telefono" inputmode="numeric" placeholder="50499999999" style="font-size: 18px; padding: 8px; width: 220px;" />
+          <button type="submit" style="font-size: 18px; padding: 8px 16px;">Pedir código</button>
+        </form>
+        <p style="margin-top: 24px;"><a href="/qr">O vincular con QR</a></p>
+      `));
+    }
+
     try {
-      await resetSession();
-      cached = null;
-      lastRequest = -Infinity;
-      res.json({ ...describe({ ...getState() }), mensaje: "Sesión nueva iniciada. Espera unos segundos y solicita el código." });
+      const codigo = await solicitarCodigoVinculacion(getState, telefono);
+
+      res.send(pagina(`
+        <h2>Tu código de vinculación</h2>
+        <p style="font-size: 42px; font-weight: bold; letter-spacing: 4px; color: #2563eb;">${codigo}</p>
+        <p>En el celular con el número <strong>${telefono}</strong>: abre WhatsApp → Configuración → Dispositivos vinculados → Vincular un dispositivo → "Vincular con número de teléfono en su lugar", y escribe este código.</p>
+        <p style="color: #888; font-size: 13px;">Este código vence en unos minutos — si tarda demasiado, recarga esta misma página para pedir uno nuevo.</p>
+      `));
     } catch (error) {
-      console.error("No se pudo empezar una sesión nueva:", error.message);
-      res.status(500).json({ error: "No se pudo empezar una sesión nueva. Revisa los logs del asistente." });
+      const mensaje = String(error?.message ?? "No se pudo generar el código.")
+        .replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c]);
+
+      res.status(500).send(pagina(`
+        <h2>Error</h2>
+        <p>${mensaje}</p>
+        <p><a href="/pair">Volver a intentar</a></p>
+      `));
     }
   });
-  router.post("/codigo", async (req, res) => {
-    const phone = typeof req.body?.numero === "string" ? req.body.numero.trim() : "";
-    if (!/^[1-9]\d{7,14}$/.test(phone)) return res.status(400).json({ error: "Escribe el número emisor con código de país, solo dígitos. Ejemplo: 504 seguido de los 8 dígitos de Honduras." });
-    let state = { ...getState() };
-    // Esperar el evento de conexión; el código telefónico no depende de
-    // haber terminado de convertir una imagen QR.
-    const deadline = Date.now() + waitMs;
-    while (!describe(state).listo && !["conectado", "desvinculado", "reemplazada"].includes(state.status) && !state.socket?.authState?.creds?.registered && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      if (res.destroyed) return;
-      state = { ...getState() };
-    }
-    if (["desvinculado", "reemplazada"].includes(state.status)) return res.status(409).json({ ...describe(state), error: describe(state).mensaje });
-    if (state.status === "conectado" || state.socket?.authState.creds.registered) return res.status(409).json({ error: "El bot ya está vinculado. No se reemplazará su sesión desde esta página." });
-    if (!describe(state).listo) return res.status(503).json({ ...describe(state), error: "No se pudo establecer la conexión con WhatsApp en 20 segundos. Consulta el estado: allí se muestra el último código de desconexión." });
-    // El código forma parte del estado criptográfico hasta completar o cerrar
-    // esta conexión. Generar otro sobre el mismo socket invalida el anterior.
-    if (cached?.socket === state.socket) {
-      if (cached.phone === phone) return res.json({ codigo: cached.code });
-      return res.status(409).json({ error: "Ya hay una vinculación pendiente en esta conexión. Usa el código mostrado o reinicia con una sesión nueva." });
-    }
-    if (busy || now() - lastRequest < 60_000) {
-      res.set("Retry-After", "60");
-      return res.status(429).json({ error: "Espera un minuto antes de solicitar otro código." });
-    }
-    busy = true;
-    lastRequest = now();
-    cached = null;
-    try {
-      const code = await state.socket.requestPairingCode(phone);
-      if (getState().socket !== state.socket) return res.status(409).json({ error: "La conexión cambió. Consulta el estado y solicita un código nuevo." });
-      cached = { socket: state.socket, phone, code };
-      res.json({ codigo: code });
-    } catch {
-      res.status(502).json({ error: "WhatsApp no pudo generar el código. Espera un minuto e intenta nuevamente." });
-    } finally { busy = false; }
-  });
+
   return router;
 }

@@ -2,10 +2,7 @@ import "dotenv/config";
 import express from "express";
 import qrcode from "qrcode";
 import makeWASocket, {
-  useMultiFileAuthState,
-  fetchLatestWaWebVersion,
-  downloadMediaMessage,
-  BufferJSON,
+  useMultiFileAuthState, downloadMediaMessage, BufferJSON, fetchLatestWaWebVersion,
 } from "@whiskeysockets/baileys";
 import path from "node:path";
 import pino from "pino";
@@ -19,7 +16,6 @@ import { createGatewayRouter } from "./whatsapp/http.routes.js";
 
 const AUTH_DIR = process.env.WHATSAPP_SESSION_DIR || "./whatsapp-session-asistente";
 const NUMERO_AUTORIZADO = process.env.WHATSAPP_NUMERO_AUTORIZADO;
-const QR_PAGE_SECRET = process.env.QR_PAGE_SECRET;
 const INFORME_INTERNO_SECRET = process.env.INFORME_INTERNO_SECRET;
 const MINIMARKET_API_URL = process.env.MINIMARKET_API_URL;
 
@@ -45,25 +41,29 @@ if (process.env.RAILWAY_VOLUME_MOUNT_PATH) {
 }
 const cacheReintentos = crearCacheReintentos();
 
-// El otro bot desplegado en Railway obtiene la versión Web actual antes de
-// abrir el socket. WhatsApp puede rechazar al final la vinculación cuando el
-// cliente anuncia una versión incorporada que ya quedó obsoleta.
-let whatsappVersion;
-try {
-  const latest = await fetchLatestWaWebVersion({});
-  whatsappVersion = latest.version;
-  console.log(`Versión de WhatsApp Web: ${whatsappVersion.join(".")}`);
-} catch (error) {
-  console.warn("No se pudo consultar la versión de WhatsApp Web; se usará la incluida en Baileys:", error.message);
+async function apartarSesionCerrada() {
+  const { movidos, destino } = await archivarSesion(AUTH_DIR);
+  console.log(`Sesión cerrada por WhatsApp: ${movidos} archivo(s) apartados en ${destino}. Listo para vincular de nuevo.`);
 }
 
+// Misma configuración que el HotelBot (que vincula sin problemas):
+// Baileys 7, identidad por defecto y la versión REAL de WhatsApp Web.
 const connection = createWhatsAppConnection({
   loadAuth: () => useMultiFileAuthState(AUTH_DIR),
   makeSocket: makeWASocket,
   toQr: value => qrcode.toDataURL(value),
+  getVersion: async () => {
+    // fetchLatestBaileysVersion() y la versión por defecto de Baileys pueden
+    // ser viejas: el código se genera pero WhatsApp rechaza el vínculo al
+    // final ("No se pudo vincular el dispositivo" / 401).
+    const { version } = await fetchLatestWaWebVersion({});
+    console.log(`Usando WhatsApp Web versión ${version.join(".")}`);
+    return version;
+  },
+  onLoggedOut: apartarSesionCerrada,
   socketOptions: {
     printQRInTerminal: false,
-    ...(whatsappVersion ? { version: whatsappVersion } : {}),
+    markOnlineOnConnect: false,
     logger: pino({ level: LOG_LEVEL }),
     getMessage: async key => mensajesEnviados.obtener(key.id),
     msgRetryCounterCache: cacheReintentos,
@@ -76,20 +76,14 @@ const assistant = createAssistantHandler({
   downloadMediaMessage, backendUrl: MINIMARKET_API_URL, secret: INFORME_INTERNO_SECRET,
 });
 const app = express();
-app.use("/pair", createPairingRouter({
-  secret: QR_PAGE_SECRET,
-  getState: connection.getState,
-  resetSession: () => connection.reset(async () => {
-    const { movidos, destino } = await archivarSesion(AUTH_DIR);
-    console.log(`Sesión desvinculada apartada: ${movidos} archivo(s) en ${destino}`);
-  }),
-}));
+// /pair y /qr, igual que el HotelBot.
+app.use(createPairingRouter({ getState: connection.getState }));
 app.use("/interno", createGatewayRouter({
   secret: INFORME_INTERNO_SECRET, authDir: AUTH_DIR, store: mensajesEnviados,
   getState: connection.getState, enviar: queue.enviar,
 }));
 const server = app.listen(process.env.PORT || 3002, () => {
-  console.log(`Página de pairing en el puerto ${process.env.PORT || 3002}`);
+  console.log(`Vinculación en /pair y /qr (puerto ${process.env.PORT || 3002})`);
 });
 let stopping = false;
 async function shutdown() {

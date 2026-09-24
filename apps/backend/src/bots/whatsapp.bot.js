@@ -1,7 +1,12 @@
 import "dotenv/config";
 import express from "express";
 import qrcode from "qrcode";
-import { makeWASocket, useMultiFileAuthState, downloadMediaMessage, BufferJSON, Browsers } from "@whiskeysockets/baileys";
+import makeWASocket, {
+  useMultiFileAuthState,
+  fetchLatestWaWebVersion,
+  downloadMediaMessage,
+  BufferJSON,
+} from "@whiskeysockets/baileys";
 import path from "node:path";
 import pino from "pino";
 import { crearAlmacenPersistente } from "../lib/whatsapp-message-store.js";
@@ -40,21 +45,25 @@ if (process.env.RAILWAY_VOLUME_MOUNT_PATH) {
 }
 const cacheReintentos = crearCacheReintentos();
 
+// El otro bot desplegado en Railway obtiene la versión Web actual antes de
+// abrir el socket. WhatsApp puede rechazar al final la vinculación cuando el
+// cliente anuncia una versión incorporada que ya quedó obsoleta.
+let whatsappVersion;
+try {
+  const latest = await fetchLatestWaWebVersion({});
+  whatsappVersion = latest.version;
+  console.log(`Versión de WhatsApp Web: ${whatsappVersion.join(".")}`);
+} catch (error) {
+  console.warn("No se pudo consultar la versión de WhatsApp Web; se usará la incluida en Baileys:", error.message);
+}
+
 const connection = createWhatsAppConnection({
   loadAuth: () => useMultiFileAuthState(AUTH_DIR),
   makeSocket: makeWASocket,
   toQr: value => qrcode.toDataURL(value),
   socketOptions: {
-    // La vinculación por teléfono valida con más rigor la identidad anunciada.
-    // Usar una identidad canónica evita códigos que WhatsApp rechaza después.
-    browser: Browsers.macOS("Desktop"),
     printQRInTerminal: false,
-    connectTimeoutMs: 120_000,
-    defaultQueryTimeoutMs: undefined,
-    markOnlineOnConnect: false,
-    syncFullHistory: false,
-    shouldSyncHistoryMessage: () => false,
-    qrTimeout: 120_000,
+    ...(whatsappVersion ? { version: whatsappVersion } : {}),
     logger: pino({ level: LOG_LEVEL }),
     getMessage: async key => mensajesEnviados.obtener(key.id),
     msgRetryCounterCache: cacheReintentos,

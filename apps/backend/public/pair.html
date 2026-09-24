@@ -48,7 +48,7 @@
     </ol>
     <p>No solicites otro código mientras este intento siga abierto. El botón devolverá el mismo código para proteger la vinculación.</p>
   </section>
-  <details><summary>También puedes usar un QR</summary><p>Pulsa «Consultar conexión» para cargarlo.</p><img id="qr" alt="QR de vinculación de WhatsApp" hidden></details>
+  <details open><summary>Vincular con QR</summary><p>Pulsa «Consultar conexión». El QR se actualizará automáticamente mientras lo escaneas desde WhatsApp → Dispositivos vinculados.</p><img id="qr" alt="QR de vinculación de WhatsApp" hidden></details>
 </main>
 <script>
   const secret = document.getElementById('secret');
@@ -104,7 +104,6 @@
       working = true;
       try {
         const data = await request('/estado');
-        if (!result.hidden && data.listo) return;
         showState(data);
       } catch (error) {
         status.textContent = error.message;

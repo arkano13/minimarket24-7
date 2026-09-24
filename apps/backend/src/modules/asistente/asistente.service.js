@@ -19,6 +19,33 @@ import { inferirTurnoDeCierre } from "../caja/turno-cierre.js";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const MODELO = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
+// Modelo de respaldo (opcional) si el principal sigue saturado (503) después
+// de los reintentos. Ej: GEMINI_FALLBACK_MODEL=gemini-2.5-flash
+const MODELO_RESPALDO = process.env.GEMINI_FALLBACK_MODEL || "";
+
+// Esperas entre reintentos cuando Gemini responde 503 (saturado) o 500.
+const ESPERAS_REINTENTO_MS = [1500, 4000, 8000];
+
+const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function esTemporal(err) {
+  return err?.status === 503 || err?.status === 500;
+}
+
+// Reintenta la misma llamada si Gemini está saturado. El chat de
+// @google/genai solo guarda el turno en el historial cuando la llamada
+// sale bien, así que reintentar no duplica mensajes.
+async function conReintentos(llamada) {
+  for (let intento = 0; ; intento++) {
+    try {
+      return await llamada();
+    } catch (err) {
+      if (!esTemporal(err) || intento >= ESPERAS_REINTENTO_MS.length) throw err;
+      console.warn(`Gemini ocupado (${err.status}), reintento ${intento + 1} en ${ESPERAS_REINTENTO_MS[intento]} ms`);
+      await esperar(ESPERAS_REINTENTO_MS[intento]);
+    }
+  }
+}
 
 const HONDURAS_TIME_ZONE = "America/Tegucigalpa";
 
@@ -227,6 +254,37 @@ export async function transcribirAudio(base64Audio, mimeType) {
   return response.text?.trim() || "";
 }
 
+async function conversar(modelo, history, mensaje) {
+  const chat = ai.chats.create({
+    model: modelo,
+    config: {
+      systemInstruction: systemPrompt(),
+      tools: [{ functionDeclarations: tools }],
+      // thinkingLevel solo existe en los modelos Gemini 3.
+      ...(modelo.startsWith("gemini-3") ? { thinkingConfig: { thinkingLevel: "medium" } } : {}),
+    },
+    history,
+  });
+
+  let response = await conReintentos(() => chat.sendMessage({ message: mensaje }));
+
+  while (response.functionCalls && response.functionCalls.length > 0) {
+    const functionResponses = await Promise.all(
+      response.functionCalls.map(async (fc) => ({
+        functionResponse: {
+          id: fc.id,
+          name: fc.name,
+          response: { result: await executeTool(fc.name, fc.args) },
+        },
+      })),
+    );
+
+    response = await conReintentos(() => chat.sendMessage({ message: functionResponses }));
+  }
+
+  return response.text || "No pude procesar tu consulta, intenta de nuevo.";
+}
+
 export async function handleMessage(messages) {
   const history = messages.slice(0, -1).map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
@@ -234,38 +292,23 @@ export async function handleMessage(messages) {
   }));
   while (history.length > 0 && history[0].role === "model") history.shift();
 
-  const chat = ai.chats.create({
-    model: MODELO,
-    config: {
-      systemInstruction: systemPrompt(),
-      tools: [{ functionDeclarations: tools }],
-      thinkingConfig: { thinkingLevel: "medium" },
-    },
-    history,
-  });
+  const mensaje = messages[messages.length - 1].content;
 
   try {
-    let response = await chat.sendMessage({ message: messages[messages.length - 1].content });
-
-    while (response.functionCalls && response.functionCalls.length > 0) {
-      const functionResponses = await Promise.all(
-        response.functionCalls.map(async (fc) => ({
-          functionResponse: {
-            id: fc.id,
-            name: fc.name,
-            response: { result: await executeTool(fc.name, fc.args) },
-          },
-        })),
-      );
-
-      response = await chat.sendMessage({ message: functionResponses });
+    try {
+      return await conversar(MODELO, history, mensaje);
+    } catch (err) {
+      if (!esTemporal(err) || !MODELO_RESPALDO || MODELO_RESPALDO === MODELO) throw err;
+      console.warn(`Gemini ${MODELO} sigue saturado; se usa el respaldo ${MODELO_RESPALDO}.`);
+      return await conversar(MODELO_RESPALDO, history, mensaje);
     }
-
-    return response.text || "No pude procesar tu consulta, intenta de nuevo.";
   } catch (err) {
     console.error("Error en asistente:", err);
     if (err.status === 429) {
       return "Estoy recibiendo muchas consultas ahora mismo, dame un momento e inténtalo de nuevo.";
+    }
+    if (esTemporal(err)) {
+      return "El servicio de inteligencia artificial está saturado en este momento (no es un problema del sistema). Intenta de nuevo en unos minutos.";
     }
     return "Tuve un problema procesando tu consulta, intenta de nuevo.";
   }

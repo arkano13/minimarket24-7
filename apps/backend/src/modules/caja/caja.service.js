@@ -143,7 +143,11 @@ export async function listMyCashActivity(userId, filters = {}) {
     const movements = await prisma.movimientoCaja.findMany({
       where: { ...baseWhere, ...(tipoFiltro ? { tipo: tipoFiltro } : { tipo: { in: ["INGRESO", "RETIRO"] } }) },
       orderBy: [{ creadoEn: "desc" }, { id: "desc" }],
-      select: { id: true, turnoCajaId: true, creadoEn: true, monto: true, motivo: true, tipo: true, metodo: true },
+      select: {
+        id: true, turnoCajaId: true, creadoEn: true, monto: true, motivo: true,
+        tipo: true, metodo: true, estado: true, anuladoEn: true,
+        motivoAnulacion: true,
+      },
     });
     return movements.map((movement) => ({ ...movement, monto: Number(movement.monto) }));
   }
@@ -214,6 +218,12 @@ const SHIFT_INCLUDE = {
   movimientos: {
     include: {
       usuario: {
+        select: {
+          id: true,
+          nombre: true,
+        },
+      },
+      usuarioAnulacion: {
         select: {
           id: true,
           nombre: true,
@@ -295,6 +305,8 @@ function calculateTotals(shift) {
   }
 
   for (const movement of shift.movimientos) {
+    if (movement.estado === "ANULADO") continue;
+
     if (movement.tipo === "INGRESO") {
       if (movement.metodo === "TARJETA") {
         incomeCard = incomeCard.add(movement.monto);
@@ -382,6 +394,10 @@ function serializeShift(shift, userId) {
         metodo: movement.metodo,
         monto: Number(movement.monto),
         motivo: movement.motivo,
+        estado: movement.estado ?? "ACTIVO",
+        anuladoEn: movement.anuladoEn ?? null,
+        motivoAnulacion: movement.motivoAnulacion ?? null,
+        usuarioAnulacion: movement.usuarioAnulacion ?? null,
         creadoEn: movement.creadoEn,
         usuario: movement.usuario,
       }),
@@ -542,6 +558,70 @@ export async function createCashMovement(
   );
 }
 
+export async function cancelCashMovement(movementId, data, userId) {
+  const id = Number(movementId);
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    throw new AppError("El movimiento no es válido.", 400);
+  }
+
+  const cancellationReason = cleanReason(data?.motivo);
+
+  return prisma.$transaction(async (transaction) => {
+    const movement = await transaction.movimientoCaja.findUnique({
+      where: { id },
+      include: { turnoCaja: { select: { estado: true, usuarioAperturaId: true } } },
+    });
+
+    if (!movement || movement.usuarioId !== userId || movement.turnoCaja.usuarioAperturaId !== userId) {
+      throw new AppError("No se encontró ese movimiento en tu caja.", 404);
+    }
+    if (movement.estado === "ANULADO") {
+      throw new AppError("Ese movimiento ya está anulado.", 409);
+    }
+    if (movement.turnoCaja.estado !== "ABIERTO") {
+      throw new AppError("No se puede anular un movimiento de un turno cerrado.", 409);
+    }
+
+    const annulledAt = new Date();
+    const cancelled = await transaction.movimientoCaja.updateMany({
+      where: {
+        id,
+        estado: "ACTIVO",
+        turnoCaja: { estado: "ABIERTO" },
+      },
+      data: {
+        estado: "ANULADO",
+        anuladoEn: annulledAt,
+        usuarioAnulacionId: userId,
+        motivoAnulacion: cancellationReason,
+      },
+    });
+    if (!cancelled.count) {
+      throw new AppError("El movimiento cambió mientras intentabas anularlo. Actualiza la caja.", 409);
+    }
+
+    await transaction.bitacora.create({
+      data: {
+        usuarioId: userId,
+        accion: "ANULAR_MOVIMIENTO_CAJA",
+        entidad: "MovimientoCaja",
+        entidadId: id,
+        detalle: {
+          turnoCajaId: movement.turnoCajaId,
+          tipo: movement.tipo,
+          metodo: movement.metodo,
+          monto: Number(movement.monto),
+          motivoOriginal: movement.motivo,
+          motivoAnulacion: cancellationReason,
+        },
+      },
+    });
+
+    const updatedShift = await findOpenShift(userId, transaction);
+    return serializeShift(updatedShift, userId);
+  });
+}
+
 // Rotación fija para saber qué informe de turno mandar por WhatsApp al
 // cerrar caja — a propósito NO mira la hora del cierre. Cada cierre
 // consume el turno que está "en fila" y avanza el puntero al
@@ -699,7 +779,9 @@ function serializeShiftCompleto(shift) {
     },
     movimientos: shift.movimientos.map((m) => ({
       id: m.id, tipo: m.tipo, metodo: m.metodo, monto: Number(m.monto),
-      motivo: m.motivo, creadoEn: m.creadoEn, usuario: m.usuario,
+      motivo: m.motivo, estado: m.estado ?? "ACTIVO", creadoEn: m.creadoEn,
+      anuladoEn: m.anuladoEn ?? null, motivoAnulacion: m.motivoAnulacion ?? null,
+      usuarioAnulacion: m.usuarioAnulacion ?? null, usuario: m.usuario,
     })),
   };
 }

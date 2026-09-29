@@ -4,7 +4,7 @@ import { listCreditSales, markCreditAsPaid, listMyCashActivity } from "../../ser
 const money = (value) => new Intl.NumberFormat("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 const dateTime = (value) => new Intl.DateTimeFormat("es-HN", { timeZone: "America/Tegucigalpa", dateStyle: "short", timeStyle: "short" }).format(new Date(value));
 const labels = { VENTA: "Venta", INGRESO: "Ingreso", RETIRO: "Retiro" };
-const movementMethodLabels = { EFECTIVO: "Efectivo", TARJETA: "Tarjeta" };
+const movementMethodLabels = { EFECTIVO: "Efectivo", TARJETA: "Tarjeta", TRANSFERENCIA: "Transferencia" };
 
 const SHIFT_OPTIONS = [
   { value: "A", label: "Turno A · 2am–8am" },
@@ -14,6 +14,7 @@ const SHIFT_OPTIONS = [
 
 // Verde = venta, rojo = venta cancelada, amarillo = ingreso, azul = retiro.
 function activityColorClass(item) {
+  if (item.estado === "ANULADO") return "activity-card--cancelada";
   if (item.tipo === "VENTA") {
     return item.estado === "CANCELADA" ? "activity-card--cancelada" : "activity-card--venta";
   }
@@ -232,6 +233,7 @@ export function MiActividad({ token, revision }) {
                     <strong>
                       {labels[item.tipo]} #{item.id}
                       {item.tipo === "VENTA" && item.estado === "CANCELADA" ? " · Cancelada" : ""}
+                      {item.tipo !== "VENTA" && item.estado === "ANULADO" ? " · Anulado" : ""}
                     </strong>
                     <span>{dateTime(item.creadoEn)} · {item.turnoCajaId ? `Caja #${item.turnoCajaId}` : "Sin turno asociado"}</span>
                     <strong>L {money(item.monto)}</strong>
@@ -243,7 +245,11 @@ export function MiActividad({ token, revision }) {
                       <ul>{item.productos.map((product) => <li key={product.id}>{product.cantidad} × {product.nombre} ({product.presentacion}) — L {money(product.subtotal)}</li>)}</ul>
                       <p>{item.pagos.map((payment) => `${payment.metodo}: L ${money(payment.monto)}`).join(" · ")}</p>
                     </details>
-                  </> : <p>{item.motivo}{item.metodo ? ` (${movementMethodLabels[item.metodo] ?? item.metodo})` : ""}</p>}
+                  </> : item.estado === "ANULADO" ? (
+                    <p>{item.motivo} ({movementMethodLabels[item.metodo] ?? item.metodo}) · Anulado: {item.motivoAnulacion}</p>
+                  ) : (
+                    <p>{item.motivo}{item.metodo ? ` (${movementMethodLabels[item.metodo] ?? item.metodo})` : ""}</p>
+                  )}
                 </article>
               ))}
             </div>

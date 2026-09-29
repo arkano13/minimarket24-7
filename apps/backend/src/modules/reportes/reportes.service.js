@@ -230,8 +230,9 @@ async function loadCashMovements(
 ) {
   const movements = await prisma.movimientoCaja.findMany({
     where: caja
-      ? { turnoCajaId: caja.id }
+      ? { turnoCajaId: caja.id, estado: "ACTIVO" }
       : {
+          estado: "ACTIVO",
           creadoEn: {
             gte: range.from,
             lte: range.to,

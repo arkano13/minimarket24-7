@@ -4,6 +4,7 @@ import { MiActividad } from "./MiActividad.jsx";
 import { HistorialCierres } from "./HistorialCierres.jsx";
 
 import {
+  cancelCashMovement,
   closeCashShift,
   createCashMovement,
   getCurrentCashShift,
@@ -96,6 +97,9 @@ export function CajaPage({ currentUser, token }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [confirmingClose, setConfirmingClose] = useState(false);
+  const [movementToCancel, setMovementToCancel] = useState(null);
+  const [cancellationReason, setCancellationReason] = useState("");
+  const [cancelingMovementId, setCancelingMovementId] = useState(null);
 
   const previewDifference = useMemo(() => {
     if (!shift || countedCash === "") {
@@ -217,6 +221,31 @@ export function CajaPage({ currentUser, token }) {
       setError(requestError.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleCancelMovement(event) {
+    event.preventDefault();
+    if (!movementToCancel || cancelingMovementId) return;
+
+    setError("");
+    setSuccess("");
+    setCancelingMovementId(movementToCancel.id);
+
+    try {
+      const result = await cancelCashMovement(
+        token,
+        movementToCancel.id,
+        cancellationReason,
+      );
+      setShift(result.turno);
+      setMovementToCancel(null);
+      setCancellationReason("");
+      setSuccess(result.mensaje);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setCancelingMovementId(null);
     }
   }
 
@@ -579,6 +608,95 @@ export function CajaPage({ currentUser, token }) {
               </form>
             </section>
           </div>
+
+          <section className="cash-movements-card">
+            <div className="cash-card-heading">
+              <span aria-hidden="true">
+                <CashCardIcon name="MOVIMIENTO" />
+              </span>
+
+              <div>
+                <h2>Movimientos del turno</h2>
+                <p>Los movimientos anulados permanecen visibles, pero dejan de afectar el cuadre.</p>
+              </div>
+            </div>
+
+            {shift.movimientos.length === 0 ? (
+              <p className="empty-state">Todavía no registraste entradas ni retiros.</p>
+            ) : (
+              <div className="cash-movements-list">
+                {shift.movimientos.map((movement) => {
+                  const annulled = movement.estado === "ANULADO";
+                  const confirming = movementToCancel?.id === movement.id;
+
+                  return (
+                    <article
+                      className={`cash-movement-row${annulled ? " cash-movement-row--annulled" : ""}`}
+                      key={movement.id}
+                    >
+                      <div>
+                        <strong>{movement.tipo === "INGRESO" ? "Ingreso" : "Retiro"} · {movement.metodo}</strong>
+                        <span>{movement.motivo} · {formatDate(movement.creadoEn)}</span>
+                        {annulled ? (
+                          <small>Anulado: {movement.motivoAnulacion}</small>
+                        ) : null}
+                      </div>
+
+                      <strong className={movement.tipo === "RETIRO" ? "cash-negative" : "cash-positive"}>
+                        {movement.tipo === "RETIRO" ? "−" : "+"} L {formatMoney(movement.monto)}
+                      </strong>
+
+                      {!annulled && !confirming ? (
+                        <button
+                          className="cash-cancel-movement"
+                          disabled={Boolean(cancelingMovementId)}
+                          onClick={() => {
+                            setMovementToCancel(movement);
+                            setCancellationReason("");
+                          }}
+                          type="button"
+                        >
+                          Anular
+                        </button>
+                      ) : null}
+
+                      {confirming ? (
+                        <form className="cash-cancel-form" onSubmit={handleCancelMovement}>
+                          <label className="field">
+                            <span>Motivo de la anulación</span>
+                            <input
+                              autoFocus
+                              maxLength="200"
+                              onChange={(event) => setCancellationReason(event.target.value)}
+                              placeholder="Ejemplo: método o monto equivocado"
+                              required
+                              value={cancellationReason}
+                            />
+                          </label>
+                          <div>
+                            <button
+                              className="secondary-button"
+                              disabled={Boolean(cancelingMovementId)}
+                              onClick={() => {
+                                setMovementToCancel(null);
+                                setCancellationReason("");
+                              }}
+                              type="button"
+                            >
+                              Volver
+                            </button>
+                            <button className="danger-button" disabled={Boolean(cancelingMovementId)} type="submit">
+                              {cancelingMovementId ? "Anulando..." : "Confirmar anulación"}
+                            </button>
+                          </div>
+                        </form>
+                      ) : null}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
         </>
       )}
       <MiActividad token={token} revision={shift} />

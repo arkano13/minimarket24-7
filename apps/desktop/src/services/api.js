@@ -302,6 +302,16 @@ const API_URL = `${import.meta.env?.VITE_API_URL ?? "http://127.0.0.1:3001"}/api
     });
   }
 
+  export function cancelCashMovement(token, movementId, reason) {
+    return request(`/caja/movimientos/${movementId}/anular`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ motivo: reason }),
+    });
+  }
+
   export function closeCashShift(token, data) {
     return request("/caja/cerrar", {
       method: "POST",

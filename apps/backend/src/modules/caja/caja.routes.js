@@ -6,6 +6,7 @@ import {
 } from "../auth/auth.middleware.js";
 
 import {
+  cancelCashMovement,
   closeCashShift,
   createCashMovement,
   getCurrentCashShift,
@@ -89,6 +90,26 @@ cashRouter.post(
 
       res.status(201).json({
         turno: shift,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+cashRouter.post(
+  "/movimientos/:id/anular",
+  async (req, res, next) => {
+    try {
+      const shift = await cancelCashMovement(
+        req.params.id,
+        req.body,
+        req.auth.usuario.id,
+      );
+
+      res.json({
+        turno: shift,
+        mensaje: "Movimiento anulado correctamente.",
       });
     } catch (error) {
       next(error);

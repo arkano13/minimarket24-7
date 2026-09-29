@@ -5,6 +5,7 @@ const state = {
   caja: null,
   sales: [],
   movimientos: [],
+  movimientoQuery: null,
   cierres: [],
 };
 
@@ -28,7 +29,8 @@ const prisma = {
     },
   },
   movimientoCaja: {
-    async findMany() {
+    async findMany(query) {
+      state.movimientoQuery = query;
       return state.movimientos;
     },
   },
@@ -94,6 +96,7 @@ beforeEach(() => {
     venta(2, 1699, "TARJETA", "05:20:00"),
   ];
   state.movimientos = [movimiento(1, "INGRESO", "EFECTIVO", 15, "3 sopa preparadas")];
+  state.movimientoQuery = null;
   state.cierres = [];
 });
 
@@ -109,6 +112,7 @@ test("el cuadre total suma efectivo, tarjeta, transferencia y entradas menos sal
   assert.equal(report.cierre.cuadreTotal, 9451);
   assert.equal(report.cierre.tarjetaVentas, 1699);
   assert.equal(report.cierre.transferenciaVentas, 0);
+  assert.equal(state.movimientoQuery.where.estado, "ACTIVO");
   // Efectivo esperado en la gaveta: 7,737 + 15.
   assert.equal(report.resumen.efectivoEsperado, 7752);
 });

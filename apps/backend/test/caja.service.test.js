@@ -22,6 +22,7 @@ function makeShift(overrides = {}) {
 const state = {
   shift: null,
   movementId: 0,
+  audit: [],
 };
 
 const turnoCaja = {
@@ -48,8 +49,10 @@ const turnoCaja = {
 const movimientoCaja = {
   async findMany(query) {
     state.activityQuery = query;
-    return state.activity.filter((item) => item.usuarioId === query.where.usuarioId && item.tipo === query.where.tipo)
-      .slice(query.skip, query.skip + query.take);
+    const expectedType = typeof query.where.tipo === "string" ? query.where.tipo : null;
+    return state.activity.filter((item) =>
+      item.usuarioId === query.where.usuarioId && (!expectedType || item.tipo === expectedType),
+    );
   },
   async create({ data }) {
     const movement = {
@@ -61,15 +64,56 @@ const movimientoCaja = {
     state.shift.movimientos.unshift(movement);
     return movement;
   },
+  async findUnique({ where }) {
+    const movement = state.shift?.movimientos.find((item) => item.id === where.id);
+    return movement ? {
+      ...movement,
+      turnoCaja: {
+        estado: state.shift.estado,
+        usuarioAperturaId: state.shift.usuarioApertura.id,
+      },
+    } : null;
+  },
+  async updateMany({ where, data }) {
+    const index = state.shift.movimientos.findIndex((item) => item.id === where.id);
+    if (index < 0 || state.shift.movimientos[index].estado !== "ACTIVO" || state.shift.estado !== "ABIERTO") {
+      return { count: 0 };
+    }
+    state.shift.movimientos[index] = {
+      ...state.shift.movimientos[index],
+      ...data,
+      usuarioAnulacion: data.usuarioAnulacionId
+        ? { id: data.usuarioAnulacionId, nombre: "Caja" }
+        : null,
+    };
+    return { count: 1 };
+  },
 };
 
-const transaction = { turnoCaja, movimientoCaja };
+const bitacora = {
+  async create({ data }) {
+    state.audit.push(data);
+    return data;
+  },
+};
+
+const configuracionSistema = {
+  async upsert() { return { proximoTurnoInforme: "C" }; },
+  async update() { return { proximoTurnoInforme: "A" }; },
+};
+
+const informePendiente = {
+  async create({ data }) { return data; },
+};
+
+const transaction = {
+  turnoCaja, movimientoCaja, bitacora, configuracionSistema, informePendiente,
+};
 const prisma = {
   venta: {
     async findMany(query) {
       state.activityQuery = query;
-      return state.activity.filter((item) => item.usuarioId === query.where.usuarioId)
-        .slice(query.skip, query.skip + query.take);
+      return state.activity.filter((item) => item.usuarioId === query.where.usuarioId);
     },
   },
   turnoCaja,
@@ -85,6 +129,7 @@ mock.module(prismaModule.href, { namedExports: { prisma } });
 const {
   closeCashShift,
   createCashMovement,
+  cancelCashMovement,
   getCurrentCashShift,
   openCashShift,
   listMyCashActivity,
@@ -93,6 +138,7 @@ const {
 beforeEach(() => {
   state.shift = null;
   state.movementId = 0;
+  state.audit = [];
   state.activity = [];
   state.activityQuery = null;
 });
@@ -108,22 +154,22 @@ test("mi actividad pagina ventas propias, incluidas canceladas, con fecha de Hon
   const first = await listMyCashActivity(2, { fecha: "2026-08-27", usuarioId: 3 });
   assert.equal(first.registros.length, 20);
   assert.equal(first.hayMas, true);
-  assert.equal(first.registros[0].id, 1);
-  assert.equal(first.registros[0].estado, "CANCELADA");
+  assert.equal(first.registros[0].id, 22);
   assert.equal(first.registros[0].productos[0].cantidad, 2);
   assert.equal(state.activityQuery.where.usuarioId, 2);
-  assert.equal(state.activityQuery.where.creadoEn.gte.toISOString(), "2026-08-27T06:00:00.000Z");
-  assert.equal(state.activityQuery.where.creadoEn.lt.toISOString(), "2026-08-28T06:00:00.000Z");
+  assert.equal(state.activityQuery.where.creadoEn.gte.toISOString(), "2026-08-27T08:00:00.000Z");
+  assert.equal(state.activityQuery.where.creadoEn.lt.toISOString(), "2026-08-28T08:00:00.000Z");
   const second = await listMyCashActivity(2, { fecha: "2026-08-27", page: 2 });
-  assert.deepEqual(second.registros.map((item) => item.id), [21, 22]);
+  assert.deepEqual(second.registros.map((item) => item.id), [2, 1]);
+  assert.equal(second.registros.find((item) => item.id === 1).estado, "CANCELADA");
   assert.equal(second.hayMas, false);
 });
 
 test("mi actividad filtra ingresos y retiros por autor, no por quien abrió caja", async () => {
   state.activity = [
-    { id: 1, usuarioId: 2, tipo: "INGRESO", monto: "25", motivo: "Cambio" },
-    { id: 2, usuarioId: 3, tipo: "INGRESO", monto: "80", motivo: "Otro usuario" },
-    { id: 3, usuarioId: 2, tipo: "RETIRO", monto: "10", motivo: "Pago" },
+    { id: 1, usuarioId: 2, tipo: "INGRESO", monto: "25", motivo: "Cambio", creadoEn: new Date("2026-09-29T12:00:00-06:00") },
+    { id: 2, usuarioId: 3, tipo: "INGRESO", monto: "80", motivo: "Otro usuario", creadoEn: new Date("2026-09-29T12:00:00-06:00") },
+    { id: 3, usuarioId: 2, tipo: "RETIRO", monto: "10", motivo: "Pago", creadoEn: new Date("2026-09-29T12:00:00-06:00") },
   ];
   const incomes = await listMyCashActivity(2, { tipo: "INGRESO" });
   assert.deepEqual(incomes.registros.map((item) => item.id), [1]);
@@ -160,7 +206,7 @@ test("no permite abrir una segunda caja", async () => {
 
   await assert.rejects(
     () => openCashShift({ fondoInicial: 500 }, 2),
-    (error) => error.status === 409 && /ya existe una caja abierta/i.test(error.message),
+    (error) => error.status === 409 && /ya tienes una caja abierta/i.test(error.message),
   );
 });
 
@@ -206,6 +252,9 @@ test("calcula efectivo, tarjeta, transferencia, ingresos y retiros", async () =>
     tarjeta: 50,
     transferencia: 25,
     ingresos: 20,
+    ingresosEfectivo: 20,
+    ingresosTarjeta: 0,
+    ingresosTransferencia: 0,
     retiros: 30,
   });
 });
@@ -234,6 +283,50 @@ test("registra movimientos y normaliza el motivo", async () => {
   assert.equal(result.totales.ingresos, 25);
   assert.equal(result.movimientos[0].motivo, "Cambio extra");
   assert.equal(result.efectivoEsperado, 525);
+});
+
+test("anula un movimiento abierto, conserva el registro y lo quita del cuadre", async () => {
+  state.shift = makeShift({ movimientos: [{
+    id: 8, turnoCajaId: 1, usuarioId: 2, tipo: "INGRESO", metodo: "EFECTIVO",
+    estado: "ACTIVO", monto: "75", motivo: "Cambio", creadoEn: new Date(),
+    usuario: { id: 2, nombre: "Caja" }, usuarioAnulacion: null,
+  }] });
+
+  const result = await cancelCashMovement(8, { motivo: "  Monto equivocado  " }, 2);
+
+  assert.equal(result.efectivoEsperado, 500);
+  assert.equal(result.totales.ingresos, 0);
+  assert.equal(result.movimientos[0].estado, "ANULADO");
+  assert.equal(result.movimientos[0].motivoAnulacion, "Monto equivocado");
+  assert.equal(state.audit[0].accion, "ANULAR_MOVIMIENTO_CAJA");
+  assert.equal(state.audit[0].detalle.monto, 75);
+});
+
+test("no anula movimientos ajenos, repetidos ni de turnos cerrados", async () => {
+  const movement = {
+    id: 9, turnoCajaId: 1, usuarioId: 3, tipo: "RETIRO", metodo: "EFECTIVO",
+    estado: "ACTIVO", monto: "10", motivo: "Pago", creadoEn: new Date(),
+    usuario: { id: 3, nombre: "Otro" },
+  };
+  state.shift = makeShift({ movimientos: [movement] });
+  await assert.rejects(
+    () => cancelCashMovement(9, { motivo: "Error" }, 2),
+    (error) => error.status === 404,
+  );
+
+  state.shift = makeShift({ movimientos: [{ ...movement, usuarioId: 2, usuario: { id: 2 } }] });
+  state.shift.estado = "CERRADO";
+  await assert.rejects(
+    () => cancelCashMovement(9, { motivo: "Error" }, 2),
+    (error) => error.status === 409 && /turno cerrado/i.test(error.message),
+  );
+
+  state.shift.estado = "ABIERTO";
+  state.shift.movimientos[0].estado = "ANULADO";
+  await assert.rejects(
+    () => cancelCashMovement(9, { motivo: "Error" }, 2),
+    (error) => error.status === 409 && /ya está anulado/i.test(error.message),
+  );
 });
 
 test("cierra la caja y calcula diferencia de efectivo", async () => {

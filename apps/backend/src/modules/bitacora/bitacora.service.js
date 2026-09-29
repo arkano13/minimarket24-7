@@ -79,7 +79,9 @@ function movimientosCte() {
         c.turno_caja_id AS entidad_id,
         jsonb_build_object(
           'monto', c.monto,
-          'motivo', c.motivo
+          'motivo', c.motivo,
+          'estado', c.estado,
+          'motivoAnulacion', c.motivo_anulacion
         ) AS detalle
       FROM movimientos_caja c
       LEFT JOIN usuarios u3 ON u3.id = c.usuario_id

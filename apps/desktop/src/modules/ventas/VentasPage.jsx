@@ -7,6 +7,7 @@ import {
   searchSaleClients,
   searchSaleProducts,
 } from "../../services/api.js";
+import { createSearchDedupe } from "./searchDedupe.js";
 
 function PaymentIcon({ name }) {
   const common = {
@@ -172,6 +173,7 @@ function priceLabel(product, client) {
 
 export function VentasPage({ token }) {
   const searchInputRef = useRef(null);
+  const dedupeProductSearch = useRef(createSearchDedupe()).current;
 
   const [search, setSearch] = useState("");
   const [currentHondurasMinute, setCurrentHondurasMinute] = useState(hondurasMinute);
@@ -397,11 +399,7 @@ export function VentasPage({ token }) {
       setLoading(true);
 
       try {
-        const result = await searchSaleProducts(
-          token,
-          term,
-          selectedClient?.id,
-        );
+        const result = await fetchSaleProducts(term);
 
         if (active) {
           setProducts(result.productos);
@@ -423,6 +421,14 @@ export function VentasPage({ token }) {
       window.clearTimeout(timer);
     };
   }, [cashShift, search, selectedClient, token]);
+
+  function fetchSaleProducts(term) {
+    const clientId = selectedClient?.id ?? "";
+
+    return dedupeProductSearch(`${term}\u0000${clientId}`, () =>
+      searchSaleProducts(token, term, selectedClient?.id),
+    );
+  }
 
   function focusSearch() {
     window.setTimeout(() => searchInputRef.current?.focus(), 0);
@@ -513,11 +519,7 @@ export function VentasPage({ token }) {
     }
 
     try {
-      const result = await searchSaleProducts(
-        token,
-        term,
-        selectedClient?.id,
-      );
+      const result = await fetchSaleProducts(term);
 
       // No se auto-agrega nunca, aunque haya una sola coincidencia exacta:
       // varios productos pueden compartir el mismo código de barras (ej.

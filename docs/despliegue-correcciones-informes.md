@@ -27,7 +27,7 @@ Cambios locales: reconexión progresiva (2–60 segundos), diagnóstico de desco
 ## Comportamiento
 
 - El cierre y el informe pendiente se guardan juntos, antes de responder al cajero. Una migración ausente impide el cierre: aplicar primero la migración.
-- El trabajador revisa cada 15 segundos y comienza a enviar a partir de cinco minutos después del cierre. El cierre no espera a WhatsApp.
+- El trabajador agenda su revisión para el próximo informe pendiente (mínimo 15 segundos, máximo 30 minutos) y comienza a enviar a partir de cinco minutos después del cierre. El cierre no espera a WhatsApp.
 - Red, bot desconectado o entrega parcial: reintentos de 30 segundos hasta una hora; los trabajos sobreviven reinicios.
 - Los destinatarios quedan fijados al comenzar el primer intento. Cada destinatario enviado se registra y se omite en los reintentos.
 - Confirmado significa que Baileys devolvió un ID de mensaje; no certifica recepción, descifrado ni lectura en el teléfono. Existe una ventana inevitable de duplicación si el proceso cae después de enviar pero antes de guardar la confirmación. No se promete entrega exactamente una vez.

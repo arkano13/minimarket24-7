@@ -1,5 +1,6 @@
 import express from "express";
 import { fileURLToPath } from "node:url";
+import compression from "compression";
 import cors from "cors";
 
 import { healthRouter } from "./routes/health.routes.js";
@@ -44,6 +45,21 @@ export const app = express();
 
 app.disable("x-powered-by");
 
+// Deja en el log de Railway las peticiones lentas. Si una búsqueda se siente
+// lenta en la caja pero aquí no aparece, la demora está en la red y no en
+// el servidor.
+const UMBRAL_LENTO_MS = Number(process.env.SLOW_REQUEST_MS ?? 800);
+app.use((req, res, next) => {
+  const inicio = process.hrtime.bigint();
+  res.on("finish", () => {
+    const ms = Number(process.hrtime.bigint() - inicio) / 1e6;
+    if (ms >= UMBRAL_LENTO_MS) {
+      console.warn(`Petición lenta: ${req.method} ${req.path} ${res.statusCode} ${Math.round(ms)} ms`);
+    }
+  });
+  next();
+});
+
 // El gateway puede enviar audio base64. Esta ruta tiene su propio límite y
 // permanece fuera de la API pública.
 app.use("/interno/whatsapp", whatsappAssistantRouter);
@@ -63,6 +79,11 @@ app.use(
     },
   }),
 );
+
+// Comprime con gzip las respuestas de la API pública (listas de productos,
+// ventas, reportes...). El JSON se reduce mucho y baja el tráfico de salida
+// (egress) que cobra Railway. Las rutas /interno quedan arriba, sin cambios.
+app.use(compression());
 
 app.use(
   express.json({

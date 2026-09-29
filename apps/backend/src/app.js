@@ -1,5 +1,6 @@
 import express from "express";
 import { fileURLToPath } from "node:url";
+import compression from "compression";
 import cors from "cors";
 
 import { healthRouter } from "./routes/health.routes.js";
@@ -63,6 +64,11 @@ app.use(
     },
   }),
 );
+
+// Comprime con gzip las respuestas de la API pública (listas de productos,
+// ventas, reportes...). El JSON se reduce mucho y baja el tráfico de salida
+// (egress) que cobra Railway. Las rutas /interno quedan arriba, sin cambios.
+app.use(compression());
 
 app.use(
   express.json({

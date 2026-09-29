@@ -109,3 +109,21 @@ test("peticiones simultáneas al bot no repiten al destinatario en curso", async
   assert.equal(calls, 1);
   assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
 });
+
+test("la cola agenda la próxima revisión según el informe pendiente más cercano", async () => {
+  const { calcularEsperaCola } = await import("../src/modules/caja/informe-turno-notifier.js");
+  const ahora = new Date("2026-09-22T12:00:00Z");
+  const now = () => ahora;
+  const conPendiente = (pendiente) => ({ informePendiente: { findFirst: async () => pendiente } });
+
+  assert.equal(await calcularEsperaCola({ db: conPendiente(null), now }), 30 * 60_000);
+  assert.equal(await calcularEsperaCola({
+    db: conPendiente({ proximoIntento: new Date(ahora.getTime() + 5 * 60_000), bloqueoHasta: null }), now,
+  }), 5 * 60_000 + 1_000);
+  assert.equal(await calcularEsperaCola({
+    db: conPendiente({ proximoIntento: new Date(ahora.getTime() - 60_000), bloqueoHasta: null }), now,
+  }), 15_000);
+  assert.equal(await calcularEsperaCola({
+    db: conPendiente({ proximoIntento: ahora, bloqueoHasta: new Date(ahora.getTime() + 2 * 60 * 60_000) }), now,
+  }), 30 * 60_000);
+});

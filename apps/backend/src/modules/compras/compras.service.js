@@ -184,9 +184,12 @@ export async function searchPurchaseProducts(
       where: {
         activo: true,
 
+        // Un compuesto no tiene existencia propia (descuenta de sus
+        // componentes), así que no se compra: se compran sus componentes.
         producto: {
           activo: true,
           controlaInventario: true,
+          esCompuesto: false,
         },
 
         OR: [
@@ -271,6 +274,7 @@ export async function searchPurchaseProducts(
       nombre: presentation.producto.nombre,
       sku: presentation.producto.sku,
       presentacion: presentation.nombre,
+      esPrincipal: presentation.esPrincipal,
       tipoVenta: presentation.tipo,
       factorInventario: factor,
 
@@ -476,6 +480,7 @@ export async function createPurchase(
               producto: {
                 activo: true,
                 controlaInventario: true,
+                esCompuesto: false,
               },
             },
 

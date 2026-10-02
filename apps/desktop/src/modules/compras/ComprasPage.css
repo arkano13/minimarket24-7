@@ -157,7 +157,7 @@
 
 .purchase-item {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) 1fr 1fr auto auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto;
   align-items: end;
   gap: 12px;
   border: 1px solid var(--border);
@@ -168,6 +168,7 @@
 
 .purchase-item__name {
   display: grid;
+  grid-column: 1 / -1;
   gap: 3px;
 }
 
@@ -511,4 +512,8 @@
   .purchase-detail-actions {
     justify-items: start;
   }
+}
+.purchase-item__name .purchase-item__units {
+  color: var(--success);
+  font-weight: 600;
 }

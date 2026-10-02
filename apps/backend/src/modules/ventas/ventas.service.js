@@ -554,6 +554,10 @@ export async function searchSaleProducts(search = "", clientIdInput = null) {
 
         presentacion: presentation.nombre,
 
+        esPrincipal: presentation.esPrincipal,
+
+        factorInventario: Number(presentation.factorInventario),
+
         tipoVenta: presentation.tipo,
 
         codigoBarra: barcode,
@@ -694,6 +698,8 @@ export async function repriceCartForClient(
       productoId: presentation.producto.id,
       nombre: presentation.producto.nombre,
       presentacion: presentation.nombre,
+      esPrincipal: presentation.esPrincipal,
+      factorInventario: Number(presentation.factorInventario),
       tipoVenta: presentation.tipo,
       codigoBarra: barcode,
       sku: presentation.producto.sku,

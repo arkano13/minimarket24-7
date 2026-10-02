@@ -8,6 +8,7 @@ import {
   searchSaleProducts,
 } from "../../services/api.js";
 import { createSearchDedupe } from "./searchDedupe.js";
+import { presentationLabel } from "../../services/presentation.js";
 
 function PaymentIcon({ name }) {
   const common = {
@@ -940,8 +941,8 @@ export function VentasPage({ token }) {
                   type="button"
                 >
                   <span className="sales-product-card__name">
-                    <strong>{product.nombre}</strong>
-                    <small>{product.presentacion}</small>
+                    <strong>{presentationLabel(product).titulo}</strong>
+                    <small>{presentationLabel(product).detalle}</small>
                   </span>
 
                   <span className="sales-product-card__price">
@@ -1004,9 +1005,9 @@ export function VentasPage({ token }) {
                   <div className="cart-item__row-top">
                     <strong
                       className="cart-item__name"
-                      title={item.nombre}
+                      title={presentationLabel(item).titulo}
                     >
-                      {item.nombre}
+                      {presentationLabel(item).titulo}
                     </strong>
 
                     <button
@@ -1024,6 +1025,9 @@ export function VentasPage({ token }) {
                   <div className="cart-item__row-bottom">
                     <small className="cart-item__unit-price">
                       L {formatMoney(item.precio)} c/u
+                      {presentationLabel(item).titulo !== item.nombre
+                        ? ` · ${item.nombre}`
+                        : ""}
                     </small>
 
                     <input

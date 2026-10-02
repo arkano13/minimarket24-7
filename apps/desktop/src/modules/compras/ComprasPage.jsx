@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import "./ComprasPage.css";
+import { formatUnits, presentationLabel } from "../../services/presentation.js";
 
 import {
   cancelPurchase,
@@ -414,9 +415,14 @@ export function ComprasPage({ token }) {
                       type="button"
                     >
                       <span>
-                        <strong>{product.nombre}</strong>
+                        <strong>{presentationLabel(product).titulo}</strong>
 
-                        <small>{product.presentacion}</small>
+                        <small>
+                          {presentationLabel(product).detalle}
+                          {product.factorInventario !== 1
+                            ? ` · equivale a ${formatUnits(product.factorInventario)} unid.`
+                            : ""}
+                        </small>
                       </span>
 
                       <small>Costo anterior: L {money(product.costoSugerido)}</small>
@@ -434,9 +440,17 @@ export function ComprasPage({ token }) {
               {items.map((item) => (
                 <article className="purchase-item" key={item.presentacionId}>
                   <div className="purchase-item__name">
-                    <strong>{item.nombre}</strong>
+                    <strong>{presentationLabel(item).titulo}</strong>
 
-                    <small>{item.presentacion}</small>
+                    <small>{presentationLabel(item).detalle}</small>
+
+                    {item.factorInventario !== 1 ? (
+                      <small className="purchase-item__units">
+                        Entran al inventario:{" "}
+                        {formatUnits((Number(item.cantidad) || 0) * item.factorInventario)} unid.
+                        de {item.nombre}
+                      </small>
+                    ) : null}
                   </div>
 
                   <label>
@@ -474,7 +488,7 @@ export function ComprasPage({ token }) {
                     />
                   </label>
 
-                  <strong>Por {item.presentacion.toLowerCase()}: L {money(Number(item.cantidad) > 0 ? Number(item.costoTotal) / Number(item.cantidad) : 0)}</strong>
+                  <strong>Costo c/u: L {money(Number(item.cantidad) > 0 ? Number(item.costoTotal) / Number(item.cantidad) : 0)}</strong>
 
                   <button
                     aria-label={`Quitar ${item.nombre}`}
@@ -632,13 +646,16 @@ export function ComprasPage({ token }) {
                   {selectedPurchase.productos.map((product) => (
                     <article key={product.id}>
                       <span>
-                        <strong>{product.nombre}</strong>
+                        <strong>{presentationLabel(product).titulo}</strong>
 
-                        <small>{product.presentacion}</small>
+                        <small>{presentationLabel(product).detalle}</small>
                       </span>
 
                       <span>
                         {product.cantidad} × L {money(product.costo)}
+                        {product.factorInventario !== 1
+                          ? ` (= ${formatUnits(product.cantidadInventario)} unid.)`
+                          : ""}
                       </span>
 
                       <strong>L {money(product.subtotal)}</strong>

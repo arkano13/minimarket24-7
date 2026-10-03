@@ -36,6 +36,7 @@
     "appId": "com.minimarket247.pos",
     "productName": "Minimarket 24/7",
     "asar": true,
+    "npmRebuild": false,
     "directories": {
       "output": "release"
     },

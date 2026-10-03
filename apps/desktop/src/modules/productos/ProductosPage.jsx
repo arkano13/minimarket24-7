@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import "./ProductosPage.css";
 
 import {
@@ -591,7 +591,9 @@ export function ProductosPage({ token, onBack }) {
     }
   }
 
-  async function startEditing(product) {
+  // presentationToEdit: si se pulsó Editar en la fila de una presentación,
+  // abre el producto y deja cargada esa presentación en su editor.
+  async function startEditing(product, presentationToEdit = null) {
     const presentation = product.presentacionPrincipal;
 
     const shiftTwoPrice = presentation?.preciosTurno?.find(
@@ -665,6 +667,29 @@ export function ProductosPage({ token, onBack }) {
     }
 
     await loadPresentations(product.id);
+
+    if (presentationToEdit) {
+      const principalFactorOfProduct = Number(
+        product.presentacionPrincipal?.factorInventario ?? 1,
+      );
+
+      startEditingPresentation({
+        id: presentationToEdit.id,
+        nombre: presentationToEdit.nombre,
+        cantidad: Number(presentationToEdit.factorInventario) / principalFactorOfProduct,
+        precio: Number(presentationToEdit.precio),
+        precioTurno2: shiftPriceText(presentationToEdit, 2),
+        precioTurno3: shiftPriceText(presentationToEdit, 3),
+        codigoBarra: presentationToEdit.codigoBarra,
+      });
+
+      window.setTimeout(() => {
+        document
+          .querySelector(".presentation-editor")
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 0);
+      return;
+    }
 
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -1514,7 +1539,8 @@ export function ProductosPage({ token, onBack }) {
 
               <tbody>
                 {products.map((product) => (
-                  <tr key={product.id}>
+                  <Fragment key={product.id}>
+                  <tr>
                     <td>
                       <strong>{product.nombre}</strong>
 
@@ -1530,11 +1556,10 @@ export function ProductosPage({ token, onBack }) {
 
                       {product.presentaciones?.length > 1 ? (
                         <small className="presentation-count">
-                          +{" "}
-                          {product.presentaciones
-                            .filter((item) => !item.esPrincipal)
-                            .map((item) => item.nombre)
-                            .join(" · ")}
+                          + {product.presentaciones.length - 1}{" "}
+                          {product.presentaciones.length - 1 === 1
+                            ? "presentación"
+                            : "presentaciones"}
                         </small>
                       ) : null}
                     </td>
@@ -1569,6 +1594,57 @@ export function ProductosPage({ token, onBack }) {
                       </button>
                     </td>
                   </tr>
+
+                  {(product.presentaciones ?? [])
+                    .filter((item) => !item.esPrincipal)
+                    .map((item) => {
+                      const units =
+                        Number(item.factorInventario) /
+                        Number(product.presentacionPrincipal?.factorInventario ?? 1);
+
+                      return (
+                        <tr className="product-table__presentation" key={`p-${item.id}`}>
+                          <td>
+                            <strong>{item.nombre}</strong>
+
+                            <small>Presentación de {product.nombre}</small>
+                          </td>
+
+                          <td>{item.codigoBarra ?? "—"}</td>
+
+                          <td>
+                            Equivale a {formatNumber(units)}{" "}
+                            {BASE_UNIT_LABELS[product.presentacionPrincipal?.tipo] ?? "unidades"}
+                          </td>
+
+                          <td>{units > 0 ? formatNumber(product.stock / units) : "—"}</td>
+
+                          <td>
+                            <span className="price-cell">
+                              <strong>{Number(item.precio).toFixed(2)}</strong>
+
+                              <small>
+                                {product.modoPrecio === "POR_HORARIO" &&
+                                item.preciosTurno?.length > 0
+                                  ? "Por turno"
+                                  : "Todo el día"}
+                              </small>
+                            </span>
+                          </td>
+
+                          <td>
+                            <button
+                              className="secondary-button product-edit-button"
+                              onClick={() => startEditing(product, item)}
+                              type="button"
+                            >
+                              Editar
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

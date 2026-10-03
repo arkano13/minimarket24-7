@@ -38,8 +38,16 @@ const EMPTY_PRESENTATION_FORM = {
   nombre: "",
   cantidad: "",
   precio: "",
+  precioTurno2: "",
+  precioTurno3: "",
   codigoBarra: "",
 };
+
+// Precio de una presentación guardada en un turno (2 o 3), como texto.
+function shiftPriceText(presentation, shift) {
+  const found = presentation.preciosTurno?.find((item) => item.turno === shift);
+  return found ? String(found.precio) : "";
+}
 
 // Factor de la presentación principal según cómo se vende el producto.
 // Debe coincidir con TIPOS_VENTA de productos.service.js.
@@ -409,8 +417,17 @@ export function ProductosPage({ token, onBack }) {
       tipoVenta: presentationTypeFor(form.tipoVenta),
       factorInventario: factor,
       precio: draft.precio,
+      ...shiftPricePayload(draft),
       codigoBarra: draft.codigoBarra.trim(),
     };
+  }
+
+  // Si el producto cambia de precio según el turno, cada presentación
+  // lleva también su precio de turno 2 y 3 (el turno 1 es el precio normal).
+  function shiftPricePayload(draft) {
+    return form.cambiaPrecioTurno
+      ? { cambiaPrecioTurno: true, precioTurno2: draft.precioTurno2, precioTurno3: draft.precioTurno3 }
+      : { cambiaPrecioTurno: false };
   }
 
   function validatePresentationForm() {
@@ -426,6 +443,13 @@ export function ProductosPage({ token, onBack }) {
 
     if (!(Number(presentationForm.precio) > 0)) {
       return "Escribe un precio de venta válido.";
+    }
+
+    if (
+      form.cambiaPrecioTurno &&
+      !(Number(presentationForm.precioTurno2) > 0 && Number(presentationForm.precioTurno3) > 0)
+    ) {
+      return "Escribe el precio del turno 2 y del turno 3 para esta presentación.";
     }
 
     const others = extraPresentations.filter((item) => item.id !== editingPresentationId);
@@ -449,6 +473,8 @@ export function ProductosPage({ token, onBack }) {
       nombre: item.nombre,
       cantidad: String(item.cantidad),
       precio: String(item.precio),
+      precioTurno2: item.precioTurno2 ?? "",
+      precioTurno3: item.precioTurno3 ?? "",
       codigoBarra: item.codigoBarra ?? "",
     });
 
@@ -478,6 +504,8 @@ export function ProductosPage({ token, onBack }) {
         nombre: presentationForm.nombre.trim(),
         cantidad: presentationForm.cantidad,
         precio: presentationForm.precio,
+        precioTurno2: presentationForm.precioTurno2,
+        precioTurno3: presentationForm.precioTurno3,
         codigoBarra: presentationForm.codigoBarra.trim(),
       };
 
@@ -503,6 +531,7 @@ export function ProductosPage({ token, onBack }) {
         await updatePresentation(token, editingProductId, editingPresentationId, {
           nombre: presentationForm.nombre.trim(),
           precio: presentationForm.precio,
+          ...shiftPricePayload(presentationForm),
           codigoBarra: presentationForm.codigoBarra.trim(),
         });
       } else {
@@ -662,6 +691,8 @@ export function ProductosPage({ token, onBack }) {
           nombre: item.nombre,
           cantidad: Number(item.factorInventario) / principalFactor,
           precio: Number(item.precio),
+          precioTurno2: shiftPriceText(item, 2),
+          precioTurno3: shiftPriceText(item, 3),
           codigoBarra: item.codigoBarra,
         }))
     : draftPresentations.map((item) => ({
@@ -669,6 +700,8 @@ export function ProductosPage({ token, onBack }) {
         nombre: item.nombre,
         cantidad: Number(item.cantidad),
         precio: Number(item.precio),
+        precioTurno2: item.precioTurno2 ?? "",
+        precioTurno3: item.precioTurno3 ?? "",
         codigoBarra: item.codigoBarra,
       }));
 
@@ -1076,6 +1109,19 @@ export function ProductosPage({ token, onBack }) {
                             ? ` · L ${(item.precio / item.cantidad).toFixed(2)} c/u`
                             : ""}
                         </small>
+
+                        {form.cambiaPrecioTurno ? (
+                          item.precioTurno2 && item.precioTurno3 ? (
+                            <small>
+                              Turno 2: L {Number(item.precioTurno2).toFixed(2)} · Turno 3: L{" "}
+                              {Number(item.precioTurno3).toFixed(2)}
+                            </small>
+                          ) : (
+                            <small className="presentation-list__warning">
+                              Sin precios por turno: cobra L {item.precio.toFixed(2)} todo el día. Pulsa Editar para agregarlos.
+                            </small>
+                          )
+                        ) : null}
                       </span>
 
                       <span className="presentation-list__price">
@@ -1144,7 +1190,7 @@ export function ProductosPage({ token, onBack }) {
                   </label>
 
                   <label className="field">
-                    <span>Precio de venta *</span>
+                    <span>{form.cambiaPrecioTurno ? "Precio normal · turno 1 *" : "Precio de venta *"}</span>
 
                     <input
                       min="0.01"
@@ -1156,6 +1202,38 @@ export function ProductosPage({ token, onBack }) {
                       value={presentationForm.precio}
                     />
                   </label>
+
+                  {form.cambiaPrecioTurno ? (
+                    <>
+                      <label className="field">
+                        <span>Precio turno 2 · 10 p. m. a 2 a. m. *</span>
+
+                        <input
+                          min="0.01"
+                          name="precioTurno2"
+                          onChange={updatePresentationField}
+                          placeholder="0.00"
+                          step="0.01"
+                          type="number"
+                          value={presentationForm.precioTurno2}
+                        />
+                      </label>
+
+                      <label className="field">
+                        <span>Precio turno 3 · 2 a. m. a 8 a. m. *</span>
+
+                        <input
+                          min="0.01"
+                          name="precioTurno3"
+                          onChange={updatePresentationField}
+                          placeholder="0.00"
+                          step="0.01"
+                          type="number"
+                          value={presentationForm.precioTurno3}
+                        />
+                      </label>
+                    </>
+                  ) : null}
 
                   <label className="field">
                     <span>Código de barras</span>

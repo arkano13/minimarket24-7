@@ -574,3 +574,7 @@
     grid-template-columns: 1fr;
   }
 }
+.presentation-list__name .presentation-list__warning {
+  color: var(--warning);
+  font-weight: 600;
+}

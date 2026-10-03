@@ -176,6 +176,54 @@ async function getShiftPrices(transaction, normalPrice, shiftTwoPrice, shiftThre
   ];
 }
 
+// Precios por turno de una presentación adicional (paquete, caja...).
+// cambiaPrecioTurno: true → guarda los tres turnos (el 1 es el precio
+// normal); false → los quita; sin enviar → se dejan como estaban.
+function presentationShiftInput(data) {
+  if (data.cambiaPrecioTurno === true) {
+    return {
+      mode: "SET",
+      shiftTwo: decimalValue(data.precioTurno2, "El precio del turno 2", { positive: true }),
+      shiftThree: decimalValue(data.precioTurno3, "El precio del turno 3", { positive: true }),
+    };
+  }
+
+  return { mode: data.cambiaPrecioTurno === false ? "CLEAR" : "KEEP" };
+}
+
+async function savePresentationShiftPrices(transaction, presentationId, price, shiftInput) {
+  if (shiftInput.mode === "SET") {
+    const shiftPrices = await getShiftPrices(transaction, price, shiftInput.shiftTwo, shiftInput.shiftThree);
+
+    await transaction.precioPresentacionHorario.deleteMany({ where: { presentacionId: presentationId } });
+    await transaction.precioPresentacionHorario.createMany({
+      data: shiftPrices.map((shiftPrice) => ({ presentacionId: presentationId, ...shiftPrice })),
+    });
+    return;
+  }
+
+  if (shiftInput.mode === "CLEAR") {
+    await transaction.precioPresentacionHorario.deleteMany({ where: { presentacionId: presentationId } });
+    return;
+  }
+
+  // KEEP: el turno 1 es el precio normal; si cambió el precio, se sincroniza.
+  await transaction.precioPresentacionHorario.updateMany({
+    where: { presentacionId: presentationId, franja: { orden: 1 } },
+    data: { precio: price },
+  });
+}
+
+function serializeShiftPrices(preciosHorario = []) {
+  return preciosHorario.map((shiftPrice) => ({
+    turno: shiftPrice.franja.orden,
+    nombre: shiftPrice.franja.nombre,
+    minutoInicio: shiftPrice.franja.minutoInicio,
+    minutoFin: shiftPrice.franja.minutoFin,
+    precio: Number(shiftPrice.precio),
+  }));
+}
+
 function serializeProduct(product) {
   const principal =
     product.presentaciones.find((presentation) => presentation.esPrincipal) ??
@@ -209,13 +257,7 @@ function serializeProduct(product) {
             principal.codigosBarra[0]?.codigo ??
             null,
 
-          preciosTurno: principal.preciosHorario.map((shiftPrice) => ({
-            turno: shiftPrice.franja.orden,
-            nombre: shiftPrice.franja.nombre,
-            minutoInicio: shiftPrice.franja.minutoInicio,
-            minutoFin: shiftPrice.franja.minutoFin,
-            precio: Number(shiftPrice.precio),
-          })),
+          preciosTurno: serializeShiftPrices(principal.preciosHorario),
         }
       : null,
 
@@ -228,6 +270,7 @@ function serializeProduct(product) {
       esPrincipal: presentation.esPrincipal,
       factorInventario: Number(presentation.factorInventario),
       precio: Number(presentation.precioBase),
+      preciosTurno: serializeShiftPrices(presentation.preciosHorario),
 
       codigoBarra:
         presentation.codigosBarra.find((barcode) => barcode.principal)?.codigo ??
@@ -608,7 +651,10 @@ export async function listPresentations(productIdInput) {
 
   const presentations = await prisma.presentacionProducto.findMany({
     where: { productoId: productId, activo: true },
-    include: { codigosBarra: { where: { activo: true } } },
+    include: {
+      codigosBarra: { where: { activo: true } },
+      preciosHorario: { include: { franja: true }, orderBy: { franja: { orden: "asc" } } },
+    },
     orderBy: [{ esPrincipal: "desc" }, { id: "asc" }],
   });
 
@@ -619,6 +665,7 @@ export async function listPresentations(productIdInput) {
     esPrincipal: presentation.esPrincipal,
     factorInventario: Number(presentation.factorInventario),
     precio: Number(presentation.precioBase),
+    preciosTurno: serializeShiftPrices(presentation.preciosHorario),
 
     codigoBarra:
       presentation.codigosBarra.find((barcode) => barcode.principal)?.codigo ??
@@ -646,6 +693,7 @@ export async function addPresentation(productIdInput, data, userId) {
   });
 
   const price = decimalValue(data.precio, "El precio", { positive: true });
+  const shiftInput = presentationShiftInput(data);
 
   try {
     const product = await prisma.$transaction(async (transaction) => {
@@ -669,7 +717,7 @@ export async function addPresentation(productIdInput, data, userId) {
 
       await assertBarcodeAvailable(transaction, barcode, parentProduct.esCompuesto, productId);
 
-      await transaction.presentacionProducto.create({
+      const created = await transaction.presentacionProducto.create({
         data: {
           productoId: productId,
           nombre: name,
@@ -683,6 +731,8 @@ export async function addPresentation(productIdInput, data, userId) {
             : {}),
         },
       });
+
+      await savePresentationShiftPrices(transaction, created.id, price, shiftInput);
 
       return transaction.producto.findUnique({
         where: { id: productId },
@@ -719,6 +769,7 @@ export async function updatePresentation(productIdInput, presentationIdInput, da
   const name = cleanText(data.nombre, "El nombre de la presentación", 80);
   const barcode = optionalText(data.codigoBarra, 80);
   const price = decimalValue(data.precio, "El precio", { positive: true });
+  const shiftInput = presentationShiftInput(data);
 
   // El factorInventario NO se permite cambiar aquí a propósito: si ya
   // hay ventas históricas con este factor, cambiarlo rompe la trazabilidad
@@ -769,6 +820,8 @@ export async function updatePresentation(productIdInput, presentationIdInput, da
             : {}),
         },
       });
+
+      await savePresentationShiftPrices(transaction, presentationId, price, shiftInput);
 
       return transaction.producto.findUnique({
         where: { id: productId },

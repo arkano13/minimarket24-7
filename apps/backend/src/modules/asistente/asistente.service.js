@@ -70,6 +70,10 @@ información — no tienes ninguna herramienta para crear, editar, anular o borr
 Si te piden registrar una venta, anular una compra, ajustar stock o algo similar, explica
 que eso se hace desde el sistema/panel directamente, no desde aquí.
 
+EXISTENCIAS: responde solo la cantidad del producto en unidades sueltas (ej. "Salvavida
+Botella: 121"). No menciones ni calcules presentaciones (cajas, paquetes, six-pack) ni
+productos compuestos (cubetazos, combos).
+
 FECHA Y HORA ACTUAL (Honduras): ${new Date().toLocaleString("es-HN", { timeZone: HONDURAS_TIME_ZONE })}.
 Cuando te pidan "hoy", "ayer", "esta semana", calcula tú mismo las fechas a partir de la de arriba.
 
@@ -171,21 +175,30 @@ function recortarLista(lista, campos, limite = 15) {
   });
 }
 
-async function executeTool(name, args) {
+// El asistente responde existencias solo del producto base, en unidades
+// sueltas: sin presentaciones (cajas, paquetes) ni productos compuestos,
+// que no tienen existencia propia y aparecerían con 0.
+const CAMPOS_PRODUCTO = ["id", "sku", "nombre", "stock", "stockMinimo"];
+
+function soloProductosBase(lista) {
+  return lista.filter((producto) => !producto.esCompuesto);
+}
+
+export async function executeTool(name, args) {
   try {
     switch (name) {
       case "list_products": {
         const resultado = await listProducts(args.search ?? "");
         const productos = Array.isArray(resultado) ? resultado : resultado.productos ?? [];
-        return recortarLista(productos, ["id", "sku", "nombre", "stock", "stockMinimo", "presentaciones"], 20);
+        return recortarLista(soloProductosBase(productos), CAMPOS_PRODUCTO, 20);
       }
       case "list_low_stock_products":
-        return await listLowStockProducts();
+        return recortarLista(soloProductosBase(await listLowStockProducts()), CAMPOS_PRODUCTO, 40);
       case "list_categories":
         return await listCategories();
       case "list_products_by_category": {
         const productos = await listProductsByCategory(args.categoria);
-        return recortarLista(productos, ["id", "sku", "nombre", "stock", "stockMinimo"], 30);
+        return recortarLista(soloProductosBase(productos), CAMPOS_PRODUCTO, 30);
       }
       case "list_suppliers": {
         const resultado = await listSuppliers(args.search ?? "");

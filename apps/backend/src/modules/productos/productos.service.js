@@ -240,6 +240,7 @@ function serializeProduct(product) {
     categoria: product.categoria,
     modoPrecio: product.modoPrecio,
     activo: product.activo,
+    esCompuesto: product.esCompuesto,
     stock: Number(product.stockActual) / factor,
     stockMinimo: Number(product.stockMinimo) / factor,
     costo: Number(product.costoPromedio) * factor,

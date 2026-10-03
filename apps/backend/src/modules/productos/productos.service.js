@@ -318,6 +318,14 @@ export async function listProducts(search = "", pageInput, perPageInput) {
             {
               presentaciones: {
                 some: {
+                  activo: true,
+                  nombre: { contains: term, mode: "insensitive" },
+                },
+              },
+            },
+            {
+              presentaciones: {
+                some: {
                   codigosBarra: {
                     some: { codigo: { contains: term } },
                   },

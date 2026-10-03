@@ -578,3 +578,12 @@
   color: var(--warning);
   font-weight: 600;
 }
+
+/* Fila de una presentación (paquete, caja...) debajo de su producto. */
+.product-table__presentation td {
+  background: var(--accent-tint);
+}
+
+.product-table__presentation td:first-child {
+  padding-left: 32px;
+}

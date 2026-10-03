@@ -1,0 +1,51 @@
+# Compila el instalador de Windows de la app de escritorio y lo publica en
+# GitHub Releases, de donde lo descargan las cajas al actualizarse.
+#
+# Se ejecuta al subir una etiqueta vX.Y.Z (por ejemplo v0.2.6). La versión
+# del instalador sale de apps/desktop/package.json, así que la etiqueta y
+# esa versión deben coincidir.
+name: Release escritorio
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    env:
+      # Dirección del backend en Railway que usa el .exe.
+      VITE_API_URL: https://minimarket24-7-production.up.railway.app
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # El escritorio no usa Chromium de Puppeteer.
+      PUPPETEER_SKIP_DOWNLOAD: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Verificar que la etiqueta coincide con la versión
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./apps/desktop/package.json').version")
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "La etiqueta $GITHUB_REF_NAME no coincide con la versión $VERSION de apps/desktop/package.json"
+            exit 1
+          fi
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Compilar y publicar
+        run: npm run release --workspace=@minisuper/desktop

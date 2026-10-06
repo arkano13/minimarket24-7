@@ -126,6 +126,16 @@ const API_URL = `${import.meta.env?.VITE_API_URL ?? "http://127.0.0.1:3001"}/api
     });
   }
 
+  // Desactiva el producto en la base de datos (no lo borra).
+  export function deactivateProduct(token, productId) {
+    return request(`/productos/${productId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  }
+
   export function getProductComponents(token, productId) {
     return request(`/productos/${productId}/componentes`, {
       headers: {

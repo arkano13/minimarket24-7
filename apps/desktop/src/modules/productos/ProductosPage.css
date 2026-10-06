@@ -587,3 +587,31 @@
 .product-table__presentation td:first-child {
   padding-left: 32px;
 }
+
+/* Zona para eliminar (desactivar) el producto, al final del formulario. */
+.product-delete-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 20px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  background: var(--danger-tint);
+}
+
+.product-delete-zone > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.product-delete-zone small {
+  color: var(--muted);
+}
+
+.product-delete-zone__actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}

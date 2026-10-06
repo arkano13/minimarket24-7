@@ -5,6 +5,7 @@ import { requireAuth, requireModule } from "../auth/auth.middleware.js";
 import {
   addPresentation,
   createProduct,
+  deactivateProduct,
   deactivatePresentation,
   getProductComponents,
   listPresentations,
@@ -60,6 +61,16 @@ productsRouter.patch("/:id", async (req, res, next) => {
   try {
     const product = await updateProduct(req.params.id, req.body, req.auth.usuario.id);
     res.json({ producto: product });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Desactiva el producto (no lo borra de la base de datos).
+productsRouter.delete("/:id", async (req, res, next) => {
+  try {
+    const product = await deactivateProduct(req.params.id, req.auth.usuario.id);
+    res.json({ producto: product, mensaje: "Producto eliminado." });
   } catch (error) {
     next(error);
   }

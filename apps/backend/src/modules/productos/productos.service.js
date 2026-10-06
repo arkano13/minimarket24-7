@@ -1080,3 +1080,52 @@ export async function listProductsByCategory(categoria) {
 
   return products.map(serializeProduct);
 }
+// "Eliminar" un producto desde la pantalla: se desactiva (activo = false),
+// nunca se borra, porque ventas, compras y movimientos lo referencian.
+// Deja de aparecer en Productos, Ventas, Compras y el asistente.
+export async function deactivateProduct(productIdInput, userId) {
+  const productId = productIdValue(productIdInput);
+
+  const product = await prisma.$transaction(async (transaction) => {
+    const current = await transaction.producto.findFirst({
+      where: { id: productId, activo: true },
+      select: { id: true, nombre: true, stockActual: true },
+    });
+
+    if (!current) {
+      throw new AppError("El producto no existe o ya fue eliminado.", 404);
+    }
+
+    // Si un compuesto activo descuenta de este producto, desactivarlo
+    // dejaría ese compuesto sin poder venderse correctamente.
+    const usedBy = await transaction.componenteProducto.findMany({
+      where: { productoComponenteId: productId, productoPadre: { activo: true } },
+      select: { productoPadre: { select: { nombre: true } } },
+    });
+
+    if (usedBy.length > 0) {
+      const names = usedBy.map((item) => item.productoPadre.nombre).join(", ");
+      throw new AppError(
+        `No se puede eliminar: lo usan estos productos compuestos: ${names}. Elimínalos o cámbialos primero.`,
+        409,
+      );
+    }
+
+    await transaction.producto.update({
+      where: { id: productId },
+      data: { activo: false },
+    });
+
+    return current;
+  });
+
+  await registrarBitacora({
+    usuarioId: userId,
+    accion: "ELIMINAR_PRODUCTO",
+    entidad: "Producto",
+    entidadId: productId,
+    detalle: { producto: product.nombre, existencia: Number(product.stockActual) },
+  });
+
+  return { id: product.id, nombre: product.nombre };
+}

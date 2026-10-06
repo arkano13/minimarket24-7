@@ -5,6 +5,7 @@ import {
   addPresentation,
   createCategory,
   createProduct,
+  deactivateProduct,
   getProductComponents,
   listCategories,
   listPresentations,
@@ -104,6 +105,8 @@ export function ProductosPage({ token, onBack }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [editingProductId, setEditingProductId] = useState(null);
   const [formSnapshot, setFormSnapshot] = useState(EMPTY_FORM);
   const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
@@ -350,6 +353,31 @@ export function ProductosPage({ token, onBack }) {
     }
   }
 
+  // "Eliminar" desactiva el producto en la base de datos: deja de aparecer
+  // en Productos, Ventas y Compras, pero sus ventas anteriores se conservan.
+  async function handleDeactivateProduct() {
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      return;
+    }
+
+    setDeleting(true);
+    setError("");
+
+    try {
+      const name = form.nombre;
+      await deactivateProduct(token, editingProductId);
+      resetForm();
+      await loadProducts(page);
+      setSuccess(`Producto "${name}" eliminado. Ya no aparece en Productos, Ventas ni Compras.`);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setDeleting(false);
+      setConfirmingDelete(false);
+    }
+  }
+
   function closeForm() {
     const hasUnsavedChanges =
       JSON.stringify(form) !== JSON.stringify(formSnapshot) ||
@@ -365,6 +393,7 @@ export function ProductosPage({ token, onBack }) {
   }
 
   function resetForm() {
+    setConfirmingDelete(false);
     setForm(EMPTY_FORM);
     setShowForm(false);
     setShowCategoryForm(false);
@@ -1495,6 +1524,46 @@ export function ProductosPage({ token, onBack }) {
                     : "Guardar producto"}
               </button>
             </div>
+
+            {editingProductId ? (
+              <div className="product-delete-zone">
+                <div>
+                  <strong>Eliminar producto</strong>
+
+                  <small>
+                    {confirmingDelete
+                      ? `¿Seguro que quieres eliminar "${form.nombre}"? Dejará de aparecer en Productos, Ventas y Compras. Sus ventas anteriores se conservan en los reportes.`
+                      : "Deja de aparecer en Productos, Ventas y Compras. Sus ventas anteriores se conservan."}
+                  </small>
+                </div>
+
+                <div className="product-delete-zone__actions">
+                  {confirmingDelete ? (
+                    <button
+                      className="secondary-button"
+                      disabled={deleting}
+                      onClick={() => setConfirmingDelete(false)}
+                      type="button"
+                    >
+                      Cancelar
+                    </button>
+                  ) : null}
+
+                  <button
+                    className="danger-button"
+                    disabled={deleting || saving}
+                    onClick={handleDeactivateProduct}
+                    type="button"
+                  >
+                    {deleting
+                      ? "Eliminando..."
+                      : confirmingDelete
+                        ? "Sí, eliminar producto"
+                        : "Eliminar producto"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </form>
         </section>
       ) : null}

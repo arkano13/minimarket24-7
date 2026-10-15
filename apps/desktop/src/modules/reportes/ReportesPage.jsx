@@ -552,7 +552,7 @@ function ShiftReportView({
 
               <tbody>
                 {report.productos.map((product, index) => (
-                  <tr key={product.productoId}>
+                  <tr key={product.clave ?? product.productoId}>
                     <td>
                       <span className="reports-rank">{index + 1}</span>
                     </td>

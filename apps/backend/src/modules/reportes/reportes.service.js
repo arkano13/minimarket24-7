@@ -6,6 +6,28 @@ import { AppError } from "../../utils/AppError.js";
 // el backend (local, Railway, o donde sea).
 const HONDURAS_TIME_ZONE = "America/Tegucigalpa";
 
+// En "Todas las ventas · agrupadas por producto", las bebidas alcohólicas
+// (cervezas, licores) se suman en unidades sueltas: 2 cajas de 24 + 10
+// botellas = 58 cervezas. El resto (ej. cigarros) se separa por
+// presentación: unidad, cajetilla grande, cajetilla pequeña.
+// Mismas palabras que usa Ventas para el recargo "Tomar acá".
+const CATEGORIAS_EN_UNIDADES = ["cerveza", "alcoh", "licor"];
+
+// "Paquete Cigarro belmont Grande" ya dice de qué producto es; "Caja 24"
+// no, así que se le antepone el producto.
+function presentationLabel(productName, presentationName) {
+  const firstWord = (productName ?? "").trim().split(/\s+/)[0]?.toLowerCase();
+
+  return firstWord && presentationName.toLowerCase().includes(firstWord)
+    ? presentationName
+    : `${productName} · ${presentationName}`;
+}
+
+function sumaEnUnidades(categoryName) {
+  const name = (categoryName ?? "").toLowerCase();
+  return CATEGORIAS_EN_UNIDADES.some((keyword) => name.includes(keyword));
+}
+
 const hondurasHourFormatter = new Intl.DateTimeFormat("en-US", {
   timeZone: HONDURAS_TIME_ZONE,
   hour12: false,
@@ -503,6 +525,19 @@ export async function getShiftReport(
         orderBy: {
           id: "asc",
         },
+
+        include: {
+          producto: {
+            select: {
+              categoria: { select: { nombre: true } },
+              presentaciones: {
+                where: { esPrincipal: true },
+                select: { id: true, factorInventario: true },
+                take: 1,
+              },
+            },
+          },
+        },
       },
     },
 
@@ -604,13 +639,31 @@ export async function getShiftReport(
 
       totalCost += detailCost;
 
+      const inUnits = sumaEnUnidades(detail.producto?.categoria?.nombre);
+      const principal = detail.producto?.presentaciones?.[0];
+      const principalFactor = Number(principal?.factorInventario ?? 1);
+      const isPrincipal =
+        !principal ||
+        !detail.presentacionNombre ||
+        detail.presentacionId === principal.id;
+
+      // Clave de agrupación: el producto entero (en unidades) o cada
+      // presentación por separado.
+      const productKey = inUnits
+        ? `p-${detail.productoId}`
+        : `p-${detail.productoId}-${detail.presentacionId}`;
+
       const productEntry =
-        products.get(detail.productoId) ?? {
+        products.get(productKey) ?? {
+          clave: productKey,
+
           productoId:
             detail.productoId,
 
           nombre:
-            detail.productoNombre,
+            inUnits || isPrincipal
+              ? detail.productoNombre
+              : presentationLabel(detail.productoNombre, detail.presentacionNombre),
 
           cantidad: 0,
           ventas: 0,
@@ -618,9 +671,9 @@ export async function getShiftReport(
           ganancia: 0,
         };
 
-      productEntry.cantidad += Number(
-        detail.cantidad,
-      );
+      productEntry.cantidad += inUnits
+        ? Number(detail.cantidadInventario) / principalFactor
+        : Number(detail.cantidad);
 
       productEntry.ventas += detailSale;
       productEntry.costo += detailCost;
@@ -629,7 +682,7 @@ export async function getShiftReport(
         detailSale - detailCost;
 
       products.set(
-        detail.productoId,
+        productKey,
         productEntry,
       );
     }

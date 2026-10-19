@@ -1,10 +1,9 @@
 // apps/backend/src/modules/caja/turno-cierre.js
 //
 // Deduce a qué turno (A/B/C) corresponde un cierre de caja a partir de
-// la HORA en que se cerró, con una tolerancia de ±1 hora alrededor del
-// fin de cada turno. Se usa SOLO para imprimir el informe de un cierre
-// desde el historial: el envío por WhatsApp sigue usando la rotación
-// A → B → C (obtenerYAvanzarProximoTurno) y no se ve afectado.
+// la HORA en que se cerró: gana el turno cuyo fin queda más cerca. Lo
+// usan el informe que se manda por WhatsApp al cerrar caja, la impresión
+// desde el historial y el asistente, así los tres ponen la misma letra.
 //
 // Fin de cada turno (hora de Honduras, UTC-6, sin horario de verano):
 //   Turno A: 2:00 a. m. – 8:00 a. m.   → termina 8:00 a. m.
@@ -16,8 +15,11 @@
 //   cierre 5:40 p. m.  → Turno B   (cae en 5:00–7:00 p. m.)
 //   cierre 6:30 p. m.  → Turno B
 //   cierre 1:30 a. m.  → Turno C   (cae en 1:00–3:00 a. m.)
-//   cierre 12:00 m.    → fuera de toda tolerancia: Turno B (el que
-//                        contiene esa hora)
+//   cierre 7:30 p. m.  → fuera de la tolerancia, pero el fin más cercano
+//                        es el de las 6:00 p. m.: Turno B
+//
+// Cortes resultantes: 5:00 a. m. – 12:59 p. m. → A,
+// 1:00 p. m. – 9:59 p. m. → B, 10:00 p. m. – 4:59 a. m. → C.
 
 const HONDURAS_TIME_ZONE = "America/Tegucigalpa";
 
@@ -59,17 +61,13 @@ function distanciaCircular(a, b) {
   return Math.min(diferencia, 1440 - diferencia);
 }
 
-function turnoQueContiene(minuto) {
-  if (minuto >= 120 && minuto < 480) return "A";
-  if (minuto >= 480 && minuto < 1080) return "B";
-  return "C";
-}
-
 /**
  * @param {Date} cerradoEn instante en que se cerró la caja
  * @param {number} [tolerancia] minutos de margen (arriba y abajo) alrededor
  *   del fin de cada turno
  * @returns {{ turno: "A"|"B"|"C", fecha: string, porTolerancia: boolean }}
+ *   `porTolerancia` es false cuando el cierre quedó lejos de todo fin de
+ *   turno (la letra es la del fin más cercano igual).
  *   `fecha` es el día comercial (YYYY-MM-DD) del turno — el Turno C que
  *   termina de madrugada pertenece al día calendario anterior.
  */
@@ -85,17 +83,13 @@ export function inferirTurnoDeCierre(
   for (const [candidato, fin] of Object.entries(FIN_DE_TURNO)) {
     const distancia = distanciaCircular(minuto, fin);
 
-    if (distancia <= tolerancia && distancia < mejorDistancia) {
+    if (distancia < mejorDistancia) {
       turno = candidato;
       mejorDistancia = distancia;
     }
   }
 
-  const porTolerancia = turno !== null;
-
-  if (!porTolerancia) {
-    turno = turnoQueContiene(minuto);
-  }
+  const porTolerancia = mejorDistancia <= tolerancia;
 
   // El Turno C cruza la medianoche: si el cierre ocurrió de madrugada
   // (antes del mediodía), el turno empezó el día calendario anterior.

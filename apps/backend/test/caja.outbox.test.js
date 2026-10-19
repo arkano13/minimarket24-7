@@ -26,12 +26,14 @@ const prisma = {
 };
 mock.module(new URL("../src/lib/prisma.js", import.meta.url).href, { namedExports: { prisma } });
 const { closeCashShift } = await import("../src/modules/caja/caja.service.js");
+const { inferirTurnoDeCierre } = await import("../src/modules/caja/turno-cierre.js");
 
-test("el servicio de caja incluye cierre, rotación e informe en una transacción", async () => {
+test("el servicio de caja incluye cierre e informe en una transacción", async () => {
   const result = await closeCashShift({ efectivoContado: 50 }, 1);
   assert.equal(result.estado, "CERRADO");
-  assert.equal(committed.turno, "A");
-  assert.equal(committed.job.turno, "C");
+  // La letra sale de la hora del cierre, no de la rotación guardada.
+  assert.equal(committed.turno, "C");
+  assert.equal(committed.job.turno, inferirTurnoDeCierre(committed.shift.cerradoEn).turno);
   assert.equal(committed.job.turnoCajaId, 1);
   assert.equal(committed.job.proximoIntento.getTime() - committed.shift.cerradoEn.getTime(), 300_000);
 });

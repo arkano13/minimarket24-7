@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/AppError.js";
 import { generarInformeTurnoHTML } from "@minisuper/shared/shift-report-pdf";
-import { businessDayFor, getShiftReport } from "../reportes/reportes.service.js";
+import { getShiftReport } from "../reportes/reportes.service.js";
 import { notificarCierreDeCaja } from "./informe-turno-notifier.js";
 import {
   inferirTurnoDeCierre,
@@ -622,40 +622,9 @@ export async function cancelCashMovement(movementId, data, userId) {
   });
 }
 
-// Rotación fija para saber qué informe de turno mandar por WhatsApp al
-// cerrar caja — a propósito NO mira la hora del cierre. Cada cierre
-// consume el turno que está "en fila" y avanza el puntero al
-// siguiente, sin importar qué tan tarde/temprano se cerró. Arranca en
-// "C" porque el primer cierre del día suele ser el de la madrugada
-// (fin del Turno C de la noche anterior).
-//
-// Riesgo conocido y aceptado: si hay más de un cierre dentro de lo que
-// debería ser un mismo turno (ej. se abre/cierra caja dos veces en una
-// mañana), el segundo cierre avanza igual y queda con la etiqueta del
-// turno siguiente. Para esos casos existe la corrección manual — ver
-// getProximoTurnoInforme/setProximoTurnoInforme más abajo.
-const SIGUIENTE_TURNO = { A: "B", B: "C", C: "A" };
-
-async function obtenerYAvanzarProximoTurno(transaction) {
-  const configuracion = await transaction.configuracionSistema.upsert({
-    where: { id: 1 },
-    create: { id: 1 },
-    update: {},
-    select: { proximoTurnoInforme: true },
-  });
-
-  const turno = configuracion.proximoTurnoInforme;
-
-  await transaction.configuracionSistema.update({
-    where: { id: 1 },
-    data: { proximoTurnoInforme: SIGUIENTE_TURNO[turno] ?? "C" },
-  });
-
-  return turno;
-}
-
-// Para mostrar en el panel de admin cuál es el próximo turno esperado,
-// sin consumirlo/avanzarlo.
+// Valor de la antigua rotación A → B → C. El informe por WhatsApp ya no
+// lo usa (la letra sale de la hora del cierre, ver turno-cierre.js); se
+// conserva solo para no romper la ruta /proximo-turno-informe.
 export async function getProximoTurnoInforme() {
   const configuracion = await prisma.configuracionSistema.upsert({
     where: { id: 1 },
@@ -730,13 +699,13 @@ export async function closeCashShift(
           include: SHIFT_INCLUDE,
         });
 
-      // Dentro de la misma transacción: si el cierre se guarda, la
-      // rotación avanza; si algo falla y se revierte el cierre, la
-      // rotación tampoco avanza.
-      const turnoInforme = await obtenerYAvanzarProximoTurno(transaction);
+      // La letra del informe sale de la hora del cierre (fin de turno
+      // más cercano), no de una rotación: un cierre de más ya no corre
+      // las letras de los informes siguientes.
+      const { turno: turnoInforme, fecha } = inferirTurnoDeCierre(closedShift.cerradoEn);
 
       await notificarCierreDeCaja(
-        turnoInforme, businessDayFor(closedShift.cerradoEn), closedShift.id,
+        turnoInforme, fecha, closedShift.id,
         transaction, closedShift.cerradoEn,
       );
 

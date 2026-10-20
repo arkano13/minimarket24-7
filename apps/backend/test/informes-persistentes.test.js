@@ -127,3 +127,31 @@ test("la cola agenda la próxima revisión según el informe pendiente más cerc
     db: conPendiente({ proximoIntento: ahora, bloqueoHasta: new Date(ahora.getTime() + 2 * 60 * 60_000) }), now,
   }), 30 * 60_000);
 });
+
+test("el Turno C del domingo y fin de mes agrega el semanal y el mensual a cada número", async () => {
+  const { db, job } = database();
+  job.fecha = "2026-05-31"; // domingo y último día de mayo
+  db.informePendiente.findFirst = async () => null;
+  const sent = [];
+  const pedidos = [];
+  await entregarInforme({
+    db, turnoCajaId: 1, destinatarios: ["a", "b"], now,
+    crearDocumento: async () => ({ tipo: "TURNO" }),
+    crearPeriodico: async (tipo, fecha) => { pedidos.push(`${tipo} ${fecha}`); return { tipo }; },
+    enviar: async (numero, documento) => { sent.push(`${documento.tipo}>${numero}`); return { key: { id: "m" } }; },
+  });
+  assert.deepEqual(job.destinatarios, ["a", "b", "SEMANAL|a", "SEMANAL|b", "MENSUAL|a", "MENSUAL|b"]);
+  assert.deepEqual(sent, ["TURNO>a", "TURNO>b", "SEMANAL>a", "SEMANAL>b", "MENSUAL>a", "MENSUAL>b"]);
+  assert.deepEqual(pedidos, ["SEMANAL 2026-05-31", "MENSUAL 2026-05-31"]);
+});
+
+test("un segundo cierre del Turno C el mismo domingo no repite el semanal", async () => {
+  const { db, job } = database();
+  job.fecha = "2026-10-18";
+  db.informePendiente.findFirst = async ({ where }) => (where.destinatarios.has === "SEMANAL|a" ? { turnoCajaId: 2 } : null);
+  await entregarInforme({
+    db, turnoCajaId: 1, destinatarios: ["a"], now, crearDocumento: async () => ({}),
+    enviar: async () => ({ key: { id: "m" } }),
+  });
+  assert.deepEqual(job.destinatarios, ["a"]);
+});

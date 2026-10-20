@@ -692,8 +692,11 @@ export function generarInformeTurnoHTML(datos) {
 </html>`;
 }
 
+// Los informes semanal y mensual (backend) reutilizan los estilos y helpers.
 export {
   calcularEfectivoEsperado,
   formatMoney,
   formatCantidad,
+  escapeHtml,
+  CSS as ESTILOS_INFORME,
 };

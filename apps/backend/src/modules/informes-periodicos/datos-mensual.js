@@ -8,20 +8,57 @@
 import { prisma } from "../../lib/prisma.js";
 import { businessDayFor, getShiftReport, reportShift } from "../reportes/reportes.service.js";
 import { instantesDelRango, rangoMensual, rangoMesAnterior, semanasDelMes } from "./periodos.js";
+import { esCigarro, nombreConPresentacion } from "./productos.js";
 
 const redondear = (valor) => Math.round((Number(valor) || 0) * 100) / 100;
 
-async function gananciaPorVenta(rango) {
+async function cargarVentas(rango) {
   const { from, to } = instantesDelRango(rango);
-  const ventas = await prisma.venta.findMany({
+  return prisma.venta.findMany({
     where: { estado: "COMPLETADA", creadoEn: { gte: from, lte: to } },
     select: {
       creadoEn: true,
       total: true,
-      detalles: { select: { costoUnitario: true, cantidad: true } },
+      detalles: {
+        select: {
+          productoId: true, presentacionId: true, productoNombre: true, presentacionNombre: true,
+          cantidad: true, cantidadInventario: true, costoUnitario: true, subtotal: true,
+          producto: {
+            select: {
+              categoria: { select: { nombre: true } },
+              presentaciones: { where: { esPrincipal: true }, select: { id: true, factorInventario: true }, take: 1 },
+            },
+          },
+        },
+      },
     },
   });
+}
 
+// Productos vendidos: todo en unidades del producto, salvo los cigarros,
+// que se separan por presentación (cajetilla grande, pequeña, unidad).
+function productosVendidos(ventas) {
+  const productos = new Map();
+  for (const detalle of ventas.flatMap((venta) => venta.detalles)) {
+    const principal = detalle.producto?.presentaciones?.[0];
+    const porPresentacion = esCigarro(detalle.producto, detalle.productoNombre);
+    const clave = porPresentacion ? `${detalle.productoId}-${detalle.presentacionId}` : `${detalle.productoId}`;
+    const nombre = porPresentacion && principal?.id !== detalle.presentacionId && detalle.presentacionNombre
+      ? nombreConPresentacion(detalle.productoNombre, detalle.presentacionNombre)
+      : detalle.productoNombre;
+    const fila = productos.get(clave) ?? { nombre, cantidad: 0, ventas: 0 };
+    fila.cantidad += porPresentacion
+      ? Number(detalle.cantidad)
+      : Number(detalle.cantidadInventario) / (Number(principal?.factorInventario ?? 1) || 1);
+    fila.ventas += Number(detalle.subtotal);
+    productos.set(clave, fila);
+  }
+  return [...productos.values()]
+    .map((fila) => ({ ...fila, cantidad: Math.round(fila.cantidad * 1000) / 1000, ventas: redondear(fila.ventas) }))
+    .sort((a, b) => b.cantidad - a.cantidad);
+}
+
+function gananciaPorVenta(ventas) {
   // Misma fórmula que getShiftReport: total de la venta − costo de sus líneas.
   return ventas.map((venta) => ({
     dia: businessDayFor(venta.creadoEn),
@@ -44,10 +81,6 @@ function turnoMasRentable(turnos) {
   return ganancia > 0 ? { turno, ganancia } : null;
 }
 
-function masVendido(productos) {
-  return [...productos].sort((a, b) => b.cantidad - a.cantidad)[0] ?? null;
-}
-
 function comprasPorProveedor(compras) {
   const proveedores = new Map();
   for (const compra of compras) {
@@ -61,14 +94,14 @@ function comprasPorProveedor(compras) {
     .sort((a, b) => b.total - a.total);
 }
 
-function resumenMes(reporte, turnos) {
+function resumenMes(reporte, turnos, productos) {
   const compras = reporte.compras ?? [];
   return {
     total: reporte.resumen.total,
     ganancia: reporte.resumen.gananciaEstimada,
     margen: reporte.resumen.margenEstimado,
     operaciones: reporte.resumen.operaciones,
-    masVendido: masVendido(reporte.productos),
+    masVendido: productos[0] ?? null,
     turno: turnoMasRentable(turnos),
     pedidos: compras.length,
     gastadoEnCompras: redondear(compras.reduce((suma, compra) => suma + compra.total, 0)),
@@ -79,12 +112,15 @@ export async function datosMensuales(fecha) {
   const rango = rangoMensual(fecha);
   const anterior = rangoMesAnterior(fecha);
 
-  const [reporte, reporteAnterior, ventas, ventasAnteriores] = await Promise.all([
+  const [reporte, reporteAnterior, ventasMes, ventasMesAnterior] = await Promise.all([
     getShiftReport(rango.desde, rango.hasta),
     getShiftReport(anterior.desde, anterior.hasta),
-    gananciaPorVenta(rango),
-    gananciaPorVenta(anterior),
+    cargarVentas(rango),
+    cargarVentas(anterior),
   ]);
+  const ventas = gananciaPorVenta(ventasMes);
+  const ventasAnteriores = gananciaPorVenta(ventasMesAnterior);
+  const productos = productosVendidos(ventasMes);
 
   const semanas = semanasDelMes(rango).map((semana) => ({
     ...semana,
@@ -105,9 +141,9 @@ export async function datosMensuales(fecha) {
   return {
     rango,
     anterior,
-    actual: resumenMes(reporte, turnos),
-    previo: resumenMes(reporteAnterior, turnosAnteriores),
-    top: [...reporte.productos].sort((a, b) => b.cantidad - a.cantidad).slice(0, 5),
+    actual: resumenMes(reporte, turnos, productos),
+    previo: resumenMes(reporteAnterior, turnosAnteriores, productosVendidos(ventasMesAnterior)),
+    top: productos.slice(0, 5),
     cobros,
     credito: redondear(pagos.find((item) => item.metodo === "CREDITO")?.total),
     proveedores: comprasPorProveedor(reporte.compras ?? []),

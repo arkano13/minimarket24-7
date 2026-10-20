@@ -10,6 +10,7 @@
 
 import { prisma } from "../../lib/prisma.js";
 import { instantesDelRango, rangoSemanal } from "./periodos.js";
+import { esCigarro } from "./productos.js";
 
 const redondear = (valor) => Math.round((Number(valor) || 0) * 100) / 100;
 const redondearCantidad = (valor) => Math.round((Number(valor) || 0) * 1000) / 1000;
@@ -40,13 +41,6 @@ const SIGNO = {
 };
 
 const NO_VENTA = ["COMPRA", "AJUSTE_POSITIVO", "AJUSTE_NEGATIVO", "DEVOLUCION_PROVEEDOR", "DEVOLUCION_CLIENTE", "ANULACION_COMPRA", "INVENTARIO_INICIAL"];
-
-// Los cigarros se compran y venden por cajetilla/cartón: en el informe sí
-// se muestra la presentación comprada. El resto va solo en unidades.
-function esCigarro(producto, nombreProducto) {
-  const texto = `${producto?.categoria?.nombre ?? ""} ${nombreProducto ?? ""}`.toLowerCase();
-  return texto.includes("cigarr") || texto.includes("tabac");
-}
 
 function plural(nombre) {
   return /[aeiouáéíóú]$/.test(nombre) ? `${nombre}s` : `${nombre}es`;

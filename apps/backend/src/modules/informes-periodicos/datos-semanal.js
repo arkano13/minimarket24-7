@@ -41,6 +41,10 @@ const SIGNO = {
 
 const NO_VENTA = ["COMPRA", "AJUSTE_POSITIVO", "AJUSTE_NEGATIVO", "DEVOLUCION_PROVEEDOR", "DEVOLUCION_CLIENTE", "ANULACION_COMPRA", "INVENTARIO_INICIAL"];
 
+function plural(nombre) {
+  return /[aeiouáéíóú]$/.test(nombre) ? `${nombre}s` : `${nombre}es`;
+}
+
 async function ultimoLote(productoId, antesDe) {
   const detalle = await prisma.compraDetalle.findFirst({
     where: { productoId, compra: { estado: "RECIBIDA", creadoEn: { lt: antesDe } } },
@@ -58,7 +62,7 @@ async function cargarCompras(from, to) {
     orderBy: { creadoEn: "asc" },
     include: {
       usuario: { select: { nombre: true } },
-      detalles: { orderBy: { id: "asc" }, include: { producto: { select: PRINCIPAL } } },
+      detalles: { orderBy: { id: "asc" }, include: { producto: { select: { unidadInventario: true, ...PRINCIPAL } } } },
     },
   });
 
@@ -83,11 +87,9 @@ async function cargarCompras(from, to) {
 
       return {
         producto: detalle.productoNombre,
-        presentacion: detalle.presentacionNombre,
-        unidad: principal?.nombre ?? "unidad",
-        cantidad: Number(detalle.cantidad),
+        // Sin presentaciones en el informe: todo en unidades (o libras, etc.).
+        unidad: detalle.producto?.unidadInventario === "UNIDAD" || !principal ? "unidades" : plural(principal.nombre.toLowerCase()),
         unidades: redondearCantidad(cantidadInventario / factor),
-        costoPresentacion: Number(detalle.costoPresentacion),
         costoUnidad,
         lote: lote ? { costoUnidad: lote.costoInventario * factor, fecha: lote.fecha } : null,
         precioVenta,

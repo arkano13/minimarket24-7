@@ -184,7 +184,7 @@ const SHIFT_LABELS = {
   C: "Turno C · 6:00 p. m. – 2:00 a. m.",
 };
 
-function reportShift(date) {
+export function reportShift(date) {
   const hour = hondurasHour(date);
 
   if (hour >= 2 && hour < 8) {

@@ -343,7 +343,7 @@ function subioDeCosto(linea) {
 
 function compraHtml(compra) {
   const filas = compra.lineas.map((linea) => `<tr${!compra.anulada && subioDeCosto(linea) ? ' class="alerta"' : ""}>
-    <td class="product-name">${escapeHtml(linea.producto)}<div class="pay-meta" style="margin-top:0">Entraron ${formatCantidad(linea.unidades)} ${escapeHtml(linea.unidad)}</div></td>
+    <td class="product-name">${escapeHtml(linea.producto)}<div class="pay-meta" style="margin-top:0">${linea.presentacion ? `${formatCantidad(linea.presentacion.cantidad)} &times; ${escapeHtml(linea.presentacion.nombre)} a ${formatMoney(linea.presentacion.costo)} &middot; ` : ""}Entraron ${formatCantidad(linea.unidades)} ${escapeHtml(linea.unidad)}</div></td>
     <td class="num"><b>${formatMoney(linea.costoUnidad)}</b></td>
     <td class="num">${loteHtml(linea)}</td>
     <td class="num">${linea.precioVenta === null ? "—" : formatMoney(linea.precioVenta)}</td>

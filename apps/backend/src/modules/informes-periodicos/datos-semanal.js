@@ -41,6 +41,13 @@ const SIGNO = {
 
 const NO_VENTA = ["COMPRA", "AJUSTE_POSITIVO", "AJUSTE_NEGATIVO", "DEVOLUCION_PROVEEDOR", "DEVOLUCION_CLIENTE", "ANULACION_COMPRA", "INVENTARIO_INICIAL"];
 
+// Los cigarros se compran y venden por cajetilla/cartón: en el informe sí
+// se muestra la presentación comprada. El resto va solo en unidades.
+function esCigarro(producto, nombreProducto) {
+  const texto = `${producto?.categoria?.nombre ?? ""} ${nombreProducto ?? ""}`.toLowerCase();
+  return texto.includes("cigarr") || texto.includes("tabac");
+}
+
 function plural(nombre) {
   return /[aeiouáéíóú]$/.test(nombre) ? `${nombre}s` : `${nombre}es`;
 }
@@ -62,7 +69,7 @@ async function cargarCompras(from, to) {
     orderBy: { creadoEn: "asc" },
     include: {
       usuario: { select: { nombre: true } },
-      detalles: { orderBy: { id: "asc" }, include: { producto: { select: { unidadInventario: true, ...PRINCIPAL } } } },
+      detalles: { orderBy: { id: "asc" }, include: { producto: { select: { unidadInventario: true, categoria: { select: { nombre: true } }, ...PRINCIPAL } } } },
     },
   });
 
@@ -87,7 +94,10 @@ async function cargarCompras(from, to) {
 
       return {
         producto: detalle.productoNombre,
-        // Sin presentaciones en el informe: todo en unidades (o libras, etc.).
+        // Solo los cigarros muestran la presentación; lo demás va en unidades (o libras, etc.).
+        presentacion: esCigarro(detalle.producto, detalle.productoNombre)
+          ? { nombre: detalle.presentacionNombre, cantidad: Number(detalle.cantidad), costo: Number(detalle.costoPresentacion) }
+          : null,
         unidad: detalle.producto?.unidadInventario === "UNIDAD" || !principal ? "unidades" : plural(principal.nombre.toLowerCase()),
         unidades: redondearCantidad(cantidadInventario / factor),
         costoUnidad,

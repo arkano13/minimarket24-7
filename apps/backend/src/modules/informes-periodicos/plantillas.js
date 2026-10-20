@@ -343,8 +343,7 @@ function subioDeCosto(linea) {
 
 function compraHtml(compra) {
   const filas = compra.lineas.map((linea) => `<tr${!compra.anulada && subioDeCosto(linea) ? ' class="alerta"' : ""}>
-    <td class="product-name">${escapeHtml(linea.producto)}<div class="pay-meta" style="margin-top:0">${escapeHtml(linea.presentacion)} &middot; ${formatCantidad(linea.cantidad)} &rarr; ${formatCantidad(linea.unidades)} ${escapeHtml(linea.unidad.toLowerCase())}</div></td>
-    <td class="num">${formatMoney(linea.costoPresentacion)}</td>
+    <td class="product-name">${escapeHtml(linea.producto)}<div class="pay-meta" style="margin-top:0">Entraron ${formatCantidad(linea.unidades)} ${escapeHtml(linea.unidad)}</div></td>
     <td class="num"><b>${formatMoney(linea.costoUnidad)}</b></td>
     <td class="num">${loteHtml(linea)}</td>
     <td class="num">${linea.precioVenta === null ? "—" : formatMoney(linea.precioVenta)}</td>
@@ -358,7 +357,7 @@ function compraHtml(compra) {
         <div class="pay-meta">${momento(compra.creadoEn)} &middot; Factura: ${escapeHtml(compra.documento ?? "sin número")} &middot; Registró: ${escapeHtml(compra.usuario)}</div></div>
       <div style="text-align:right"><div class="compra-total">${formatMoney(compra.total)}</div>${compra.anulada ? "" : `<div class="pay-meta" style="margin-top:0">Utilidad bruta proyectada: <b class="pos">${formatMoney(utilidad)}</b></div>`}</div>
     </div>
-    <table class="tabla-compra"><thead><tr><th>Producto · presentación</th><th class="num">Costo presentación</th><th class="num">Costo unidad</th><th class="num">Último lote</th><th class="num">Precio venta</th><th class="num">Utilidad por unidad</th><th class="num">Utilidad proyectada</th><th class="num">Subtotal</th></tr></thead>
+    <table class="tabla-compra"><thead><tr><th>Producto</th><th class="num">Costo unidad</th><th class="num">Último lote</th><th class="num">Precio venta</th><th class="num">Utilidad por unidad</th><th class="num">Utilidad proyectada</th><th class="num">Subtotal</th></tr></thead>
     <tbody>${filas}</tbody></table>
     ${compra.anulada ? `<div class="anulada-nota">Compra anulada${compra.anuladaEn ? ` el ${momento(compra.anuladaEn)}` : ""}. No suma al total ni al inventario.</div>` : ""}
   </div>`;
@@ -417,7 +416,7 @@ export function generarInformeSemanalHTML(datos) {
   </div>` : ""}
 
   <div class="section-title">Compras detalladas</div>
-  ${datos.compras.length ? `<div class="footnote" style="margin:-4px 0 8px">Costos y precios por unidad de la presentación principal. Último lote = costo por unidad de la compra anterior del mismo producto (<span class="neg">▲</span> subió, <span class="pos">▼</span> bajó; las filas en naranja subieron de costo). Utilidad proyectada = (precio de venta − costo) × unidades compradas.</div>
+  ${datos.compras.length ? `<div class="footnote" style="margin:-4px 0 8px">Costos y precios por unidad. Último lote = costo por unidad de la compra anterior del mismo producto (<span class="neg">▲</span> subió, <span class="pos">▼</span> bajó; las filas en naranja subieron de costo). Utilidad proyectada = (precio de venta − costo) × unidades compradas.</div>
   ${datos.compras.map(compraHtml).join("")}` : '<div class="vacio">No se registraron compras esta semana.</div>'}
 
   <div class="section-title" style="margin-top:6px">Bajas de inventario (salidas manuales)</div>
@@ -442,7 +441,7 @@ export function generarInformeSemanalHTML(datos) {
     <thead><tr><th>Producto</th><th class="num">Al iniciar</th><th class="num">+ Compras</th><th class="num">+ Ajustes</th><th class="num">&minus; Ventas</th><th class="num">&minus; Bajas y dev.</th><th class="num">Al cerrar</th></tr></thead>
     <tbody>${datos.inventario.map((fila) => `<tr><td class="product-name">${escapeHtml(fila.producto)}</td><td class="num">${formatCantidad(fila.inicial)}</td><td class="num pos">${fila.compras ? `+ ${formatCantidad(fila.compras)}` : "—"}</td><td class="num pos">${fila.ajustes ? `+ ${formatCantidad(fila.ajustes)}` : "—"}</td><td class="num">${fila.ventas ? `&minus; ${formatCantidad(fila.ventas)}` : "—"}</td><td class="num ${fila.bajas ? "neg" : ""}">${fila.bajas ? `&minus; ${formatCantidad(fila.bajas)}` : "—"}</td><td class="num" style="font-weight:700">${formatCantidad(fila.final)}</td></tr>`).join("")}</tbody>
   </table></div>
-  <div class="footnote" style="margin-top:-10px; margin-bottom:14px;">Solo aparecen los productos que tuvieron compras, ajustes o bajas en la semana. Cantidades en la presentación principal de cada producto (las cajas y cartones se convierten).</div>` : '<div class="vacio">No hubo compras, ajustes ni bajas esta semana.</div>'}
+  <div class="footnote" style="margin-top:-10px; margin-bottom:14px;">Solo aparecen los productos que tuvieron compras, ajustes o bajas en la semana. Cantidades en unidades (las cajas, paquetes y cartones se convierten a unidades).</div>` : '<div class="vacio">No hubo compras, ajustes ni bajas esta semana.</div>'}
 
   <div class="summary">
     <div class="summary-title">Resumen de la semana</div>
@@ -450,7 +449,7 @@ export function generarInformeSemanalHTML(datos) {
     ${datos.bajas.length ? `Se dieron de baja ${plural(unidadesBajas, "unidad", "unidades")} por ${formatMoney(totalBajas)}${perdidas[0] ? `; la pérdida más alta fue de ${escapeHtml(perdidas[0].nombre)}` : ""}.` : "No hubo bajas de inventario."}
     ${subieron.length ? `Subieron de costo respecto a su último lote: ${subieron.map(escapeHtml).join(", ")}.` : ""}</p>
   </div>
-  <div class="footnote">La pérdida por bajas y la utilidad proyectada se calculan con los costos registrados y el precio de venta actual de la presentación principal.</div>`;
+  <div class="footnote">La pérdida por bajas y la utilidad proyectada se calculan con los costos registrados y el precio de venta actual por unidad.</div>`;
 
   return documento("Informe semanal", cuerpo);
 }

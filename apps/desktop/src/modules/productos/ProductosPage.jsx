@@ -100,6 +100,9 @@ export function ProductosPage({ token, onBack }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [showForm, setShowForm] = useState(false);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
+  // Presentación esperando confirmación para quitarse (en la misma fila, sin
+  // window.confirm: en Electron ese diálogo deja la ventana sin poder escribir).
+  const [removingPresentationId, setRemovingPresentationId] = useState(null);
   const [categoryName, setCategoryName] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -589,9 +592,12 @@ export function ProductosPage({ token, onBack }) {
       return;
     }
 
-    if (!window.confirm(`¿Quitar la presentación "${item.nombre}"? Ya no aparecerá en ventas ni compras.`)) {
+    if (removingPresentationId !== item.id) {
+      setRemovingPresentationId(item.id);
       return;
     }
+
+    setRemovingPresentationId(null);
 
     try {
       await removePresentation(token, editingProductId, item.id);
@@ -958,8 +964,8 @@ export function ProductosPage({ token, onBack }) {
                   min="0"
                   name="costo"
                   onChange={updateField}
-                  placeholder="0.0000"
-                  step="0.0001"
+                  placeholder="0.00"
+                  step="0.01"
                   type="number"
                   value={form.costo}
                 />
@@ -1182,24 +1188,46 @@ export function ProductosPage({ token, onBack }) {
                         L {item.precio.toFixed(2)}
                       </span>
 
-                      <div className="presentation-list__actions">
-                        <button
-                          className="text-button"
-                          onClick={() => startEditingPresentation(item)}
-                          type="button"
-                        >
-                          Editar
-                        </button>
+                      {removingPresentationId === item.id ? (
+                        <div className="presentation-list__actions presentation-list__confirm">
+                          <small>¿Quitarla? Ya no aparecerá en ventas ni compras.</small>
 
-                        <button
-                          aria-label={`Quitar ${item.nombre}`}
-                          className="text-button presentation-list__remove"
-                          onClick={() => handleRemovePresentation(item)}
-                          type="button"
-                        >
-                          Quitar
-                        </button>
-                      </div>
+                          <button
+                            className="text-button presentation-list__remove"
+                            onClick={() => handleRemovePresentation(item)}
+                            type="button"
+                          >
+                            Sí, quitar
+                          </button>
+
+                          <button
+                            className="text-button"
+                            onClick={() => setRemovingPresentationId(null)}
+                            type="button"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="presentation-list__actions">
+                          <button
+                            className="text-button"
+                            onClick={() => startEditingPresentation(item)}
+                            type="button"
+                          >
+                            Editar
+                          </button>
+
+                          <button
+                            aria-label={`Quitar ${item.nombre}`}
+                            className="text-button presentation-list__remove"
+                            onClick={() => handleRemovePresentation(item)}
+                            type="button"
+                          >
+                            Quitar
+                          </button>
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>

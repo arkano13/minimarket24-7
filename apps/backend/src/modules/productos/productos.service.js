@@ -243,7 +243,10 @@ function serializeProduct(product) {
     esCompuesto: product.esCompuesto,
     stock: Number(product.stockActual) / factor,
     stockMinimo: Number(product.stockMinimo) / factor,
-    costo: Number(product.costoPromedio) * factor,
+    // El costo se guarda por unidad interna (gramo, mililitro) con 4
+    // decimales; al multiplicarlo por la presentación salen decimales que
+    // nadie escribió (13.25 → 13.2568). Se muestra redondeado al centavo.
+    costo: Math.round(Number(product.costoPromedio) * factor * 100) / 100,
 
     presentacionPrincipal: principal
       ? {

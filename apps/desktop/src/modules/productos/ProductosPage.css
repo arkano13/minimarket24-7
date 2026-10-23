@@ -195,6 +195,15 @@
   color: var(--danger);
 }
 
+.presentation-list__confirm {
+  align-items: center;
+}
+
+.presentation-list__confirm small {
+  color: var(--danger);
+  font-size: 0.78rem;
+}
+
 .presentation-count {
   display: block;
   color: var(--muted);

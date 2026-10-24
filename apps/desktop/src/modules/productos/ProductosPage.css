@@ -624,3 +624,10 @@
   flex-shrink: 0;
   gap: 8px;
 }
+
+.field-warning {
+  display: block;
+  margin-top: 4px;
+  color: var(--danger);
+  font-weight: 600;
+}

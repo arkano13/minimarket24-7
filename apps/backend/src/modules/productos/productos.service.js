@@ -483,6 +483,73 @@ export async function createProduct(data, userId) {
   }
 }
 
+// Cambio de "¿Cómo se vende?" al editar. Entre Unidad, Paquete y Caja solo
+// cambia el nombre de la presentación principal (las tres guardan la
+// existencia en unidades). Pasar a Libra o Litro, o volver de ellas, cambia
+// la unidad interna (unidades, gramos, mililitros): la existencia, el costo
+// y el mínimo se toman de lo que se escribió en el formulario, ya en la nueva
+// unidad, y los lotes FIFO viejos se cierran porque estaban en la unidad
+// anterior. Solo se permite si el producto no tiene otras presentaciones ni
+// lo usa un compuesto, porque sus equivalencias quedarían mal.
+async function prepareSaleTypeChange(transaction, currentProduct, principal, newType) {
+  const oldType = TIPOS_VENTA[principal.tipo] ? principal.tipo : null;
+
+  if (!newType || !TIPOS_VENTA[newType] || newType === oldType) {
+    return null;
+  }
+
+  const target = TIPOS_VENTA[newType];
+  const changesUnit = target.unidadInventario !== currentProduct.unidadInventario;
+
+  if (changesUnit) {
+    if (currentProduct.esCompuesto) {
+      throw new AppError("Un producto compuesto no puede cambiar a libra o litro.", 409);
+    }
+
+    const others = currentProduct.presentaciones.filter((item) => item.id !== principal.id);
+
+    if (others.length > 0) {
+      throw new AppError(
+        `Para cambiar a ${target.nombrePresentacion.toLowerCase()} quita primero sus otras presentaciones: ${others.map((item) => item.nombre).join(", ")}.`,
+        409,
+      );
+    }
+
+    const usedBy = await transaction.componenteProducto.findMany({
+      where: { productoComponenteId: currentProduct.id, productoPadre: { activo: true } },
+      select: { productoPadre: { select: { nombre: true } } },
+    });
+
+    if (usedBy.length > 0) {
+      throw new AppError(
+        `No se puede cambiar: lo usan estos productos compuestos: ${usedBy.map((item) => item.productoPadre.nombre).join(", ")}.`,
+        409,
+      );
+    }
+  }
+
+  const oldDefaultName = oldType ? TIPOS_VENTA[oldType].nombrePresentacion : null;
+  // El nombre es único por producto (también entre presentaciones quitadas).
+  const nameTaken = await transaction.presentacionProducto.findFirst({
+    where: { productoId: currentProduct.id, nombre: target.nombrePresentacion, id: { not: principal.id } },
+    select: { id: true },
+  });
+  const renames = (!oldDefaultName || principal.nombre === oldDefaultName) && !nameTaken;
+
+  return {
+    oldType,
+    newType,
+    changesUnit,
+    unidadInventario: target.unidadInventario,
+    factor: changesUnit
+      ? new Prisma.Decimal(target.factorInventario)
+      : new Prisma.Decimal(principal.factorInventario),
+    // Si la presentación principal tenía el nombre por defecto ("Unidad"),
+    // pasa al nuevo ("Libra"); si alguien le puso otro nombre, se respeta.
+    nombre: renames ? target.nombrePresentacion : principal.nombre,
+  };
+}
+
 export async function updateProduct(productIdInput, data, userId) {
   const productId = productIdValue(productIdInput);
 
@@ -547,13 +614,27 @@ export async function updateProduct(productIdInput, data, userId) {
       }
 
       const precioAnterior = new Prisma.Decimal(principal.precioBase);
-      const factor = new Prisma.Decimal(principal.factorInventario);
+      const saleTypeChange = await prepareSaleTypeChange(
+        transaction, currentProduct, principal, data.tipoVenta,
+      );
+      const factor = saleTypeChange?.factor ?? new Prisma.Decimal(principal.factorInventario);
 
       const internalStock = visibleStock.mul(factor);
       const internalMinimum = visibleMinimum.mul(factor);
       const internalCost = visibleCost.div(factor);
 
-      const stockDifference = internalStock.sub(currentProduct.stockActual);
+      // Si cambia la unidad interna, la existencia anterior estaba en otra
+      // unidad: no se compara ni se registra como ajuste.
+      const stockDifference = saleTypeChange?.changesUnit
+        ? new Prisma.Decimal(0)
+        : internalStock.sub(currentProduct.stockActual);
+
+      if (saleTypeChange?.changesUnit) {
+        await transaction.loteInventario.updateMany({
+          where: { productoId: productId, cantidadRestante: { gt: 0 } },
+          data: { cantidadRestante: 0 },
+        });
+      }
 
       const shiftPrices = changesByShift
         ? await getShiftPrices(transaction, price, shiftTwoPrice, shiftThreePrice)
@@ -574,6 +655,14 @@ export async function updateProduct(productIdInput, data, userId) {
 
         data: {
           precioBase: price,
+
+          ...(saleTypeChange
+            ? {
+                tipo: saleTypeChange.newType,
+                nombre: saleTypeChange.nombre,
+                factorInventario: saleTypeChange.factor,
+              }
+            : {}),
 
           ...(barcode
             ? { codigosBarra: { create: { codigo: barcode, principal: true } } }
@@ -597,6 +686,7 @@ export async function updateProduct(productIdInput, data, userId) {
           stockActual: internalStock,
           stockMinimo: internalMinimum,
           costoPromedio: internalCost,
+          ...(saleTypeChange ? { unidadInventario: saleTypeChange.unidadInventario } : {}),
         },
 
         include: PRODUCT_INCLUDE,
@@ -616,8 +706,25 @@ export async function updateProduct(productIdInput, data, userId) {
         });
       }
 
-      return { product, precioAnterior };
+      return { product, precioAnterior, saleTypeChange };
     });
+
+    if (resultado.saleTypeChange) {
+      await registrarBitacora({
+        usuarioId: userId,
+        accion: "CAMBIO_FORMA_VENTA",
+        entidad: "Producto",
+        entidadId: productId,
+
+        detalle: {
+          nombre: resultado.product.nombre,
+          antes: resultado.saleTypeChange.oldType,
+          despues: resultado.saleTypeChange.newType,
+          existencia: Number(visibleStock),
+          costo: Number(visibleCost),
+        },
+      });
+    }
 
     if (!price.equals(resultado.precioAnterior)) {
       await registrarBitacora({

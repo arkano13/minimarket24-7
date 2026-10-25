@@ -731,6 +731,15 @@ export function ProductosPage({ token, onBack }) {
 
   const principalPresentation = presentations.find((item) => item.esPrincipal) ?? null;
 
+  // Unidad interna de cada forma de venta: Unidad, Paquete y Caja cuentan
+  // en unidades; Peso en gramos y Volumen en mililitros.
+  const unitFamily = (type) => (type === "PESO" ? "PESO" : type === "VOLUMEN" ? "VOLUMEN" : "UNIDAD");
+  const savedSaleType = principalPresentation?.tipo ?? null;
+  const changesSaleUnit = Boolean(
+    editingProductId && savedSaleType && unitFamily(savedSaleType) !== unitFamily(form.tipoVenta),
+  );
+  const otherPresentations = presentations.filter((item) => !item.esPrincipal);
+
   const principalFactor =
     principalPresentation?.factorInventario || BASE_FACTORS[form.tipoVenta] || 1;
 
@@ -939,7 +948,6 @@ export function ProductosPage({ token, onBack }) {
               <span>¿Cómo se vende? *</span>
 
               <select
-                disabled={Boolean(editingProductId)}
                 name="tipoVenta"
                 onChange={updateField}
                 value={form.tipoVenta}
@@ -951,8 +959,18 @@ export function ProductosPage({ token, onBack }) {
                 ))}
               </select>
 
-              {editingProductId ? (
-                <small>La forma de venta no se cambia después de registrar el producto.</small>
+              {changesSaleUnit ? (
+                otherPresentations.length > 0 ? (
+                  <small className="field-warning">
+                    Para cambiar a {TYPE_LABELS[form.tipoVenta].toLowerCase()} quita primero sus otras
+                    presentaciones ({otherPresentations.map((item) => item.nombre).join(", ")}).
+                  </small>
+                ) : (
+                  <small className="field-warning">
+                    Cambia la unidad del inventario: escribe abajo el costo, el precio, la cantidad
+                    actual y el aviso de mínimo por {form.tipoVenta === "PESO" ? "libra" : form.tipoVenta === "VOLUMEN" ? "litro" : "unidad"} antes de guardar.
+                  </small>
+                )
               ) : null}
             </label>
 

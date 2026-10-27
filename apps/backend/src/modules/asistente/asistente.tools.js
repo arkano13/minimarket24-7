@@ -102,4 +102,15 @@ export const tools = [
       properties: { date: { type: Type.STRING, description: "YYYY-MM-DD, opcional" } },
     },
   },
+  {
+    name: "consultar_base_datos",
+    description: "Consulta de SOLO LECTURA a la base de datos del minimarket con una sentencia SQL (PostgreSQL). Úsala para cualquier dato que las otras herramientas no traen: precios de venta, costos, márgenes, precios por turno, precios especiales, productos agotados, rankings, promedios, comparaciones entre fechas, compras por proveedor, usuarios que registraron algo, bitácora, etc. Una sola sentencia SELECT o WITH; devuelve como máximo 200 filas.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        sql: { type: Type.STRING, description: "Una sola consulta SELECT/WITH de PostgreSQL. Usa los nombres reales de tablas y columnas del esquema del sistema." },
+      },
+      required: ["sql"],
+    },
+  },
 ];

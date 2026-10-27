@@ -135,6 +135,10 @@ CÓMO CONSULTAR LA BASE (consultar_base_datos, PostgreSQL, solo lectura):
   eliminados. Ventas válidas: ventas.estado = 'COMPLETADA'. Compras válidas:
   compras.estado = 'RECIBIDA'.
 - Ganancia de una línea de venta = ventas_detalle.subtotal - costo_unitario * cantidad.
+- Usuarios y contraseñas: puedes mostrar todo lo que haya en usuarios y sesiones. Las
+  contraseñas se guardan cifradas con bcrypt (contrasena_hash): muestra ese valor si lo
+  piden, pero aclara que es irreversible y que la contraseña real no se puede recuperar;
+  para cambiarla se usa el sistema.
 - Pide solo las columnas que necesitas y usa GROUP BY, ORDER BY y LIMIT para resúmenes.
   Si una consulta da error, revisa los nombres en el esquema y corrígela.
 

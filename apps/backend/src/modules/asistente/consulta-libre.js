@@ -9,8 +9,8 @@
 //   2. Se ejecuta dentro de una transacción READ ONLY: PostgreSQL rechaza
 //      cualquier INSERT/UPDATE/DELETE/DDL aunque se colara por el filtro.
 //   3. Tiempo máximo y máximo de filas, para no trabar la base.
-// Además se bloquean columnas sensibles (contraseñas, tokens de sesión) y
-// funciones que leen archivos del servidor.
+// Puede leer todas las tablas, incluidas usuarios y sesiones. Solo se
+// bloquean funciones que leen archivos del servidor o lo traban.
 
 import { prisma } from "../../lib/prisma.js";
 
@@ -19,7 +19,6 @@ const TIEMPO_MAXIMO = "8s";
 
 const PALABRAS_PROHIBIDAS = /\b(insert|update|delete|merge|upsert|drop|alter|create|truncate|grant|revoke|copy|call|do|vacuum|analyze|reindex|cluster|refresh|lock|listen|notify|set|reset|prepare|execute|deallocate|comment|security|into)\b/i;
 const FUNCIONES_PROHIBIDAS = /\b(pg_read_file|pg_read_binary_file|pg_ls_dir|pg_stat_file|lo_\w+|dblink\w*|pg_sleep\w*|pg_terminate_backend|pg_cancel_backend|set_config|current_setting|pg_reload_conf|pg_logdir_ls)\b/i;
-const DATOS_SENSIBLES = /\b(contrasena_hash|token|bloqueo_token|sesiones)\b/i;
 
 export function validarConsulta(sqlEntrada) {
   if (typeof sqlEntrada !== "string" || !sqlEntrada.trim()) {
@@ -36,7 +35,6 @@ export function validarConsulta(sqlEntrada) {
   const sinTextos = sql.replace(/'(?:[^']|'')*'/g, "''");
   if (PALABRAS_PROHIBIDAS.test(sinTextos)) throw new Error("La consulta solo puede leer datos.");
   if (FUNCIONES_PROHIBIDAS.test(sinTextos)) throw new Error("Esa función no está permitida.");
-  if (DATOS_SENSIBLES.test(sinTextos)) throw new Error("Esos datos (contraseñas o sesiones) no se pueden consultar.");
 
   return sql;
 }
@@ -75,7 +73,7 @@ export async function consultaLibre(sqlEntrada, { db = prisma } = {}) {
 }
 
 // Tablas y columnas reales de la base, para que el modelo arme bien las
-// consultas. Se lee una vez y se guarda; no incluye columnas sensibles.
+// consultas. Se lee una vez y se guarda.
 let esquemaCache = null;
 
 export async function esquemaBase({ db = prisma } = {}) {
@@ -83,11 +81,10 @@ export async function esquemaBase({ db = prisma } = {}) {
   const columnas = await db.$queryRawUnsafe(`
     SELECT table_name AS tabla, column_name AS columna, data_type AS tipo
     FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name NOT LIKE '\\_prisma%' AND table_name <> 'sesiones'
+    WHERE table_schema = 'public' AND table_name NOT LIKE '\\_prisma%'
     ORDER BY table_name, ordinal_position`);
   const tablas = new Map();
   for (const { tabla, columna, tipo } of columnas) {
-    if (DATOS_SENSIBLES.test(columna)) continue;
     (tablas.get(tabla) ?? tablas.set(tabla, []).get(tabla)).push(`${columna} (${tipo})`);
   }
   esquemaCache = [...tablas].map(([tabla, cols]) => `${tabla}: ${cols.join(", ")}`).join("\n");

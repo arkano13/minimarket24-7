@@ -8,17 +8,17 @@ test("el asistente puede leer cualquier tabla con SELECT o WITH", () => {
   assert.equal(validarConsulta("select * from productos;"), "select * from productos");
   validarConsulta("with x as (select 1) select * from x");
   validarConsulta("select * from productos where nombre = 'update'");
+  validarConsulta("select usuario, contrasena_hash from usuarios");
+  validarConsulta("select * from sesiones");
 });
 
-test("el asistente no puede escribir ni leer contraseñas", () => {
+test("el asistente no puede escribir ni leer archivos del servidor", () => {
   const rechazadas = [
     "insert into productos values (1)",
     "update productos set nombre = 'x'",
     "select 1; delete from productos",
     "with d as (delete from categorias returning *) select * from d",
     "select * into copia from productos",
-    "select contrasena_hash from usuarios",
-    "select * from sesiones",
     "select pg_sleep(10)",
     "select pg_read_file('/etc/passwd')",
   ];

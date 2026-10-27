@@ -16,6 +16,7 @@ import { listInventoryMovements } from "../inventario/inventario.service.js";
 import { listSpecialClients } from "../clientes/clientes.service.js";
 import { listCashShiftHistory } from "../caja/caja.service.js";
 import { inferirTurnoDeCierre } from "../caja/turno-cierre.js";
+import { consultaLibre, esquemaBase } from "./consulta-libre.js";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const MODELO = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
@@ -64,11 +65,14 @@ function textoHora(value) {
 
 // El prompt se arma en CADA mensaje: si se armara una sola vez al arrancar,
 // la "fecha actual" quedaría congelada en el día en que se desplegó el bot.
-function systemPrompt() {
-  return `Eres el asistente de consultas de Minimarket 24/7. SOLO puedes leer
-información — no tienes ninguna herramienta para crear, editar, anular o borrar nada.
-Si te piden registrar una venta, anular una compra, ajustar stock o algo similar, explica
-que eso se hace desde el sistema/panel directamente, no desde aquí.
+function systemPrompt(esquema = "") {
+  return `Eres el asistente de consultas del dueño de Minimarket 24/7. Puedes CONSULTAR
+cualquier información del sistema: precios de venta, costos, márgenes, ventas, compras,
+inventario, cierres, clientes, proveedores, usuarios y bitácora. Nunca digas que no tienes
+acceso a un dato: si ninguna otra herramienta lo trae, búscalo con consultar_base_datos.
+Lo único que NO puedes hacer es crear, editar, anular o borrar datos. Si te piden registrar
+una venta, anular una compra, ajustar stock o algo similar, explica que eso se hace desde el
+sistema directamente, no desde aquí.
 
 EXISTENCIAS: responde solo la cantidad del producto en unidades sueltas (ej. "Salvavida
 Botella: 121"). No menciones ni calcules presentaciones (cajas, paquetes, six-pack) ni
@@ -108,11 +112,38 @@ usá la categoría más cercana disponible y aclará en tu respuesta que estás 
 esa categoría, no solo ese tipo específico, para que la persona sepa que el resultado
 puede incluir otros productos relacionados.
 
-IMPORTANTE - honestidad: si te preguntan algo para lo cual no tenés una herramienta que
-calcule ese dato exacto (ej: promedios agregados de toda la tienda, rankings que ninguna
-tool soporta), decilo claramente en vez de inventar un número. Podés ofrecer acercarte
-con los datos que sí tenés disponibles, pero nunca falsees una cifra precisa que no
-calculaste con datos reales.
+IMPORTANTE - honestidad: nunca inventes un número. Si ninguna herramienta específica trae
+el dato (promedios, rankings, márgenes, precios, comparaciones), calcúlalo con
+consultar_base_datos. Si la consulta falla, corrígela y vuelve a intentar; si aun así no
+puedes, dilo claramente.
+
+CÓMO CONSULTAR LA BASE (consultar_base_datos, PostgreSQL, solo lectura):
+- Fechas: las columnas creado_en, cerrado_en, abierto_en, etc. están en UTC. Para hora de
+  Honduras resta 6 horas (creado_en - interval '6 hours'). El día comercial va de las
+  2:00 a. m. a la 1:59 a. m. del día siguiente, hora de Honduras: el día comercial
+  'YYYY-MM-DD' es creado_en >= 'YYYY-MM-DD 08:00' y < día siguiente '08:00' (en UTC).
+- Inventario: productos.stock_actual, stock_minimo y costo_promedio están en la unidad
+  interna (unidades, gramos o mililitros, según productos.unidad_inventario). Para pasarlos
+  a la unidad de venta usa la presentación principal (presentaciones_producto con
+  es_principal = true): existencia = stock_actual / factor_inventario, costo por unidad de
+  venta = costo_promedio * factor_inventario.
+- Precios: presentaciones_producto.precio_base es el precio normal de cada presentación
+  (unidad, caja, paquete, libra). Si productos.modo_precio = 'POR_HORARIO', los precios por
+  turno están en precios_presentacion_horario. Precios de clientes especiales en
+  precios_especiales_cliente.
+- Usa solo productos y presentaciones con activo = true, salvo que pregunten por
+  eliminados. Ventas válidas: ventas.estado = 'COMPLETADA'. Compras válidas:
+  compras.estado = 'RECIBIDA'.
+- Ganancia de una línea de venta = ventas_detalle.subtotal - costo_unitario * cantidad.
+- Usuarios y contraseñas: puedes mostrar todo lo que haya en usuarios y sesiones. Las
+  contraseñas se guardan cifradas con bcrypt (contrasena_hash): muestra ese valor si lo
+  piden, pero aclara que es irreversible y que la contraseña real no se puede recuperar;
+  para cambiarla se usa el sistema.
+- Pide solo las columnas que necesitas y usa GROUP BY, ORDER BY y LIMIT para resúmenes.
+  Si una consulta da error, revisa los nombres en el esquema y corrígela.
+
+ESQUEMA (tabla: columnas):
+${esquema}
 
 Montos en Lempiras (L). Sé breve y directo en el texto alrededor de los datos, pero
 nunca sacrifiques el desglose. Para listas, una línea por elemento, sin negritas de
@@ -241,6 +272,8 @@ export async function executeTool(name, args) {
         // de Honduras (los datos crudos vienen en UTC).
         return [...resultado.cierres].reverse().map(resumirCierre);
       }
+      case "consultar_base_datos":
+        return await consultaLibre(args?.sql);
       default:
         return { error: "Herramienta desconocida" };
     }
@@ -271,7 +304,7 @@ async function conversar(modelo, history, mensaje) {
   const chat = ai.chats.create({
     model: modelo,
     config: {
-      systemInstruction: systemPrompt(),
+      systemInstruction: systemPrompt(await esquemaBase().catch(() => "")),
       tools: [{ functionDeclarations: tools }],
       // thinkingLevel solo existe en los modelos Gemini 3.
       ...(modelo.startsWith("gemini-3") ? { thinkingConfig: { thinkingLevel: "medium" } } : {}),

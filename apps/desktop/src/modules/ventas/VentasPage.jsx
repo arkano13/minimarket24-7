@@ -198,6 +198,9 @@ export function VentasPage({ token }) {
 
   const [loading, setLoading] = useState(false);
   const [charging, setCharging] = useState(false);
+  // Candado inmediato: el estado "charging" tarda un render en aplicarse, y
+  // un Enter doble (o sostenido) alcanzaba a mandar la misma venta dos veces.
+  const chargingRef = useRef(false);
   const [error, setError] = useState("");
   const [lastSale, setLastSale] = useState(null);
   const [cashShift, setCashShift] = useState(undefined);
@@ -642,6 +645,7 @@ export function VentasPage({ token }) {
   }
 
   async function handleCharge() {
+    if (chargingRef.current) return;
     setError("");
 
     if (!cashShift) {
@@ -673,6 +677,7 @@ export function VentasPage({ token }) {
       return;
     }
 
+    chargingRef.current = true;
     setCharging(true);
 
     try {
@@ -708,6 +713,7 @@ export function VentasPage({ token }) {
     } catch (requestError) {
       setError(requestError.message);
     } finally {
+      chargingRef.current = false;
       setCharging(false);
       focusSearch();
     }
@@ -766,6 +772,8 @@ export function VentasPage({ token }) {
   }
 
   async function submitCredit({ clienteId, nombreCredito }) {
+    if (chargingRef.current) return;
+    chargingRef.current = true;
     setCharging(true);
 
     try {
@@ -799,6 +807,7 @@ export function VentasPage({ token }) {
     } catch (requestError) {
       setError(requestError.message);
     } finally {
+      chargingRef.current = false;
       setCharging(false);
       focusSearch();
     }
@@ -1214,7 +1223,7 @@ export function VentasPage({ token }) {
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
                         event.preventDefault();
-                        handleCharge();
+                        if (!event.repeat) handleCharge();
                       }
                     }}
                     placeholder="Escribe el monto"

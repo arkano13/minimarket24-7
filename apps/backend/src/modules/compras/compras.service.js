@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { bloquearProducto } from "../../lib/bloqueo-producto.js";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/AppError.js";
 import { registrarBitacora } from "../bitacora/bitacora.service.js";
@@ -594,14 +595,21 @@ export async function createPurchase(
           incoming,
         ] of incomingByProduct.entries()
       ) {
+        // Valores frescos y bloqueados: entre la lectura inicial y aquí
+        // pudo haber ventas que no se deben perder.
+        const fresh = await bloquearProducto(
+          transaction,
+          productId,
+        );
+
         const currentStock =
           new Prisma.Decimal(
-            incoming.producto.stockActual,
+            fresh.stockActual,
           );
 
         const currentCost =
           new Prisma.Decimal(
-            incoming.producto.costoPromedio,
+            fresh.costoPromedio,
           );
 
         const newStock = currentStock.add(

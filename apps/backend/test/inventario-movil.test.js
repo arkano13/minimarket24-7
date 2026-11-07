@@ -3,6 +3,8 @@ import { beforeEach, mock, test } from "node:test";
 
 const state = { products: [], movements: [], audit: [], failOn: null };
 const tx = {
+  // Bloqueo de fila (SELECT ... FOR UPDATE): no hace nada en las pruebas.
+  async $queryRaw() { return []; },
   producto: {
     async findFirst({ where }) { return state.products.find((p) => p.id === where.id) ?? null; },
     async update({ where, data }) { const p=state.products.find((x)=>x.id===where.id);p.stockActual=data.stockActual;return p; },

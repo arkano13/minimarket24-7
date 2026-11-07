@@ -172,6 +172,10 @@ function priceLabel(product, client) {
   return "Precio normal";
 }
 
+function newSaleKey() {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 export function VentasPage({ token }) {
   const searchInputRef = useRef(null);
   const dedupeProductSearch = useRef(createSearchDedupe()).current;
@@ -201,6 +205,9 @@ export function VentasPage({ token }) {
   // Candado inmediato: el estado "charging" tarda un render en aplicarse, y
   // un Enter doble (o sostenido) alcanzaba a mandar la misma venta dos veces.
   const chargingRef = useRef(false);
+  // Clave del cobro en curso: se repite en los reintentos para que el
+  // servidor no registre la misma venta dos veces; cambia tras cada venta.
+  const saleKeyRef = useRef(newSaleKey());
   const [error, setError] = useState("");
   const [lastSale, setLastSale] = useState(null);
   const [cashShift, setCashShift] = useState(undefined);
@@ -682,6 +689,7 @@ export function VentasPage({ token }) {
 
     try {
       const result = await createSale(token, {
+        claveVenta: saleKeyRef.current,
         productos: cart.map((item) => ({
           presentacionId: item.presentacionId,
           cantidad: Number(item.cantidad),
@@ -698,6 +706,7 @@ export function VentasPage({ token }) {
         recargoEnvaseCantidad: containerSurchargeCount,
       });
 
+      saleKeyRef.current = newSaleKey();
       setLastSale(result.venta);
       setCart([]);
       setReceivedAmount("");
@@ -778,6 +787,7 @@ export function VentasPage({ token }) {
 
     try {
       const result = await createSale(token, {
+        claveVenta: saleKeyRef.current,
         productos: cart.map((item) => ({
           presentacionId: item.presentacionId,
           cantidad: Number(item.cantidad),
@@ -791,6 +801,7 @@ export function VentasPage({ token }) {
         recargoEnvaseCantidad: containerSurchargeCount,
       });
 
+      saleKeyRef.current = newSaleKey();
       setLastSale(result.venta);
       setCart([]);
       setReceivedAmount("");

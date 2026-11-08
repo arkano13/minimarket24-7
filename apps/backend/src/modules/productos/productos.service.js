@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
+import { bloquearProducto } from "../../lib/bloqueo-producto.js";
 import { AppError } from "../../utils/AppError.js";
 import { registrarBitacora } from "../bitacora/bitacora.service.js";
 
@@ -573,10 +574,18 @@ export async function updateProduct(productIdInput, data, userId) {
 
   const visibleCost = decimalValue(data.costo ?? 0, "El costo");
   const visibleStock = decimalValue(data.stockInicial ?? 0, "La existencia actual");
+  // Existencia que mostraba el formulario al abrirse. Si no la tocaron, se
+  // respeta la de la base: las ventas o conteos hechos mientras el
+  // formulario estaba abierto no se pierden al guardar otro cambio.
+  const shownStock =
+    data.stockAnterior === undefined || data.stockAnterior === null || data.stockAnterior === ""
+      ? null
+      : decimalValue(data.stockAnterior, "La existencia anterior");
   const visibleMinimum = decimalValue(data.stockMinimo ?? 0, "La existencia mínima");
 
   try {
     const resultado = await prisma.$transaction(async (transaction) => {
+      await bloquearProducto(transaction, productId);
       const currentProduct = await transaction.producto.findFirst({
         where: { id: productId, activo: true },
 
@@ -619,7 +628,10 @@ export async function updateProduct(productIdInput, data, userId) {
       );
       const factor = saleTypeChange?.factor ?? new Prisma.Decimal(principal.factorInventario);
 
-      const internalStock = visibleStock.mul(factor);
+      const keepStock = !saleTypeChange?.changesUnit && shownStock?.equals(visibleStock);
+      const internalStock = keepStock
+        ? new Prisma.Decimal(currentProduct.stockActual)
+        : visibleStock.mul(factor);
       const internalMinimum = visibleMinimum.mul(factor);
       const internalCost = visibleCost.div(factor);
 

@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 
+import { bloquearProducto } from "../../lib/bloqueo-producto.js";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/AppError.js";
 
@@ -277,6 +278,8 @@ export async function createInventoryMovement(
 
   return prisma.$transaction(
     async (transaction) => {
+      await bloquearProducto(transaction, productId);
+
       const product =
         await transaction.producto.findFirst({
           where: {

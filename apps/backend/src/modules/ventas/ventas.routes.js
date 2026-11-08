@@ -63,9 +63,33 @@ salesRouter.get("/productos", async (req, res, next) => {
   }
 });
 
+// Cada cobro trae una clave única desde la caja. Si la misma clave vuelve a
+// llegar (doble clic, Enter repetido o reintento después de un error de
+// conexión) se devuelve la venta ya registrada en vez de crear otra.
+const VIGENCIA_CLAVE_MS = 30 * 60 * 1000;
+const ventasPorClave = new Map();
+
+function ventaUnaVez(clave, crear) {
+  const ahora = Date.now();
+  for (const [k, v] of ventasPorClave) if (v.expira < ahora) ventasPorClave.delete(k);
+
+  const existente = ventasPorClave.get(clave);
+  if (existente) return existente.promesa;
+
+  const promesa = crear();
+  ventasPorClave.set(clave, { promesa, expira: ahora + VIGENCIA_CLAVE_MS });
+  promesa.catch(() => ventasPorClave.delete(clave));
+  return promesa;
+}
+
 salesRouter.post("/", async (req, res, next) => {
   try {
-    const sale = await createSale(req.body, req.auth.usuario.id);
+    const userId = req.auth.usuario.id;
+    const clave = req.body?.claveVenta;
+    const sale =
+      typeof clave === "string" && clave.length > 0 && clave.length <= 64
+        ? await ventaUnaVez(`${userId}:${clave}`, () => createSale(req.body, userId))
+        : await createSale(req.body, userId);
     res.status(201).json({ venta: sale });
   } catch (error) {
     next(error);

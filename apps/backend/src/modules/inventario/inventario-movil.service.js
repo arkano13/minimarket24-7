@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { bloquearProducto } from "../../lib/bloqueo-producto.js";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/AppError.js";
 import { registrarBitacora } from "../bitacora/bitacora.service.js";
@@ -69,6 +70,7 @@ export async function applyMobileAdjustments(input, userId) {
   const result = await prisma.$transaction(async (tx) => {
     const outputs = [];
     for (const item of items) {
+      await bloquearProducto(tx, Number(item.productoId));
       const product = await tx.producto.findFirst({ where: { id: Number(item.productoId), activo: true, controlaInventario: true, esCompuesto: false },
         select: { id: true, nombre: true, stockActual: true, costoPromedio: true,
           presentaciones: { where: { activo: true }, orderBy: [{ esPrincipal: "desc" }, { id: "asc" }] } } });

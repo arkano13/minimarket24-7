@@ -27,6 +27,8 @@ function product(overrides = {}) {
 }
 
 const transaction = {
+  // Bloqueo de fila (SELECT ... FOR UPDATE): no hace nada en las pruebas.
+  async $queryRaw() { return []; },
   producto: {
     async findFirst() {
       return state.product;

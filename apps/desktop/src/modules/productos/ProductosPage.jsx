@@ -294,7 +294,12 @@ export function ProductosPage({ token, onBack }) {
       let productId = editingProductId;
 
       if (editingProductId) {
-        await updateProduct(token, editingProductId, form);
+        // stockAnterior: si no se tocó la existencia, el servidor conserva la
+        // actual en vez de pisarla con la que había al abrir el formulario.
+        await updateProduct(token, editingProductId, {
+          ...form,
+          stockAnterior: formSnapshot.stockInicial,
+        });
       } else {
         const result = await createProduct(token, form);
         productId = result.producto.id;

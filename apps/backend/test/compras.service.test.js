@@ -10,10 +10,13 @@ const state = {
   productUpdates: [],
   movements: [],
   audit: [],
+  operations: new Map(),
+  purchaseCreates: 0,
 };
 
 const compra = {
   async create({ data }) {
+    state.purchaseCreates += 1;
     state.purchase = {
       id: 70,
       proveedorId: data.proveedorId,
@@ -98,9 +101,28 @@ const transaction = {
       return data;
     },
   },
+  operacionIdempotente: {
+    async create({ data }) {
+      const id = state.operations.size + 1;
+      state.operations.set(`${data.usuarioId}:${data.tipo}:${data.clave}`, { id, respuesta: data.respuesta });
+      return { id };
+    },
+    async update({ where, data }) {
+      for (const [key, operation] of state.operations) {
+        if (operation.id === where.id) state.operations.set(key, { ...operation, ...data });
+      }
+      return data;
+    },
+  },
 };
 
 const prisma = {
+  operacionIdempotente: {
+    async findUnique({ where }) {
+      const key = where.usuarioId_tipo_clave;
+      return state.operations.get(`${key.usuarioId}:${key.tipo}:${key.clave}`) ?? null;
+    },
+  },
   compra: {
     async findMany(query) {
       state.listQuery = query;
@@ -163,6 +185,19 @@ beforeEach(() => {
   state.movements = [];
   state.audit = [];
   state.movementBatches = 0;
+  state.operations = new Map();
+  state.purchaseCreates = 0;
+});
+
+test("una compra reenviada no vuelve a sumar existencias", async () => {
+  const input = purchaseInput({ claveOperacion: "compra-123" });
+  const first = await createPurchase(input, 2);
+  const second = await createPurchase(input, 2);
+
+  assert.equal(first.id, second.id);
+  assert.equal(state.purchaseCreates, 1);
+  assert.equal(state.productUpdates.length, 1);
+  assert.equal(state.movements.length, 1);
 });
 
 test("divide el costo total sin alterar el importe por redondeo", async () => {

@@ -1,5 +1,12 @@
 import { Prisma } from "@prisma/client";
 import { bloquearProducto } from "../../lib/bloqueo-producto.js";
+import {
+  buscarResultadoOperacion,
+  claveOperacion,
+  completarOperacion,
+  esConflictoIdempotente,
+  reservarOperacion,
+} from "../../lib/operacion-idempotente.js";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/AppError.js";
 import { registrarBitacora } from "../bitacora/bitacora.service.js";
@@ -377,6 +384,18 @@ export async function createPurchase(
   data,
   userId,
 ) {
+  const operationKey = claveOperacion(data?.claveOperacion);
+  const previous = await buscarResultadoOperacion(
+    prisma,
+    userId,
+    "REGISTRAR_COMPRA",
+    operationKey,
+  );
+
+  if (previous.encontrado) {
+    return previous.resultado;
+  }
+
   const supplierId = positiveInteger(
     data.proveedorId,
     "El proveedor",
@@ -442,8 +461,15 @@ export async function createPurchase(
     });
   }
 
-  return prisma.$transaction(
-    async (transaction) => {
+  try {
+    return await prisma.$transaction(
+      async (transaction) => {
+      const operation = await reservarOperacion(
+        transaction,
+        userId,
+        "REGISTRAR_COMPRA",
+        operationKey,
+      );
       const supplier =
         await transaction.proveedor.findFirst({
           where: {
@@ -677,10 +703,28 @@ export async function createPurchase(
 
       await transaction.movimientoInventario.createMany({ data: movements });
 
-      return serializePurchase(purchase);
-    },
-    { maxWait: 10_000, timeout: 60_000 },
-  );
+      const result = serializePurchase(purchase);
+      await completarOperacion(transaction, operation, result);
+      return result;
+      },
+      { maxWait: 10_000, timeout: 60_000 },
+    );
+  } catch (error) {
+    if (operationKey && esConflictoIdempotente(error)) {
+      const concurrent = await buscarResultadoOperacion(
+        prisma,
+        userId,
+        "REGISTRAR_COMPRA",
+        operationKey,
+      );
+
+      if (concurrent.encontrado) {
+        return concurrent.resultado;
+      }
+    }
+
+    throw error;
+  }
 }
 
 export async function cancelPurchase(purchaseIdInput, userId) {
@@ -691,6 +735,10 @@ export async function cancelPurchase(purchaseIdInput, userId) {
 
   const resultado = await prisma.$transaction(
     async (transaction) => {
+      await transaction.$queryRaw`
+        SELECT id FROM compras WHERE id = ${purchaseId} FOR UPDATE
+      `;
+
       const purchase = await transaction.compra.findUnique({
         where: {
           id: purchaseId,

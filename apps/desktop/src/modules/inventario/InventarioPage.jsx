@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "./InventarioPage.css";
+import { newOperationKey } from "../../services/operationKey.js";
 
 import {
   createInventoryMovement,
@@ -70,6 +71,7 @@ function getSingularUnitLabel(product) {
 }
 
 export function InventarioPage({ token }) {
+  const operationKeyRef = useRef(newOperationKey());
   const [products, setProducts] = useState([]);
   const [movements, setMovements] = useState([]);
   const [movementsPage, setMovementsPage] = useState(1);
@@ -168,7 +170,10 @@ export function InventarioPage({ token }) {
     setSaving(true);
 
     try {
-      await createInventoryMovement(token, form);
+      await createInventoryMovement(token, {
+        ...form,
+        claveOperacion: operationKeyRef.current,
+      });
 
       const [productResult] = await Promise.all([
         listProducts(token, productSearch, 1, 100),
@@ -177,6 +182,7 @@ export function InventarioPage({ token }) {
 
       setProducts(productResult.productos);
       setForm(EMPTY_FORM);
+      operationKeyRef.current = newOperationKey();
 
       setSuccess(
         form.tipoMovimiento === "ENTRADA"

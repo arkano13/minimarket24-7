@@ -1,6 +1,13 @@
 import { Prisma } from "@prisma/client";
 
 import { bloquearProducto } from "../../lib/bloqueo-producto.js";
+import {
+  buscarResultadoOperacion,
+  claveOperacion,
+  completarOperacion,
+  esConflictoIdempotente,
+  reservarOperacion,
+} from "../../lib/operacion-idempotente.js";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/AppError.js";
 
@@ -228,6 +235,18 @@ export async function createInventoryMovement(
   data,
   userId,
 ) {
+  const operationKey = claveOperacion(data?.claveOperacion);
+  const previous = await buscarResultadoOperacion(
+    prisma,
+    userId,
+    "MOVIMIENTO_INVENTARIO",
+    operationKey,
+  );
+
+  if (previous.encontrado) {
+    return previous.resultado;
+  }
+
   const productId = positiveInteger(
     data.productoId,
     "El producto",
@@ -276,8 +295,15 @@ export async function createInventoryMovement(
     );
   }
 
-  return prisma.$transaction(
-    async (transaction) => {
+  try {
+    return await prisma.$transaction(
+      async (transaction) => {
+      const operation = await reservarOperacion(
+        transaction,
+        userId,
+        "MOVIMIENTO_INVENTARIO",
+        operationKey,
+      );
       await bloquearProducto(transaction, productId);
 
       const product =
@@ -422,9 +448,25 @@ export async function createInventoryMovement(
               MOVEMENT_INCLUDE,
           });
 
-      return serializeMovement(
-        movement,
+      const result = serializeMovement(movement);
+      await completarOperacion(transaction, operation, result);
+      return result;
+      },
+    );
+  } catch (error) {
+    if (operationKey && esConflictoIdempotente(error)) {
+      const concurrent = await buscarResultadoOperacion(
+        prisma,
+        userId,
+        "MOVIMIENTO_INVENTARIO",
+        operationKey,
       );
-    },
-  );
+
+      if (concurrent.encontrado) {
+        return concurrent.resultado;
+      }
+    }
+
+    throw error;
+  }
 }

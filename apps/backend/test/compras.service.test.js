@@ -61,6 +61,12 @@ const producto = {
 };
 
 const transaction = {
+  async $queryRaw() {
+    return [{
+      stockActual: state.product.stockActual,
+      costoPromedio: state.product.costoPromedio,
+    }];
+  },
   proveedor: {
     async findFirst() {
       return state.supplier;
@@ -73,6 +79,14 @@ const transaction = {
   },
   compra,
   producto,
+  loteInventario: {
+    async create({ data }) {
+      return data;
+    },
+    async deleteMany() {
+      return { count: 1 };
+    },
+  },
   movimientoInventario: {
     async createMany({ data }) {
       state.movements.push(...data);

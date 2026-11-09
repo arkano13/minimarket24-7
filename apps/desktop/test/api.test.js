@@ -4,7 +4,7 @@ import { afterEach, mock, test } from "node:test";
 import {
   cancelSale,
   createSale,
-  getSalesReport,
+  getShiftReport,
   listBitacora,
   listPurchases,
   listMyCashActivity,
@@ -69,7 +69,7 @@ test("las llamadas autenticadas conservan el token y codifican filtros", async (
 
   await searchSaleProducts("token-1", "café 500 ml", 7);
   await listPurchases("token-1", "factura #2", 9);
-  await getSalesReport("token-1", "2026-08-01", "2026-08-03");
+  await getShiftReport("token-1", "2026-08-01", "2026-08-03", ["A", "B"], 7);
   await listBitacora("token-1", {
     desde: "2026-08-01",
     origen: "CAJA",
@@ -86,7 +86,7 @@ test("las llamadas autenticadas conservan el token y codifican filtros", async (
       authorization: "Bearer token-1",
     },
     {
-      url: "http://127.0.0.1:3001/api/reportes/ventas?desde=2026-08-01&hasta=2026-08-03",
+      url: "http://127.0.0.1:3001/api/reportes/turno?desde=2026-08-01&hasta=2026-08-03&turnos=A%2CB&usuarioId=7",
       authorization: "Bearer token-1",
     },
     {

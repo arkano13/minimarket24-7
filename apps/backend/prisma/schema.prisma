@@ -331,6 +331,7 @@ model LoteInventario {
 
 model Venta {
   id                Int                    @id @default(autoincrement())
+  claveVenta        String?                @map("clave_venta") @db.VarChar(64)
   usuarioId         Int                    @map("usuario_id")
   turnoCajaId       Int?                   @map("turno_caja_id")
   clienteEspecialId Int?                   @map("cliente_especial_id")
@@ -355,6 +356,7 @@ model Venta {
   movimientos       MovimientoInventario[]
   devoluciones      Devolucion[]
 
+  @@unique([usuarioId, claveVenta])
   @@index([creadoEn])
   @@index([usuarioId])
   @@index([turnoCajaId])

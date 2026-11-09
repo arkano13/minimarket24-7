@@ -108,6 +108,24 @@ function optionalText(value, maxLength) {
   return text || null;
 }
 
+function saleKeyValue(value) {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    throw new AppError("La clave de la venta no es válida.", 400);
+  }
+
+  const key = value.trim();
+
+  if (!key || key.length > 64) {
+    throw new AppError("La clave de la venta no es válida.", 400);
+  }
+
+  return key;
+}
+
 // Honduras no tiene horario de verano y siempre está en UTC-6, así que
 // esto funciona sin importar la zona horaria del servidor donde corra
 // el backend (local, Railway, o donde sea).
@@ -713,7 +731,7 @@ export async function repriceCartForClient(
   });
 }
 
-export async function createSale(data, userId) {
+async function createSaleRecord(data, userId, saleKey) {
   if (!Array.isArray(data.productos) || data.productos.length === 0) {
     throw new AppError("Agrega al menos un producto a la venta.", 400);
   }
@@ -1099,6 +1117,7 @@ export async function createSale(data, userId) {
     const sale = await transaction.venta.create({
       data: {
         usuarioId: userId,
+        claveVenta: saleKey,
 
         turnoCajaId: openCashShift.id,
 
@@ -1183,6 +1202,47 @@ export async function createSale(data, userId) {
 
     return serializeSale(sale);
   }, { maxWait: 10_000, timeout: 60_000 });
+}
+
+async function findSaleByKey(userId, saleKey) {
+  if (!saleKey) {
+    return null;
+  }
+
+  return prisma.venta.findUnique({
+    where: {
+      usuarioId_claveVenta: {
+        usuarioId: userId,
+        claveVenta: saleKey,
+      },
+    },
+    include: SALE_INCLUDE,
+  });
+}
+
+export async function createSale(data, userId) {
+  const saleKey = saleKeyValue(data?.claveVenta);
+  const existingSale = await findSaleByKey(userId, saleKey);
+
+  if (existingSale) {
+    return serializeSale(existingSale);
+  }
+
+  try {
+    return await createSaleRecord(data, userId, saleKey);
+  } catch (error) {
+    // Dos instancias pueden consultar la clave al mismo tiempo. El índice
+    // único decide cuál crea la venta; la otra devuelve esa misma venta.
+    if (saleKey && error?.code === "P2002") {
+      const concurrentSale = await findSaleByKey(userId, saleKey);
+
+      if (concurrentSale) {
+        return serializeSale(concurrentSale);
+      }
+    }
+
+    throw error;
+  }
 }
 
 export async function cancelSale(saleIdInput, userId) {

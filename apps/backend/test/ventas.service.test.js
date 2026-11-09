@@ -9,6 +9,9 @@ const state = {
   createdSaleData: null,
   stockUpdates: [],
   inventoryMovements: [],
+  persistedSale: null,
+  saleCreates: 0,
+  fifoLots: [],
 };
 
 const rootPresentation = {
@@ -33,11 +36,21 @@ const transaction = {
       return state.salePresentations;
     },
   },
+  loteInventario: {
+    async findMany() {
+      return state.fifoLots;
+    },
+    async update() {
+      return null;
+    },
+  },
   venta: {
     async create({ data }) {
+      state.saleCreates += 1;
       state.createdSaleData = data;
-      return {
+      const sale = {
         id: 44,
+        claveVenta: data.claveVenta,
         estado: "COMPLETADA",
         subtotal: data.subtotal,
         total: data.total,
@@ -51,6 +64,8 @@ const transaction = {
         })),
         pagos: [{ id: 1, ...data.pagos.create }],
       };
+      state.persistedSale = sale;
+      return sale;
     },
   },
   producto: {
@@ -71,6 +86,21 @@ const transaction = {
 };
 
 const prisma = {
+  venta: {
+    async findUnique({ where }) {
+      const key = where.usuarioId_claveVenta;
+
+      if (
+        state.persistedSale &&
+        key.usuarioId === state.persistedSale.usuario.id &&
+        key.claveVenta === state.persistedSale.claveVenta
+      ) {
+        return state.persistedSale;
+      }
+
+      return null;
+    },
+  },
   clienteEspecial: {
     async findFirst() {
       return state.specialClient;
@@ -129,6 +159,9 @@ beforeEach(() => {
   state.createdSaleData = null;
   state.stockUpdates = [];
   state.inventoryMovements = [];
+  state.persistedSale = null;
+  state.saleCreates = 0;
+  state.fifoLots = [];
 });
 
 test("valida productos y método de pago antes de abrir transacción", async () => {
@@ -250,6 +283,25 @@ test("combina líneas repetidas, descuenta stock y calcula cambio", async () => 
   assert.equal(Number(state.inventoryMovements[0].cantidad), 3);
 });
 
+test("la misma clave devuelve la venta existente sin descontar inventario otra vez", async () => {
+  state.salePresentations = [presentation()];
+  const input = {
+    claveVenta: "cobro-123",
+    productos: [{ presentacionId: 10, cantidad: 1 }],
+    metodoPago: "EFECTIVO",
+    montoRecibido: 20,
+  };
+
+  const first = await createSale(input, 2);
+  const second = await createSale(input, 2);
+
+  assert.equal(first.id, second.id);
+  assert.equal(state.saleCreates, 1);
+  assert.equal(state.stockUpdates.length, 1);
+  assert.equal(state.inventoryMovements.length, 1);
+  assert.equal(state.createdSaleData.claveVenta, "cobro-123");
+});
+
 test("no crea la venta si falta inventario o efectivo", async () => {
   state.salePresentations = [
     presentation({
@@ -296,9 +348,9 @@ test("tarjeta multiplica el total por 1.05 y conserva el redondeo al lempira", a
   }, 2);
   assert.equal(transfer.total, 100);
 });
-test("Tomar acá cobra L3 de 8am a 10pm y L5 durante la noche", () => {
+test("Tomar acá cobra L3 de 8am a 6pm y L5 durante la noche", () => {
   assert.equal(Number(alcoholSurchargePerUnit(7 * 60 + 59)), 5);
   assert.equal(Number(alcoholSurchargePerUnit(8 * 60)), 3);
-  assert.equal(Number(alcoholSurchargePerUnit(21 * 60 + 59)), 3);
-  assert.equal(Number(alcoholSurchargePerUnit(22 * 60)), 5);
+  assert.equal(Number(alcoholSurchargePerUnit(17 * 60 + 59)), 3);
+  assert.equal(Number(alcoholSurchargePerUnit(18 * 60)), 5);
 });

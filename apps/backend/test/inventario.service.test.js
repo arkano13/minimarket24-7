@@ -5,6 +5,8 @@ const state = {
   product: null,
   productUpdate: null,
   movementData: null,
+  movementCreates: 0,
+  operations: new Map(),
 };
 
 function product(overrides = {}) {
@@ -42,6 +44,7 @@ const transaction = {
   },
   movimientoInventario: {
     async create({ data }) {
+      state.movementCreates += 1;
       state.movementData = data;
       return {
         id: 1,
@@ -52,9 +55,28 @@ const transaction = {
       };
     },
   },
+  operacionIdempotente: {
+    async create({ data }) {
+      const id = state.operations.size + 1;
+      state.operations.set(`${data.usuarioId}:${data.tipo}:${data.clave}`, { id, respuesta: data.respuesta });
+      return { id };
+    },
+    async update({ where, data }) {
+      for (const [key, operation] of state.operations) {
+        if (operation.id === where.id) state.operations.set(key, { ...operation, ...data });
+      }
+      return data;
+    },
+  },
 };
 
 const prisma = {
+  operacionIdempotente: {
+    async findUnique({ where }) {
+      const key = where.usuarioId_tipo_clave;
+      return state.operations.get(`${key.usuarioId}:${key.tipo}:${key.clave}`) ?? null;
+    },
+  },
   movimientoInventario: {
     async findMany() {
       return [];
@@ -76,6 +98,24 @@ beforeEach(() => {
   state.product = product();
   state.productUpdate = null;
   state.movementData = null;
+  state.movementCreates = 0;
+  state.operations = new Map();
+});
+
+test("una entrada reenviada no vuelve a sumar existencias", async () => {
+  const input = {
+    claveOperacion: "entrada-123",
+    productoId: 5,
+    tipoMovimiento: "ENTRADA",
+    cantidad: 4,
+  };
+
+  const first = await createInventoryMovement(input, 2);
+  const second = await createInventoryMovement(input, 2);
+
+  assert.equal(first.id, second.id);
+  assert.equal(state.movementCreates, 1);
+  assert.equal(Number(state.product.stockActual), 14);
 });
 
 test("valida producto, cantidad, tipo y motivo de una salida", async () => {

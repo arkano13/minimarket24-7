@@ -1249,6 +1249,10 @@ export async function cancelSale(saleIdInput, userId) {
   const saleId = positiveInteger(saleIdInput, "La venta");
 
   const resultado = await prisma.$transaction(async (transaction) => {
+    await transaction.$queryRaw`
+      SELECT id FROM ventas WHERE id = ${saleId} FOR UPDATE
+    `;
+
     const sale = await transaction.venta.findUnique({
       where: {
         id: saleId,

@@ -1,5 +1,12 @@
 import { Prisma } from "@prisma/client";
 import { bloquearProducto } from "../../lib/bloqueo-producto.js";
+import {
+  buscarResultadoOperacion,
+  claveOperacion,
+  completarOperacion,
+  esConflictoIdempotente,
+  reservarOperacion,
+} from "../../lib/operacion-idempotente.js";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/AppError.js";
 import { registrarBitacora } from "../bitacora/bitacora.service.js";
@@ -64,10 +71,16 @@ export async function previewMobileAdjustments(input) {
 }
 
 export async function applyMobileAdjustments(input, userId) {
+  const operationKey = claveOperacion(input?.claveOperacion);
+  const previous = await buscarResultadoOperacion(prisma, userId, "AJUSTE_INVENTARIO_MOVIL", operationKey);
+  if (previous.encontrado) return previous.resultado;
   const items = validateItems(input?.items);
   const ids = items.map((item) => Number(item.productoId));
   if (ids.some((id) => !Number.isSafeInteger(id) || id <= 0) || new Set(ids).size !== ids.length) throw new AppError("La confirmación contiene productos inválidos o repetidos.", 400);
-  const result = await prisma.$transaction(async (tx) => {
+  let response;
+  try {
+    response = await prisma.$transaction(async (tx) => {
+    const operation = await reservarOperacion(tx, userId, "AJUSTE_INVENTARIO_MOVIL", operationKey);
     const outputs = [];
     for (const item of items) {
       await bloquearProducto(tx, Number(item.productoId));
@@ -88,8 +101,17 @@ export async function applyMobileAdjustments(input, userId) {
       outputs.push({ productoId: product.id, nombre: product.nombre, cantidad: item.cantidad,
         stockAnterior: Number(current.div(factor)), stockNuevo: Number(next.div(factor)) });
     }
-    return outputs;
+    const result = { resultados: outputs };
+    await completarOperacion(tx, operation, result);
+    return result;
   }, { maxWait: 10000, timeout: 60000 });
-  await registrarBitacora({ usuarioId: userId, accion: "AJUSTE_INVENTARIO_MOVIL", entidad: "Inventario", detalle: { ajustes: result } });
-  return { resultados: result };
+  } catch (error) {
+    if (operationKey && esConflictoIdempotente(error)) {
+      const concurrent = await buscarResultadoOperacion(prisma, userId, "AJUSTE_INVENTARIO_MOVIL", operationKey);
+      if (concurrent.encontrado) return concurrent.resultado;
+    }
+    throw error;
+  }
+  await registrarBitacora({ usuarioId: userId, accion: "AJUSTE_INVENTARIO_MOVIL", entidad: "Inventario", detalle: { ajustes: response.resultados } });
+  return response;
 }

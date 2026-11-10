@@ -297,6 +297,22 @@ model MovimientoInventario {
   @@map("movimientos_inventario")
 }
 
+// Conserva el resultado de las operaciones que modifican inventario. Si el
+// cliente reintenta después de una mala conexión, se devuelve esta respuesta
+// en vez de volver a sumar o descontar existencias.
+model OperacionIdempotente {
+  id        Int      @id @default(autoincrement())
+  usuarioId Int      @map("usuario_id")
+  tipo      String   @db.VarChar(50)
+  clave     String   @db.VarChar(64)
+  respuesta Json
+  creadoEn  DateTime @default(now()) @map("creado_en")
+
+  @@unique([usuarioId, tipo, clave])
+  @@index([creadoEn])
+  @@map("operaciones_idempotentes")
+}
+
 // PEPS/FIFO: cada compra que entra crea su propio lote con su propio
 // costo. Al vender, se descuenta primero del lote más viejo, así que si
 // compraste 100 a L25.34 y después 100 más a L26.57, las primeras 100

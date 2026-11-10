@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "./ComprasPage.css";
+import { newOperationKey } from "../../services/operationKey.js";
 import { formatUnits, presentationLabel } from "../../services/presentation.js";
 
 import {
@@ -36,6 +37,7 @@ function decimalValue(setter, value, decimals) {
 }
 
 export function ComprasPage({ token }) {
+  const operationKeyRef = useRef(newOperationKey());
   const [purchases, setPurchases] = useState([]);
   const [selectedPurchase, setSelectedPurchase] = useState(null);
   const [selectedPurchaseId, setSelectedPurchaseId] = useState(null);
@@ -195,6 +197,7 @@ export function ComprasPage({ token }) {
   }, [productSearch, showForm, token]);
 
   function resetForm() {
+    operationKeyRef.current = newOperationKey();
     setSupplierId("");
     setDocumentNumber("");
     setNotes("");
@@ -280,6 +283,7 @@ export function ComprasPage({ token }) {
 
     try {
       const result = await createPurchase(token, {
+        claveOperacion: operationKeyRef.current,
         proveedorId: Number(supplierId),
         numeroDocumento: documentNumber,
         notas: notes,

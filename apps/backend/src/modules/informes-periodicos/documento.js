@@ -3,8 +3,11 @@
 import { safePdfName } from "@minisuper/shared/shift-report-pdf";
 import { renderHtmlToPdf } from "../../lib/pdf-render.js";
 import { datosMensuales } from "./datos-mensual.js";
+import { datosSinCosto } from "./datos-sin-costo.js";
 import { datosSemanales } from "./datos-semanal.js";
-import { generarInformeMensualHTML, generarInformeSemanalHTML } from "./plantillas.js";
+import {
+  generarInformeMensualHTML, generarInformeSemanalHTML, generarInformeSinCostoHTML,
+} from "./plantillas.js";
 
 export async function crearDocumentoPeriodico(tipo, fecha) {
   if (tipo === "SEMANAL") {
@@ -24,6 +27,18 @@ export async function crearDocumentoPeriodico(tipo, fecha) {
       mimetype: "application/pdf",
       fileName: safePdfName(`informe-mensual-${datos.rango.desde.slice(0, 7)}`),
       caption: `Informe mensual · ${datos.rango.desde.slice(0, 7)}`,
+    };
+  }
+
+  // Envío puntual: se programa a mano agregando "SINCOSTO|<número>" a los
+  // destinatarios de un informe ya enviado (ver informe-entrega.js).
+  if (tipo === "SINCOSTO") {
+    const datos = await datosSinCosto();
+    return {
+      document: await renderHtmlToPdf(generarInformeSinCostoHTML(datos)),
+      mimetype: "application/pdf",
+      fileName: safePdfName("productos-sin-costo"),
+      caption: "Productos sin precio de costo · por categoría",
     };
   }
 

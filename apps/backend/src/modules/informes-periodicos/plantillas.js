@@ -453,3 +453,17 @@ export function generarInformeSemanalHTML(datos) {
 
   return documento("Informe semanal", cuerpo);
 }
+
+// Lista simple, sin cálculos: productos sin precio de costo por categoría.
+export function generarInformeSinCostoHTML(datos) {
+  const cuerpo = `
+  ${encabezado("Productos sin costo", "Productos sin precio de costo", "Por categoría")}
+  ${datos.categorias.length ? datos.categorias.map((categoria) => `
+  <div class="section-title">${escapeHtml(categoria.nombre)}</div>
+  <div class="table-wrap"><table style="table-layout:fixed">
+    <colgroup><col style="width:52%"><col style="width:18%"><col style="width:16%"><col style="width:14%"></colgroup>
+    <thead><tr><th>Producto</th><th>Presentación</th><th class="num">Precio de venta</th><th class="num">Existencia</th></tr></thead>
+    <tbody>${categoria.productos.map((producto) => `<tr><td class="product-name">${escapeHtml(producto.nombre)}</td><td>${escapeHtml(producto.presentacion)}</td><td class="num">${formatMoney(producto.precio)}</td><td class="num">${formatCantidad(producto.existencia)}</td></tr>`).join("")}</tbody>
+  </table></div>`).join("") : '<div class="vacio">Todos los productos tienen precio de costo.</div>'}`;
+  return documento("Productos sin precio de costo", cuerpo);
+}

@@ -122,6 +122,28 @@ function decimalValue(value, field, { positive = false } = {}) {
   return new Prisma.Decimal(String(number));
 }
 
+// Costo calculado de una presentación = costo por unidad interna × su
+// factor, redondeado al centavo como se muestra en pantalla.
+function presentationCost(costPerUnit, factor) {
+  return Math.round(Number(costPerUnit) * Number(factor) * 100) / 100;
+}
+
+// Costo propio de una presentación: vacío = se usa el calculado.
+function optionalPresentationCost(value) {
+  return value === undefined || value === null || value === ""
+    ? null
+    : decimalValue(value, "El costo");
+}
+
+// Lo que se muestra: el costo propio si lo tiene, si no el calculado.
+function serializePresentationCost(presentation, costPerUnit) {
+  const own = presentation.costo === null || presentation.costo === undefined ? null : Number(presentation.costo);
+  return {
+    costo: own ?? presentationCost(costPerUnit, presentation.factorInventario),
+    costoPropio: own !== null,
+  };
+}
+
 function optionalCategoryId(value) {
   if (value === undefined || value === null || value === "") {
     return null;
@@ -275,6 +297,7 @@ function serializeProduct(product) {
       esPrincipal: presentation.esPrincipal,
       factorInventario: Number(presentation.factorInventario),
       precio: Number(presentation.precioBase),
+      ...serializePresentationCost(presentation, product.costoPromedio),
       preciosTurno: serializeShiftPrices(presentation.preciosHorario),
 
       codigoBarra:
@@ -577,6 +600,10 @@ export async function updateProduct(productIdInput, data, userId) {
   // Existencia que mostraba el formulario al abrirse. Si no la tocaron, se
   // respeta la de la base: las ventas o conteos hechos mientras el
   // formulario estaba abierto no se pierden al guardar otro cambio.
+  const shownCost =
+    data.costoAnterior === undefined || data.costoAnterior === null || data.costoAnterior === ""
+      ? null
+      : decimalValue(data.costoAnterior, "El costo anterior");
   const shownStock =
     data.stockAnterior === undefined || data.stockAnterior === null || data.stockAnterior === ""
       ? null
@@ -633,7 +660,12 @@ export async function updateProduct(productIdInput, data, userId) {
         ? new Prisma.Decimal(currentProduct.stockActual)
         : visibleStock.mul(factor);
       const internalMinimum = visibleMinimum.mul(factor);
-      const internalCost = visibleCost.div(factor);
+      // Igual que la existencia: si el costo no se tocó en el formulario se
+      // conserva el de la base (pudo cambiar desde una presentación).
+      const keepCost = !saleTypeChange?.changesUnit && shownCost?.equals(visibleCost);
+      const internalCost = keepCost
+        ? new Prisma.Decimal(currentProduct.costoPromedio)
+        : visibleCost.div(factor);
 
       // Si cambia la unidad interna, la existencia anterior estaba en otra
       // unidad: no se compara ni se registra como ajuste.
@@ -780,6 +812,11 @@ export async function updateProduct(productIdInput, data, userId) {
 export async function listPresentations(productIdInput) {
   const productId = productIdValue(productIdInput);
 
+  const product = await prisma.producto.findUnique({
+    where: { id: productId },
+    select: { costoPromedio: true },
+  });
+
   const presentations = await prisma.presentacionProducto.findMany({
     where: { productoId: productId, activo: true },
     include: {
@@ -796,6 +833,7 @@ export async function listPresentations(productIdInput) {
     esPrincipal: presentation.esPrincipal,
     factorInventario: Number(presentation.factorInventario),
     precio: Number(presentation.precioBase),
+    ...serializePresentationCost(presentation, product?.costoPromedio ?? 0),
     preciosTurno: serializeShiftPrices(presentation.preciosHorario),
 
     codigoBarra:
@@ -824,6 +862,7 @@ export async function addPresentation(productIdInput, data, userId) {
   });
 
   const price = decimalValue(data.precio, "El precio", { positive: true });
+  const cost = optionalPresentationCost(data.costo);
   const shiftInput = presentationShiftInput(data);
 
   try {
@@ -855,6 +894,7 @@ export async function addPresentation(productIdInput, data, userId) {
           tipo: data.tipoVenta,
           factorInventario: factor,
           precioBase: price,
+          costo: cost,
           esPrincipal: false,
 
           ...(barcode
@@ -876,7 +916,10 @@ export async function addPresentation(productIdInput, data, userId) {
       accion: "AGREGAR_PRESENTACION",
       entidad: "Producto",
       entidadId: productId,
-      detalle: { presentacion: name, factor: Number(factor), precio: Number(price) },
+      detalle: {
+        presentacion: name, factor: Number(factor), precio: Number(price),
+        costo: cost === null ? null : Number(cost),
+      },
     });
 
     return serializeProduct(product);
@@ -900,6 +943,7 @@ export async function updatePresentation(productIdInput, presentationIdInput, da
   const name = cleanText(data.nombre, "El nombre de la presentación", 80);
   const barcode = optionalText(data.codigoBarra, 80);
   const price = decimalValue(data.precio, "El precio", { positive: true });
+  const cost = optionalPresentationCost(data.costo);
   const shiftInput = presentationShiftInput(data);
 
   // El factorInventario NO se permite cambiar aquí a propósito: si ya
@@ -945,6 +989,9 @@ export async function updatePresentation(productIdInput, presentationIdInput, da
         data: {
           nombre: name,
           precioBase: price,
+          // La principal toma el costo del producto (se edita arriba).
+          // Versiones viejas del escritorio no mandan "costo": no se toca.
+          ...(presentation.esPrincipal || data.costo === undefined ? {} : { costo: cost }),
 
           ...(barcode
             ? { codigosBarra: { create: { codigo: barcode, principal: true } } }
@@ -965,7 +1012,10 @@ export async function updatePresentation(productIdInput, presentationIdInput, da
       accion: "EDITAR_PRESENTACION",
       entidad: "Producto",
       entidadId: productId,
-      detalle: { presentacion: name, precio: Number(price) },
+      detalle: {
+        presentacion: name, precio: Number(price),
+        costo: cost === null ? null : Number(cost),
+      },
     });
 
     return serializeProduct(product);

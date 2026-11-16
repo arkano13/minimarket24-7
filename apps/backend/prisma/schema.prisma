@@ -215,6 +215,9 @@ model PresentacionProducto {
   tipo              TipoPresentacion
   factorInventario  Decimal                     @map("factor_inventario") @db.Decimal(14, 3)
   precioBase        Decimal                     @map("precio_base") @db.Decimal(14, 2)
+  // Costo propio de la presentación (ej. la cajetilla). Null = se calcula
+  // con el costo por unidad del producto × factorInventario.
+  costo             Decimal?                    @db.Decimal(14, 2)
   esPrincipal       Boolean                     @default(false) @map("es_principal")
   activo            Boolean                     @default(true)
   creadoEn          DateTime                    @default(now()) @map("creado_en")

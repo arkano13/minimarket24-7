@@ -39,6 +39,7 @@ const EMPTY_PRESENTATION_FORM = {
   nombre: "",
   cantidad: "",
   precio: "",
+  costo: "",
   precioTurno2: "",
   precioTurno3: "",
   codigoBarra: "",
@@ -299,6 +300,7 @@ export function ProductosPage({ token, onBack }) {
         await updateProduct(token, editingProductId, {
           ...form,
           stockAnterior: formSnapshot.stockInicial,
+          costoAnterior: formSnapshot.costo,
         });
       } else {
         const result = await createProduct(token, form);
@@ -454,6 +456,7 @@ export function ProductosPage({ token, onBack }) {
       tipoVenta: presentationTypeFor(form.tipoVenta),
       factorInventario: factor,
       precio: draft.precio,
+      costo: draft.costo ?? "",
       ...shiftPricePayload(draft),
       codigoBarra: draft.codigoBarra.trim(),
     };
@@ -510,6 +513,7 @@ export function ProductosPage({ token, onBack }) {
       nombre: item.nombre,
       cantidad: String(item.cantidad),
       precio: String(item.precio),
+      costo: item.costoPropio ? String(item.costo) : "",
       precioTurno2: item.precioTurno2 ?? "",
       precioTurno3: item.precioTurno3 ?? "",
       codigoBarra: item.codigoBarra ?? "",
@@ -541,6 +545,7 @@ export function ProductosPage({ token, onBack }) {
         nombre: presentationForm.nombre.trim(),
         cantidad: presentationForm.cantidad,
         precio: presentationForm.precio,
+        costo: presentationForm.costo,
         precioTurno2: presentationForm.precioTurno2,
         precioTurno3: presentationForm.precioTurno3,
         codigoBarra: presentationForm.codigoBarra.trim(),
@@ -568,6 +573,7 @@ export function ProductosPage({ token, onBack }) {
         await updatePresentation(token, editingProductId, editingPresentationId, {
           nombre: presentationForm.nombre.trim(),
           precio: presentationForm.precio,
+          costo: presentationForm.costo,
           ...shiftPricePayload(presentationForm),
           codigoBarra: presentationForm.codigoBarra.trim(),
         });
@@ -765,6 +771,8 @@ export function ProductosPage({ token, onBack }) {
           nombre: item.nombre,
           cantidad: Number(item.factorInventario) / principalFactor,
           precio: Number(item.precio),
+          costo: Number(item.costo) || 0,
+          costoPropio: Boolean(item.costoPropio),
           precioTurno2: shiftPriceText(item, 2),
           precioTurno3: shiftPriceText(item, 3),
           codigoBarra: item.codigoBarra,
@@ -774,6 +782,10 @@ export function ProductosPage({ token, onBack }) {
         nombre: item.nombre,
         cantidad: Number(item.cantidad),
         precio: Number(item.precio),
+        costo: item.costo
+          ? Number(item.costo)
+          : Math.round((Number(form.costo) || 0) * Number(item.cantidad) * 100) / 100,
+        costoPropio: Boolean(item.costo),
         precioTurno2: item.precioTurno2 ?? "",
         precioTurno3: item.precioTurno3 ?? "",
         codigoBarra: item.codigoBarra,
@@ -1191,6 +1203,10 @@ export function ProductosPage({ token, onBack }) {
                           {item.cantidad > 0
                             ? ` · L ${(item.precio / item.cantidad).toFixed(2)} c/u`
                             : ""}
+                          {" · "}
+                          {item.costo > 0
+                            ? `costo L ${item.costo.toFixed(2)}${item.costoPropio ? "" : " (calculado)"}`
+                            : "sin costo"}
                         </small>
 
                         {form.cambiaPrecioTurno ? (
@@ -1307,6 +1323,34 @@ export function ProductosPage({ token, onBack }) {
                       value={presentationForm.precio}
                     />
                   </label>
+
+                  {!isComposite ? (
+                    <label className="field">
+                      <span>Costo</span>
+
+                      <input
+                        min="0"
+                        name="costo"
+                        onChange={updatePresentationField}
+                        placeholder={
+                          Number(form.costo) > 0 && previewQuantity > 0
+                            ? (Number(form.costo) * previewQuantity).toFixed(2)
+                            : "0.00"
+                        }
+                        step="0.01"
+                        type="number"
+                        value={presentationForm.costo}
+                      />
+
+                      <small>
+                        Se usa para la ganancia de esta presentación. Vacío = costo del producto
+                        {Number(form.costo) > 0 && previewQuantity > 0
+                          ? ` (L ${(Number(form.costo) * previewQuantity).toFixed(2)})`
+                          : ""}
+                        .
+                      </small>
+                    </label>
+                  ) : null}
 
                   {form.cambiaPrecioTurno ? (
                     <>

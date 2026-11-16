@@ -1,6 +1,13 @@
 import { app } from "./app.js";
 import { env } from "./config/env.js";
+import { asegurarEsquema } from "./lib/asegurar-esquema.js";
 import { iniciarColaInformes } from "./modules/caja/informe-turno-notifier.js";
+
+try {
+  await asegurarEsquema();
+} catch (error) {
+  console.error("No se pudo actualizar el esquema de la base de datos.", error);
+}
 
 const detenerCola = iniciarColaInformes();
 

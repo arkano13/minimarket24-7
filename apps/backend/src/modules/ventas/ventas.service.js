@@ -952,6 +952,14 @@ async function createSaleRecord(data, userId, saleKey) {
             .div(quantity)
             .toDecimalPlaces(4);
 
+      // Si la presentación tiene costo propio (ej. la cajetilla), la
+      // ganancia de esta línea se calcula con él. Los lotes PEPS igual se
+      // descuentan arriba para que el inventario cuadre.
+      const lineCost =
+        !isComposite && presentation.costo !== null && presentation.costo !== undefined
+          ? new Prisma.Decimal(presentation.costo)
+          : visibleCost;
+
       const currentDeduction = deductionsByProduct.get(presentation.productoId);
 
       if (isComposite) {
@@ -1004,7 +1012,7 @@ async function createSaleRecord(data, userId, saleKey) {
 
         cantidadInventario: inventoryQuantity,
 
-        costoUnitario: visibleCost,
+        costoUnitario: lineCost,
 
         precioUnitario: currentPrice.price,
 

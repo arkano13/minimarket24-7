@@ -456,6 +456,7 @@ export function ProductosPage({ token, onBack }) {
       tipoVenta: presentationTypeFor(form.tipoVenta),
       factorInventario: factor,
       precio: draft.precio,
+      costo: draft.costo ?? "",
       ...shiftPricePayload(draft),
       codigoBarra: draft.codigoBarra.trim(),
     };
@@ -512,7 +513,7 @@ export function ProductosPage({ token, onBack }) {
       nombre: item.nombre,
       cantidad: String(item.cantidad),
       precio: String(item.precio),
-      costo: editingProductId && item.costo > 0 ? String(item.costo) : "",
+      costo: item.costoPropio ? String(item.costo) : "",
       precioTurno2: item.precioTurno2 ?? "",
       precioTurno3: item.precioTurno3 ?? "",
       codigoBarra: item.codigoBarra ?? "",
@@ -526,17 +527,6 @@ export function ProductosPage({ token, onBack }) {
     setPresentationForm(EMPTY_PRESENTATION_FORM);
     setEditingPresentationId(null);
     setPresentationError("");
-  }
-
-  // El costo de una presentación ajusta el costo por unidad del producto:
-  // se refleja en el formulario principal para no guardarlo después con
-  // el valor viejo. Si la persona ya había cambiado ese costo a mano, se
-  // respeta lo que escribió.
-  function syncProductCost(cost) {
-    if (cost === undefined || cost === null) return;
-    const text = String(cost);
-    setForm((current) => (current.costo === formSnapshot.costo ? { ...current, costo: text } : current));
-    setFormSnapshot((current) => ({ ...current, costo: text }));
   }
 
   async function handleSavePresentation() {
@@ -555,6 +545,7 @@ export function ProductosPage({ token, onBack }) {
         nombre: presentationForm.nombre.trim(),
         cantidad: presentationForm.cantidad,
         precio: presentationForm.precio,
+        costo: presentationForm.costo,
         precioTurno2: presentationForm.precioTurno2,
         precioTurno3: presentationForm.precioTurno3,
         codigoBarra: presentationForm.codigoBarra.trim(),
@@ -573,14 +564,13 @@ export function ProductosPage({ token, onBack }) {
     }
 
     setSavingPresentation(true);
-    let result;
 
     try {
       if (editingPresentationId) {
         // El factor no se edita aquí a propósito (rompería la trazabilidad
         // de ventas ya registradas con ese factor). Solo nombre, precio y
         // código de barras.
-        result = await updatePresentation(token, editingProductId, editingPresentationId, {
+        await updatePresentation(token, editingProductId, editingPresentationId, {
           nombre: presentationForm.nombre.trim(),
           precio: presentationForm.precio,
           costo: presentationForm.costo,
@@ -588,13 +578,8 @@ export function ProductosPage({ token, onBack }) {
           codigoBarra: presentationForm.codigoBarra.trim(),
         });
       } else {
-        result = await addPresentation(token, editingProductId, {
-          ...toPresentationPayload(presentationForm),
-          costo: presentationForm.costo,
-        });
+        await addPresentation(token, editingProductId, toPresentationPayload(presentationForm));
       }
-
-      syncProductCost(result?.producto?.costo);
 
       await loadPresentations(editingProductId);
       cancelPresentationForm();
@@ -787,6 +772,7 @@ export function ProductosPage({ token, onBack }) {
           cantidad: Number(item.factorInventario) / principalFactor,
           precio: Number(item.precio),
           costo: Number(item.costo) || 0,
+          costoPropio: Boolean(item.costoPropio),
           precioTurno2: shiftPriceText(item, 2),
           precioTurno3: shiftPriceText(item, 3),
           codigoBarra: item.codigoBarra,
@@ -796,7 +782,10 @@ export function ProductosPage({ token, onBack }) {
         nombre: item.nombre,
         cantidad: Number(item.cantidad),
         precio: Number(item.precio),
-        costo: Math.round((Number(form.costo) || 0) * Number(item.cantidad) * 100) / 100,
+        costo: item.costo
+          ? Number(item.costo)
+          : Math.round((Number(form.costo) || 0) * Number(item.cantidad) * 100) / 100,
+        costoPropio: Boolean(item.costo),
         precioTurno2: item.precioTurno2 ?? "",
         precioTurno3: item.precioTurno3 ?? "",
         codigoBarra: item.codigoBarra,
@@ -1215,7 +1204,9 @@ export function ProductosPage({ token, onBack }) {
                             ? ` · L ${(item.precio / item.cantidad).toFixed(2)} c/u`
                             : ""}
                           {" · "}
-                          {item.costo > 0 ? `costo L ${item.costo.toFixed(2)}` : "sin costo"}
+                          {item.costo > 0
+                            ? `costo L ${item.costo.toFixed(2)}${item.costoPropio ? "" : " (calculado)"}`
+                            : "sin costo"}
                         </small>
 
                         {form.cambiaPrecioTurno ? (
@@ -1333,7 +1324,7 @@ export function ProductosPage({ token, onBack }) {
                     />
                   </label>
 
-                  {editingProductId ? (
+                  {!isComposite ? (
                     <label className="field">
                       <span>Costo</span>
 
@@ -1351,7 +1342,13 @@ export function ProductosPage({ token, onBack }) {
                         value={presentationForm.costo}
                       />
 
-                      <small>Al guardarlo se ajusta también el costo del producto y de sus otras presentaciones.</small>
+                      <small>
+                        Se usa para la ganancia de esta presentación. Vacío = costo del producto
+                        {Number(form.costo) > 0 && previewQuantity > 0
+                          ? ` (L ${(Number(form.costo) * previewQuantity).toFixed(2)})`
+                          : ""}
+                        .
+                      </small>
                     </label>
                   ) : null}
 

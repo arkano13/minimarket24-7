@@ -122,41 +122,26 @@ function decimalValue(value, field, { positive = false } = {}) {
   return new Prisma.Decimal(String(number));
 }
 
-// Costo de una presentación = costo por unidad interna × su factor,
-// redondeado al centavo como se muestra en pantalla.
+// Costo calculado de una presentación = costo por unidad interna × su
+// factor, redondeado al centavo como se muestra en pantalla.
 function presentationCost(costPerUnit, factor) {
   return Math.round(Number(costPerUnit) * Number(factor) * 100) / 100;
 }
 
+// Costo propio de una presentación: vacío = se usa el calculado.
 function optionalPresentationCost(value) {
   return value === undefined || value === null || value === ""
     ? null
     : decimalValue(value, "El costo");
 }
 
-// Al escribir el costo de una presentación se ajusta el costo por unidad
-// del producto; las demás presentaciones se recalculan solas. Si el costo
-// no cambió (al centavo) no se toca, para no perder decimales.
-async function applyPresentationCost(transaction, productId, factor, cost) {
-  if (cost === null) return null;
-
-  const current = await bloquearProducto(transaction, productId);
-  const product = await transaction.producto.findUnique({
-    where: { id: productId },
-    select: { esCompuesto: true },
-  });
-
-  if (!current || product?.esCompuesto) return null;
-
-  const previous = presentationCost(current.costoPromedio, factor);
-  if (previous === Number(cost)) return null;
-
-  await transaction.producto.update({
-    where: { id: productId },
-    data: { costoPromedio: cost.div(factor) },
-  });
-
-  return { anterior: previous, nuevo: Number(cost) };
+// Lo que se muestra: el costo propio si lo tiene, si no el calculado.
+function serializePresentationCost(presentation, costPerUnit) {
+  const own = presentation.costo === null || presentation.costo === undefined ? null : Number(presentation.costo);
+  return {
+    costo: own ?? presentationCost(costPerUnit, presentation.factorInventario),
+    costoPropio: own !== null,
+  };
 }
 
 function optionalCategoryId(value) {
@@ -312,7 +297,7 @@ function serializeProduct(product) {
       esPrincipal: presentation.esPrincipal,
       factorInventario: Number(presentation.factorInventario),
       precio: Number(presentation.precioBase),
-      costo: presentationCost(product.costoPromedio, presentation.factorInventario),
+      ...serializePresentationCost(presentation, product.costoPromedio),
       preciosTurno: serializeShiftPrices(presentation.preciosHorario),
 
       codigoBarra:
@@ -848,7 +833,7 @@ export async function listPresentations(productIdInput) {
     esPrincipal: presentation.esPrincipal,
     factorInventario: Number(presentation.factorInventario),
     precio: Number(presentation.precioBase),
-    costo: presentationCost(product?.costoPromedio ?? 0, presentation.factorInventario),
+    ...serializePresentationCost(presentation, product?.costoPromedio ?? 0),
     preciosTurno: serializeShiftPrices(presentation.preciosHorario),
 
     codigoBarra:
@@ -879,7 +864,6 @@ export async function addPresentation(productIdInput, data, userId) {
   const price = decimalValue(data.precio, "El precio", { positive: true });
   const cost = optionalPresentationCost(data.costo);
   const shiftInput = presentationShiftInput(data);
-  let costChange = null;
 
   try {
     const product = await prisma.$transaction(async (transaction) => {
@@ -910,6 +894,7 @@ export async function addPresentation(productIdInput, data, userId) {
           tipo: data.tipoVenta,
           factorInventario: factor,
           precioBase: price,
+          costo: cost,
           esPrincipal: false,
 
           ...(barcode
@@ -919,7 +904,6 @@ export async function addPresentation(productIdInput, data, userId) {
       });
 
       await savePresentationShiftPrices(transaction, created.id, price, shiftInput);
-      costChange = await applyPresentationCost(transaction, productId, factor, cost);
 
       return transaction.producto.findUnique({
         where: { id: productId },
@@ -934,7 +918,7 @@ export async function addPresentation(productIdInput, data, userId) {
       entidadId: productId,
       detalle: {
         presentacion: name, factor: Number(factor), precio: Number(price),
-        ...(costChange ? { costo: costChange } : {}),
+        costo: cost === null ? null : Number(cost),
       },
     });
 
@@ -961,7 +945,6 @@ export async function updatePresentation(productIdInput, presentationIdInput, da
   const price = decimalValue(data.precio, "El precio", { positive: true });
   const cost = optionalPresentationCost(data.costo);
   const shiftInput = presentationShiftInput(data);
-  let costChange = null;
 
   // El factorInventario NO se permite cambiar aquí a propósito: si ya
   // hay ventas históricas con este factor, cambiarlo rompe la trazabilidad
@@ -1006,6 +989,9 @@ export async function updatePresentation(productIdInput, presentationIdInput, da
         data: {
           nombre: name,
           precioBase: price,
+          // La principal toma el costo del producto (se edita arriba).
+          // Versiones viejas del escritorio no mandan "costo": no se toca.
+          ...(presentation.esPrincipal || data.costo === undefined ? {} : { costo: cost }),
 
           ...(barcode
             ? { codigosBarra: { create: { codigo: barcode, principal: true } } }
@@ -1014,9 +1000,6 @@ export async function updatePresentation(productIdInput, presentationIdInput, da
       });
 
       await savePresentationShiftPrices(transaction, presentationId, price, shiftInput);
-      costChange = await applyPresentationCost(
-        transaction, productId, new Prisma.Decimal(presentation.factorInventario), cost,
-      );
 
       return transaction.producto.findUnique({
         where: { id: productId },
@@ -1031,7 +1014,7 @@ export async function updatePresentation(productIdInput, presentationIdInput, da
       entidadId: productId,
       detalle: {
         presentacion: name, precio: Number(price),
-        ...(costChange ? { costo: costChange } : {}),
+        costo: cost === null ? null : Number(cost),
       },
     });
 

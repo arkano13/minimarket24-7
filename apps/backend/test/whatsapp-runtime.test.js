@@ -99,3 +99,26 @@ test('gateway delega el asistente a minimarket y responde al JID autorizado alte
   await handler({ key: { remoteJid: 'lid', fromMe: true }, message: { conversation: 'hola' } });
   assert.equal(sent.length, 1);
 });
+
+test('un mensaje colgado no bloquea los siguientes', async () => {
+  const processed = [];
+  const s = setup({
+    messageTimeoutMs: 20,
+    onMessage: async message => { if (message === 'colgado') await new Promise(() => {}); processed.push(message); },
+  });
+  await s.connection.start();
+  s.sockets[0].ev.emit('messages.upsert', { type: 'notify', messages: ['colgado', 'siguiente'] });
+  await new Promise(resolve => setTimeout(resolve, 60));
+  assert.deepEqual(processed, ['siguiente']);
+  await s.connection.stop();
+});
+
+test('un envío colgado se corta y no bloquea la cola', async () => {
+  let count = 0;
+  const queue = createSendQueue({ sendTimeoutMs: 20, getState: () => ({ status: 'conectado', socket: {
+    sendMessage: async () => { if (++count === 1) await new Promise(() => {}); return { key: { id: 'ok' } }; },
+  } }), store: {} });
+  await assert.rejects(queue.enviar('jid', {}), /no confirmó/);
+  assert.equal((await queue.enviar('jid', {})).key.id, 'ok');
+  await queue.stop();
+});

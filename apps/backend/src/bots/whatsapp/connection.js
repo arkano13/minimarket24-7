@@ -7,8 +7,17 @@ import { describeDisconnect } from '../../lib/whatsapp-disconnect.js';
 // onLoggedOut: si se pasa, al recibir 401 (sesión cerrada) se aparta la
 // sesión y se vuelve a conectar solo, listo para un código nuevo, igual que
 // el HotelBot. Sin él, el 401 detiene la conexión.
+function conTiempoMaximo(promesa, ms) {
+  let timer;
+  const limite = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Se superó el tiempo máximo de ${ms / 1000} s.`)), ms);
+  });
+  return Promise.race([promesa, limite]).finally(() => clearTimeout(timer));
+}
+
 export function createWhatsAppConnection({ loadAuth, makeSocket, toQr, socketOptions = {},
-  onMessage, logger = console, reconnectOptions = {}, getVersion = null, onLoggedOut = null }) {
+  onMessage, logger = console, reconnectOptions = {}, getVersion = null, onLoggedOut = null,
+  messageTimeoutMs = 3 * 60_000 }) {
   let socket = null;
   let status = 'conectando';
   let qr = null;
@@ -100,8 +109,10 @@ export function createWhatsAppConnection({ loadAuth, makeSocket, toQr, socketOpt
       // Solo mensajes nuevos; no contestar nuevamente al sincronizar historial.
       if (socket !== current || event.type !== 'notify') return;
       for (const message of event.messages ?? []) {
+        // Con tiempo máximo: un mensaje que se queda colgado no debe
+        // bloquear para siempre a los que vienen detrás.
         incoming = incoming.then(async () => {
-          if (!stopped && socket === current) await onMessage(message);
+          if (!stopped && socket === current) await conTiempoMaximo(onMessage(message), messageTimeoutMs);
         }).catch(error => logger.error('Error procesando mensaje WhatsApp:', error.message));
       }
     };

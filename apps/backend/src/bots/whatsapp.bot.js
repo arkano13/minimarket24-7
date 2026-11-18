@@ -71,6 +71,10 @@ const connection = createWhatsAppConnection({
     // Desde el 17 nov uno de ellos se reenvía en cada reconexión, WhatsApp
     // corta la conexión cada ~50 min y los mensajes del dueño no se procesan.
     shouldIgnoreJid: jid => isJidBroadcast(jid),
+    // Con los valores por defecto la vinculación se cierra a los ~2-3 min
+    // (60 s + 5 × 20 s) y el código de /pair deja de servir antes de que
+    // se alcance a escribir en el teléfono. Así dura más de 10 minutos.
+    qrTimeout: 2 * 60_000,
   },
   onMessage: message => assistant(message),
 });

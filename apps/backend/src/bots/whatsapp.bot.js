@@ -2,7 +2,7 @@ import "dotenv/config";
 import express from "express";
 import qrcode from "qrcode";
 import makeWASocket, {
-  useMultiFileAuthState, downloadMediaMessage, BufferJSON, fetchLatestWaWebVersion,
+  useMultiFileAuthState, downloadMediaMessage, BufferJSON, fetchLatestWaWebVersion, isJidBroadcast,
 } from "@whiskeysockets/baileys";
 import path from "node:path";
 import pino from "pino";
@@ -67,6 +67,10 @@ const connection = createWhatsAppConnection({
     logger: pino({ level: LOG_LEVEL }),
     getMessage: async key => mensajesEnviados.obtener(key.id),
     msgRetryCounterCache: cacheReintentos,
+    // Los estados (historias) de los contactos no le sirven al asistente.
+    // Desde el 17 nov uno de ellos se reenvía en cada reconexión, WhatsApp
+    // corta la conexión cada ~50 min y los mensajes del dueño no se procesan.
+    shouldIgnoreJid: jid => isJidBroadcast(jid),
   },
   onMessage: message => assistant(message),
 });

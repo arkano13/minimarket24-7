@@ -13,6 +13,7 @@ export function createAssistantHandler({
       return;
     }
     if (!backendUrl || !secret) throw new Error("Falta MINIMARKET_API_URL o INFORME_INTERNO_SECRET.");
+    console.log("Mensaje del número autorizado recibido.");
 
     const body = { conversacionId: remitente };
     body.texto = msg.message.conversation || msg.message.extendedTextMessage?.text || "";

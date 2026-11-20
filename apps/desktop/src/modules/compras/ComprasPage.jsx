@@ -36,6 +36,17 @@ function decimalValue(setter, value, decimals) {
   }
 }
 
+// ISV de Honduras: 15 % general y 18 % bebidas alcohólicas y tabaco.
+const ISV_OPCIONES = [
+  { valor: 0, etiqueta: "No lleva" },
+  { valor: 15, etiqueta: "15 %" },
+  { valor: 18, etiqueta: "18 %" },
+];
+
+function isvDeLinea(item) {
+  return Math.round(Number(item.costoTotal || 0) * Number(item.isv || 0)) / 100;
+}
+
 export function ComprasPage({ token }) {
   const operationKeyRef = useRef(newOperationKey());
   const [purchases, setPurchases] = useState([]);
@@ -59,14 +70,16 @@ export function ComprasPage({ token }) {
   const [canceling, setCanceling] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
 
-  const total = useMemo(
-    () =>
-      items.reduce(
-        (sum, item) => sum + Number(item.costoTotal || 0),
-        0,
-      ),
-    [items],
-  );
+  // Subtotal sin impuesto, ISV por tasa y total a pagar.
+  const totals = useMemo(() => {
+    const subtotal = items.reduce((sum, item) => sum + Number(item.costoTotal || 0), 0);
+    const isvDe = (tasa) =>
+      items.filter((item) => Number(item.isv) === tasa).reduce((sum, item) => sum + isvDeLinea(item), 0);
+    const isv15 = isvDe(15);
+    const isv18 = isvDe(18);
+    return { subtotal, isv15, isv18, total: subtotal + isv15 + isv18 };
+  }, [items]);
+  const total = totals.total;
 
   async function handleCancelPurchase() {
     if (!selectedPurchase || canceling) {
@@ -237,6 +250,8 @@ export function ComprasPage({ token }) {
         ...product,
         cantidad: "1",
         costoTotal: "",
+        // Se propone el ISV que tuvo el producto en su última compra.
+        isv: Number(product.isv) || 0,
       },
     ]);
 
@@ -291,6 +306,7 @@ export function ComprasPage({ token }) {
           presentacionId: item.presentacionId,
           cantidad: item.cantidad,
           costoTotal: item.costoTotal,
+          isv: Number(item.isv) || 0,
           // Compatibility with servers from before costoTotal was introduced.
           // Current servers preserve costoTotal; older ones require unit cost.
           costo: Number(item.costoTotal) / Number(item.cantidad),
@@ -348,7 +364,7 @@ export function ComprasPage({ token }) {
               <h2>Registrar entrada</h2>
             </div>
 
-            <strong>Costo total: L {money(total)}</strong>
+            <strong>Total: L {money(total)}</strong>
           </div>
 
           <fieldset disabled={loading} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
@@ -502,10 +518,46 @@ export function ComprasPage({ token }) {
                   >
                     ×
                   </button>
+
+                  <div className="purchase-item__isv" role="radiogroup" aria-label={`Impuesto de ${item.nombre}`}>
+                    <span>Impuesto (ISV)</span>
+
+                    <div className="isv-options">
+                      {ISV_OPCIONES.map((opcion) => (
+                        <label
+                          className={Number(item.isv) === opcion.valor ? "isv-option isv-option--selected" : "isv-option"}
+                          key={opcion.valor}
+                        >
+                          <input
+                            checked={Number(item.isv) === opcion.valor}
+                            name={`isv-${item.presentacionId}`}
+                            onChange={() => updateItem(item.presentacionId, "isv", opcion.valor)}
+                            type="radio"
+                          />
+                          {opcion.etiqueta}
+                        </label>
+                      ))}
+                    </div>
+
+                    {Number(item.isv) > 0 ? (
+                      <small>
+                        + L {money(isvDeLinea(item))} · total L {money(Number(item.costoTotal || 0) + isvDeLinea(item))}
+                      </small>
+                    ) : null}
+                  </div>
                 </article>
               ))}
             </div>
           )}
+
+          {items.length > 0 ? (
+            <div className="purchase-totals">
+              <div><span>Subtotal (sin impuesto)</span><span>L {money(totals.subtotal)}</span></div>
+              {totals.isv15 > 0 ? <div><span>ISV 15 %</span><span>L {money(totals.isv15)}</span></div> : null}
+              {totals.isv18 > 0 ? <div><span>ISV 18 %</span><span>L {money(totals.isv18)}</span></div> : null}
+              <div className="purchase-totals__total"><span>Total a pagar</span><span>L {money(totals.total)}</span></div>
+            </div>
+          ) : null}
 
           </fieldset>
           <div className="purchase-form-actions">
@@ -532,7 +584,7 @@ export function ComprasPage({ token }) {
               </button>
             ) : (
               <div className="purchase-confirmation">
-                <span>Costo total: L {money(total)}. No se descontará dinero de caja.</span>
+                <span>Total a pagar: L {money(total)}. No se descontará dinero de caja.</span>
 
                 <button className="primary-button" disabled={loading} onClick={savePurchase} type="button">
                   {loading ? "Registrando..." : "Sí, actualizar inventario"}
@@ -650,7 +702,12 @@ export function ComprasPage({ token }) {
                   {selectedPurchase.productos.map((product) => (
                     <article key={product.id}>
                       <span>
-                        <strong>{presentationLabel(product).titulo}</strong>
+                        <strong>
+                          {presentationLabel(product).titulo}
+                          {product.isv > 0 ? (
+                            <span className={`isv-tag isv-tag--${product.isv}`}>ISV {product.isv} %</span>
+                          ) : null}
+                        </strong>
 
                         <small>{presentationLabel(product).detalle}</small>
                       </span>
@@ -666,6 +723,15 @@ export function ComprasPage({ token }) {
                     </article>
                   ))}
                 </div>
+
+                {selectedPurchase.isv15 > 0 || selectedPurchase.isv18 > 0 ? (
+                  <div className="purchase-totals purchase-totals--detail">
+                    <div><span>Subtotal (sin impuesto)</span><span>L {money(selectedPurchase.subtotalSinIsv)}</span></div>
+                    {selectedPurchase.isv15 > 0 ? <div><span>ISV 15 %</span><span>L {money(selectedPurchase.isv15)}</span></div> : null}
+                    {selectedPurchase.isv18 > 0 ? <div><span>ISV 18 %</span><span>L {money(selectedPurchase.isv18)}</span></div> : null}
+                    <div className="purchase-totals__total"><span>Total</span><span>L {money(selectedPurchase.total)}</span></div>
+                  </div>
+                ) : null}
 
                 {selectedPurchase.notas ? (
                   <p className="purchase-detail-notes">

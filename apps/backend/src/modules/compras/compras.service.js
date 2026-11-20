@@ -11,6 +11,18 @@ import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../utils/AppError.js";
 import { registrarBitacora } from "../bitacora/bitacora.service.js";
 
+// ISV de Honduras: 15 % general y 18 % bebidas alcohólicas y tabaco.
+const ISV_VALIDOS = new Set([0, 15, 18]);
+
+function isvValue(value) {
+  if (value === undefined || value === null || value === "") return 0;
+  const isv = Number(value);
+  if (!ISV_VALIDOS.has(isv)) {
+    throw new AppError("El impuesto debe ser 0, 15 o 18 %.", 400);
+  }
+  return isv;
+}
+
 const PURCHASE_INCLUDE = {
   proveedor: {
     select: {
@@ -116,8 +128,25 @@ function serializePurchase(purchase) {
       costoInventario: Number(
         detail.costoUnitarioInventario,
       ),
+      isv: detail.isvPorcentaje ?? 0,
+      isvMonto: Number(detail.isvMonto ?? 0),
       subtotal: Number(detail.subtotal),
     })),
+
+    // Desglose del impuesto; total ya lo incluye.
+    ...(() => {
+      const detalles = purchase.detalles ?? [];
+      const isvDe = (tasa) => detalles
+        .filter((detail) => detail.isvPorcentaje === tasa)
+        .reduce((suma, detail) => suma + Number(detail.isvMonto ?? 0), 0);
+      const isv15 = Math.round(isvDe(15) * 100) / 100;
+      const isv18 = Math.round(isvDe(18) * 100) / 100;
+      return {
+        isv15,
+        isv18,
+        subtotalSinIsv: Math.round((Number(purchase.total) - isv15 - isv18) * 100) / 100,
+      };
+    })(),
   };
 }
 
@@ -242,6 +271,7 @@ export async function searchPurchaseProducts(
             stockActual: true,
             costoPromedio: true,
             unidadInventario: true,
+            isvCompra: true,
           },
         },
 
@@ -291,10 +321,15 @@ export async function searchPurchaseProducts(
           presentation.producto.stockActual,
         ) / factor,
 
+      // El costo promedio ya incluye el ISV de la última compra: se
+      // sugiere sin impuesto, porque el impuesto se elige aparte.
       costoSugerido:
-        Number(
+        (Number(
           presentation.producto.costoPromedio,
-        ) * factor,
+        ) * factor) /
+        (1 + (presentation.producto.isvCompra ?? 0) / 100),
+
+      isv: presentation.producto.isvCompra ?? 0,
 
       codigoBarra:
         presentation.codigosBarra[0]?.codigo ??
@@ -458,6 +493,7 @@ export async function createPurchase(
       cantidad,
       costo: costoTotal.div(cantidad),
       costoTotal,
+      isv: isvValue(item.isv),
     });
   }
 
@@ -543,11 +579,18 @@ export async function createPurchase(
         const inventoryQuantity =
           item.cantidad.mul(factor);
 
-        const inventoryUnitCost = item.costo
-          .div(factor)
-          .toDecimalPlaces(4);
+        // El ISV se suma al costo: el lote, el costo promedio y la ganancia
+        // usan el costo con impuesto. costoPresentacion queda sin impuesto.
+        const isvMonto = item.costoTotal
+          .mul(item.isv)
+          .div(100)
+          .toDecimalPlaces(2);
 
-        const incomingValue = item.costoTotal;
+        const incomingValue = item.costoTotal.add(isvMonto);
+
+        const inventoryUnitCost = incomingValue
+          .div(inventoryQuantity)
+          .toDecimalPlaces(4);
 
         const subtotal =
           incomingValue.toDecimalPlaces(2);
@@ -573,6 +616,8 @@ export async function createPurchase(
                   incomingValue,
                 )
               : incomingValue,
+
+            isv: item.isv,
           },
         );
 
@@ -590,6 +635,8 @@ export async function createPurchase(
           costoPresentacion: item.costo.toDecimalPlaces(4),
           costoUnitarioInventario:
             inventoryUnitCost,
+          isvPorcentaje: item.isv,
+          isvMonto,
           subtotal,
         });
 
@@ -659,6 +706,7 @@ export async function createPurchase(
             data: {
               stockActual: newStock,
               costoPromedio: newAverageCost,
+              isvCompra: incoming.isv,
             },
 
             select: {

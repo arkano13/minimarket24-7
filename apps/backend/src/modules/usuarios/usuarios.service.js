@@ -418,7 +418,7 @@ export async function updateUser(
       },
     );
 
-    deleteUserSessions(
+    await deleteUserSessions(
       usuarioId,
       usuarioId === actorUsuarioId ? actorToken : null,
     );
@@ -497,7 +497,7 @@ export async function setUserActive(
   );
 
   if (!activoValue) {
-    deleteUserSessions(usuarioId);
+    await deleteUserSessions(usuarioId);
   }
 
   await registrarBitacora({
@@ -546,7 +546,7 @@ export async function resetUserPassword(
     },
   });
 
-  deleteUserSessions(
+  await deleteUserSessions(
     usuarioId,
     usuarioId === actorUsuarioId ? actorToken : null,
   );

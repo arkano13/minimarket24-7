@@ -83,7 +83,7 @@ export async function login({ usuario, contrasena }) {
     entidadId: usuarioEncontrado.id,
   });
 
-  const token = createSession(usuarioEncontrado.id);
+  const token = await createSession(usuarioEncontrado.id);
 
   return {
     token,

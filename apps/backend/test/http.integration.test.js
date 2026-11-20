@@ -12,6 +12,23 @@ const state = {
 };
 
 const prisma = {
+  sesion: (() => {
+    const filas = new Map();
+    return {
+      async create({ data }) { filas.set(data.token, { ...data }); return data; },
+      async findUnique({ where }) { return filas.get(where.token) ?? null; },
+      async deleteMany({ where }) {
+        let count = 0;
+        for (const [token, fila] of filas) {
+          const coincide = typeof where.token === "string"
+            ? token === where.token
+            : fila.usuarioId === where.usuarioId && (!where.token?.not || token !== where.token.not);
+          if (coincide) { filas.delete(token); count += 1; }
+        }
+        return { count };
+      },
+    };
+  })(),
   venta: {
     async findMany(query) {
       state.cashActivityQueries.push(query);

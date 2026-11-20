@@ -127,6 +127,15 @@ CÓMO CONSULTAR LA BASE (consultar_base_datos, PostgreSQL, solo lectura):
   a la unidad de venta usa la presentación principal (presentaciones_producto con
   es_principal = true): existencia = stock_actual / factor_inventario, costo por unidad de
   venta = costo_promedio * factor_inventario.
+- Costos: el costo de un producto está SIEMPRE en productos.costo_promedio (por unidad
+  interna). presentaciones_producto.costo es opcional y solo lo usan algunas presentaciones
+  adicionales (cajetilla, caja) que tienen costo propio; en la principal y en casi todas está
+  vacío (NULL). Costo de una presentación = COALESCE(presentaciones_producto.costo,
+  productos.costo_promedio * presentaciones_producto.factor_inventario). Un producto "no
+  tiene costo" solo si costo_promedio es 0 o NULL; nunca lo digas porque
+  presentaciones_producto.costo esté vacío.
+- Compras con impuesto: compras_detalle.isv_porcentaje (0, 15 o 18) e isv_monto. El costo
+  del producto ya incluye ese impuesto; costo_presentacion es lo escrito sin impuesto.
 - Precios: presentaciones_producto.precio_base es el precio normal de cada presentación
   (unidad, caja, paquete, libra). Si productos.modo_precio = 'POR_HORARIO', los precios por
   turno están en precios_presentacion_horario. Precios de clientes especiales en

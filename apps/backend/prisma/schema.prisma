@@ -166,6 +166,8 @@ model Producto {
   stockActual        Decimal                @default(0) @map("stock_actual") @db.Decimal(16, 3)
   stockMinimo        Decimal                @default(0) @map("stock_minimo") @db.Decimal(16, 3)
   costoPromedio      Decimal                @default(0) @map("costo_promedio") @db.Decimal(14, 4)
+  // Último ISV usado al comprarlo (0, 15 o 18), para proponerlo la próxima vez.
+  isvCompra          Int                    @default(0) @map("isv_compra") @db.SmallInt
   controlaInventario Boolean                @default(true) @map("controla_inventario")
   esCompuesto        Boolean                @default(false) @map("es_compuesto")
   activo             Boolean                @default(true)
@@ -595,6 +597,10 @@ model CompraDetalle {
   costoPresentacion       Decimal              @map("costo_presentacion") @db.Decimal(14, 4)
   costoUnitarioInventario Decimal              @map("costo_unitario_inventario") @db.Decimal(14, 4)
   subtotal                Decimal              @db.Decimal(14, 2)
+  // ISV de la línea: 0, 15 o 18. costoPresentacion queda sin impuesto (lo
+  // que se escribió); costoUnitarioInventario y subtotal ya lo incluyen.
+  isvPorcentaje           Int                  @default(0) @map("isv_porcentaje") @db.SmallInt
+  isvMonto                Decimal              @default(0) @map("isv_monto") @db.Decimal(14, 2)
   compra                  Compra               @relation(fields: [compraId], references: [id], onDelete: Cascade)
   producto                Producto             @relation(fields: [productoId], references: [id], onDelete: Restrict)
   presentacion            PresentacionProducto @relation(fields: [presentacionId], references: [id], onDelete: Restrict)

@@ -517,3 +517,110 @@
   color: var(--success);
   font-weight: 600;
 }
+
+/* Impuesto (ISV) por línea: No lleva / 15 % / 18 % */
+.purchase-item__isv {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  grid-column: 1 / -1;
+}
+
+.purchase-item__isv > span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.purchase-item__isv small {
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+}
+
+.isv-options {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.purchase-item .isv-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-right: 1px solid var(--border);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.purchase-item .isv-option:last-child {
+  border-right: 0;
+}
+
+.purchase-item .isv-option input {
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+}
+
+.isv-option--selected {
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.purchase-totals {
+  display: grid;
+  gap: 6px;
+  width: min(380px, 100%);
+  margin: 16px 0 0 auto;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+
+.purchase-totals div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.purchase-totals div span:last-child {
+  font-family: var(--font-mono);
+}
+
+.purchase-totals__total {
+  border-top: 1px solid var(--border-strong);
+  padding-top: 8px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.purchase-totals--detail {
+  margin-top: 12px;
+}
+
+.isv-tag {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.isv-tag--15 {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.isv-tag--18 {
+  background: var(--gold-tint);
+  color: #8a6510;
+}

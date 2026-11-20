@@ -14,7 +14,7 @@ export async function requireAuth(req, res, next) {
     }
 
     const token = authorization.slice(7).trim();
-    const session = getSession(token);
+    const session = await getSession(token);
 
     if (!token || !session) {
       throw new AppError("Sesión no válida.", 401);

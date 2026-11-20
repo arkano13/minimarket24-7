@@ -20,7 +20,11 @@ authRouter.get("/me", requireAuth, (req, res) => {
   });
 });
 
-authRouter.post("/logout", requireAuth, (req, res) => {
-  deleteSession(req.auth.token);
-  res.status(204).end();
+authRouter.post("/logout", requireAuth, async (req, res, next) => {
+  try {
+    await deleteSession(req.auth.token);
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
 });
